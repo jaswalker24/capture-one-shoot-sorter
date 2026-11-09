@@ -23,89 +23,219 @@
     <header>
       <div>
         <h1>Trips Local AI</h1>
-        <div class="sub">Control panel · catalog tagging (no captions) · additive keywords only</div>
+        <div class="sub">Control panel · additive keywords only · no cloud</div>
       </div>
-      <div class="stats" id="stats"></div>
     </header>
+    <div class="health" id="stats"></div>
+    <div class="tabs" id="tabs">
+      <button type="button" data-tab="run" class="active">Run</button>
+      <button type="button" data-tab="schedule">Schedule importer</button>
+      <button type="button" data-tab="history">History &amp; undo</button>
+      <button type="button" data-tab="profiles">Profiles</button>
+      <button type="button" data-tab="settings">Settings</button>
+      <button type="button" data-tab="exports">Exports</button>
+    </div>
 
-    <div class="grid">
+    <div id="tab-run" class="panel-section active">
+      <div class="grid">
+        <section class="card">
+          <h2>New catalog job</h2>
+          <div class="row">
+            <label>Profile
+              <select id="presetSelect"><option value="">— custom —</option></select>
+            </label>
+            <label>Year <select id="year"></select></label>
+            <label>Profile
+              <select id="profile"><option>motorsport</option><option>gig</option><option>kyoto</option></select>
+            </label>
+            <label>Sample (0 = all) <input type="number" id="sample" min="0" value="0" /></label>
+          </div>
+          <label>Folder under Camera Imports <div id="folders" class="folder-list"></div></label>
+          <p class="note" id="folderPath">No folder selected</p>
+          <label style="margin-top:10px">Context (optional)
+            <input type="text" id="context" placeholder="Britcar Into The Night, Brands Hatch" />
+          </label>
+          <div class="hr"></div>
+          <h2>Passes (drag or use arrows)</h2>
+          <ul id="passes" class="passes"></ul>
+          <p class="note">Index is auto-inserted before Sharpness / Bursts / Rank if needed and the folder is not already indexed. Draft Captions are not here.</p>
+          <div class="row" style="margin-top:12px">
+            <label class="inline"><input type="checkbox" id="applyEach" checked /> Apply keywords after each pass</label>
+            <label class="inline"><input type="checkbox" id="dryRun" /> Dry run</label>
+            <label class="inline"><input type="checkbox" id="ocrMissing" /> Text pass only if missing car number</label>
+            <label class="inline"><input type="checkbox" id="rankKw" /> Apply Rank score keywords</label>
+          </div>
+          <div class="row"><button id="addJob">Add to queue</button></div>
+        </section>
+        <section>
+          <div class="card" style="margin-bottom:16px">
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <h2 style="margin:0">Queue</h2>
+              <div style="display:flex;gap:8px">
+                <button class="secondary" id="pauseBtn">Pause next</button>
+                <button class="secondary" id="resumeBtn">Resume</button>
+              </div>
+            </div>
+            <div id="queue"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="tab-schedule" class="panel-section">
+      <div class="grid">
+        <section class="card">
+          <h2>Schedule importer</h2>
+          <p class="note">Confirmed shows only by default. Reuses the existing schedule mapper. TBA acts are listed but not time-tagged.</p>
+          <label>Existing schedule file
+            <select id="schedFile"></select>
+          </label>
+          <div class="row">
+            <button class="secondary" id="schedLoad">Load &amp; preview</button>
+          </div>
+          <div class="hr"></div>
+          <label>Or paste JSON
+            <textarea id="schedJson" class="code" placeholder='{"name":"...","timezone":"Asia/Tokyo","events":[...]}'></textarea>
+          </label>
+          <label>Or paste CSV (event,venue,date,act,start,end)
+            <textarea id="schedCsv" class="code" placeholder="event,venue,date,act,start,end"></textarea>
+          </label>
+          <div class="row">
+            <label>Save as filename <input type="text" id="schedFilename" placeholder="my-gig.json" /></label>
+            <label class="inline"><input type="checkbox" id="schedConfirmed" checked /> Confirmed only</label>
+            <button id="schedSave">Save / import</button>
+          </div>
+          <div id="schedPreview"></div>
+        </section>
+        <section class="card">
+          <h2>Map to a shoot</h2>
+          <div class="row">
+            <label>Year <select id="schedYear"></select></label>
+            <label>Camera timezone
+              <select id="schedCamTz"><option>Europe/London</option><option>Asia/Tokyo</option><option>UTC</option></select>
+            </label>
+            <label>Changeover buffer (min) <input type="number" id="schedBuf" min="0" value="3" /></label>
+          </div>
+          <label>Folder <div id="schedFolders" class="folder-list"></div></label>
+          <p class="note" id="schedFolderPath">No folder selected</p>
+          <div class="row">
+            <button class="secondary" id="schedDry">Dry-run mapping</button>
+            <button id="schedApply">Queue apply (additive keywords)</button>
+          </div>
+          <div id="schedDryOut"></div>
+        </section>
+      </div>
+    </div>
+
+    <div id="tab-history" class="panel-section">
       <section class="card">
-        <h2>New catalog job</h2>
-        <div class="row">
-          <label>Year
-            <select id="year"></select>
-          </label>
-          <label>Profile
-            <select id="profile">
-              <option>motorsport</option>
-              <option>gig</option>
-              <option>kyoto</option>
-            </select>
-          </label>
-          <label>Sample (0 = all)
-            <input type="number" id="sample" min="0" value="0" />
-          </label>
-        </div>
-        <label>Folder under Camera Imports
-          <div id="folders" class="folder-list"></div>
-        </label>
-        <p class="note" id="folderPath">No folder selected</p>
-        <label style="margin-top:10px">Context (optional)
-          <input type="text" id="context" placeholder="Britcar Into The Night, Brands Hatch" />
-        </label>
+        <h2>Run history</h2>
+        <p class="note">Undo removes only keywords that run added. Stars, colours and older keywords stay untouched. Preview first.</p>
+        <div id="history"></div>
+      </section>
+    </div>
 
-        <div class="hr"></div>
-        <h2>Passes (drag or use arrows to order)</h2>
-        <ul id="passes" class="passes"></ul>
-        <p class="note">Index is auto-inserted before Sharpness / Bursts / Rank if you leave it out. Draft Captions are not here — use the Exports panel.</p>
+    
+    <div id="tab-profiles" class="panel-section">
+      <div class="grid">
+        <section class="card">
+          <h2>Profiles</h2>
+          <p class="note">One concept for shoot setups (replaces Presets). Catalog profiles never include Draft Captions. Exports only is restricted to Camera Exports.</p>
+          <div id="profileList"></div>
+        </section>
+        <section class="card">
+          <h2 id="profileFormTitle">New profile</h2>
+          <div class="row">
+            <label>Name <input type="text" id="pfName" placeholder="My idol gig" /></label>
+            <label>Id <input type="text" id="pfId" placeholder="auto from name" /></label>
+          </div>
+          <div class="row">
+            <label>Shoot type
+              <select id="pfShoot"></select>
+            </label>
+            <label>Pass bundle
+              <select id="pfBundle"></select>
+            </label>
+            <label>Tagger profile
+              <select id="pfTagger"><option>gig</option><option>motorsport</option><option>kyoto</option></select>
+            </label>
+          </div>
+          <div class="row">
+            <label>Camera timezone
+              <select id="pfCamTz"></select>
+            </label>
+            <label id="pfCamOtherWrap" class="hidden">Other TZ
+              <input type="text" id="pfCamOther" placeholder="America/New_York" />
+            </label>
+            <label>Changeover buffer
+              <select id="pfBuf"></select>
+            </label>
+            <label>Sharpness / focus
+              <select id="pfStrict"></select>
+            </label>
+          </div>
+          <div class="row">
+            <label>Keyword set
+              <select id="pfKwSet"></select>
+            </label>
+            <label>Linked schedule
+              <select id="pfSched"><option value="">— none —</option></select>
+            </label>
+            <label>Notifications
+              <select id="pfNotify"></select>
+            </label>
+          </div>
+          <p class="note" id="pfKwPreview"></p>
+          <details>
+            <summary>Custom / advanced</summary>
+            <label>Passes (comma ids — used when bundle is Custom)
+              <input type="text" id="pfPasses" placeholder="tagger,index,sharpness,bursts,ocr,schedule" />
+            </label>
+            <div class="row">
+              <label class="inline"><input type="checkbox" id="pfApplyEach" checked /> Apply after each pass</label>
+              <label class="inline"><input type="checkbox" id="pfOcrMissing" /> OCR only missing car numbers</label>
+              <label class="inline"><input type="checkbox" id="pfRankKw" /> Apply rank score keywords</label>
+            </div>
+            <label>Extra default keywords (comma paths)
+              <input type="text" id="pfExtraKw" placeholder="Gig/Genre/Metal" />
+            </label>
+          </details>
+          <div class="row" style="margin-top:12px">
+            <button id="pfSave">Save profile</button>
+            <button class="secondary" id="pfNew">Clear form</button>
+            <button class="secondary" id="pfDup" disabled>Duplicate selected</button>
+          </div>
+        </section>
+      </div>
+    </div>
 
-        <div class="row" style="margin-top:12px">
-          <label class="inline"><input type="checkbox" id="applyEach" checked /> Apply keywords after each pass</label>
-          <label class="inline"><input type="checkbox" id="dryRun" /> Dry run (proposals only)</label>
-          <label class="inline"><input type="checkbox" id="ocrMissing" /> Text pass only on frames missing a car number</label>
-          <label class="inline"><input type="checkbox" id="rankKw" /> Apply Rank score keywords</label>
-        </div>
+    <div id="tab-settings" class="panel-section">
+      <section class="card">
+        <h2>Notifications</h2>
+        <p class="note">Telegram needs a BotFather token + chat id in <code>~/localai/gui/notify.json</code> (untracked). The Telegram inbound bridge cannot send alerts. Email uses local sendmail when enabled.</p>
+        <div id="notifyStatus" class="note"></div>
         <div class="row">
-          <button id="addJob">Add to queue</button>
+          <label class="inline"><input type="checkbox" id="notifyEnabled" /> Enable notifications</label>
+          <label class="inline"><input type="checkbox" id="notifyTg" /> Telegram channel on</label>
+          <label class="inline"><input type="checkbox" id="notifyEmail" /> Email channel on</label>
+          <button id="notifySave">Save toggles</button>
         </div>
       </section>
+    </div>
 
-      <section>
-        <div class="card" style="margin-bottom:16px">
-          <div class="row" style="justify-content:space-between;align-items:center">
-            <h2 style="margin:0">Queue</h2>
-            <div style="display:flex;gap:8px">
-              <button class="secondary" id="pauseBtn">Pause next</button>
-              <button class="secondary" id="resumeBtn">Resume</button>
-            </div>
-          </div>
-          <div id="queue"></div>
-        </div>
-
-        <div class="card" style="margin-bottom:16px">
-          <h2>Exports · Draft Captions</h2>
-          <p class="note">Runs only on folders under Camera Exports. Never part of catalog tagging.</p>
-          <label>Export folder
-            <select id="exportFolder"></select>
+    <div id="tab-exports" class="panel-section">
+      <section class="card">
+        <h2>Exports · Draft Captions</h2>
+        <p class="note">Only folders under Camera Exports. Never part of catalog tagging.</p>
+        <label>Export folder <select id="exportFolder"></select></label>
+        <div class="row" style="margin-top:10px">
+          <label>Profile
+            <select id="exportProfile"><option>gig</option><option>motorsport</option><option>kyoto</option></select>
           </label>
-          <div class="row" style="margin-top:10px">
-            <label>Profile
-              <select id="exportProfile"><option>gig</option><option>motorsport</option><option>kyoto</option></select>
-            </label>
-            <label>Sample
-              <input type="number" id="exportSample" min="0" value="3" />
-            </label>
-          </div>
-          <label>Context
-            <input type="text" id="exportContext" />
-          </label>
-          <div class="row"><button id="runCaptions">Draft captions</button></div>
+          <label>Sample <input type="number" id="exportSample" min="0" value="3" /></label>
         </div>
-
-        <div class="card">
-          <h2>History</h2>
-          <div id="history"></div>
-        </div>
+        <label>Context <input type="text" id="exportContext" /></label>
+        <div class="row"><button id="runCaptions">Draft captions</button></div>
       </section>
     </div>
   </div>

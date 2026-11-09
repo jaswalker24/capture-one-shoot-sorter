@@ -1,0 +1,38 @@
+{
+  "id": "temple-travel",
+  "name": "Temple / travel",
+  "kind": "catalog",
+  "shoot_type": "Temple/travel",
+  "tagger_profile": "kyoto",
+  "pass_bundle": "Standard",
+  "passes": [
+    "tagger",
+    "index",
+    "sharpness",
+    "bursts",
+    "schedule"
+  ],
+  "pass_settings": {
+    "tagger": {},
+    "index": {},
+    "sharpness": {},
+    "bursts": {},
+    "schedule": {}
+  },
+  "camera_tz": "Asia/Tokyo",
+  "camera_tz_other": "",
+  "buffer_min": 3,
+  "default_keywords": [
+    "Japan/Temple",
+    "Kyoto/Landscape"
+  ],
+  "keyword_set": "Temple/travel",
+  "schedule_path": "",
+  "ocr_missing_car_number": false,
+  "apply_rank_keywords": false,
+  "apply_each": true,
+  "strictness": "Lenient",
+  "notify": "Finish",
+  "advanced": {},
+  "updated": "2026-11-09T22:21:52"
+}

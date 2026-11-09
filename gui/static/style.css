@@ -87,3 +87,17 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .badge.queued { background: #2a3142; }
 .badge.error, .badge.cancelled { background: #3d1d24; color: var(--danger); }
 .badge.done { background: #1d2a3d; color: var(--accent); }
+
+/* Schedule / history / presets */
+table.data { width:100%; border-collapse:collapse; font-size:12px; }
+table.data th, table.data td { border-bottom:1px solid var(--border); padding:6px 8px; text-align:left; vertical-align:top; }
+table.data th { color:var(--muted); font-weight:600; }
+.warn-list { color:var(--warn); font-size:12px; margin:8px 0; padding-left:18px; }
+.tabs { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; }
+.tabs button { background:var(--panel2); color:var(--text); border:1px solid var(--border); }
+.tabs button.active { background:var(--accent); color:#061018; border-color:transparent; }
+.panel-section { display:none; }
+.panel-section.active { display:block; }
+.health { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
+.preset-row { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; background:var(--panel2); }
+textarea.code { font-family:ui-monospace, Menlo, monospace; font-size:12px; min-height:120px; width:100%; }

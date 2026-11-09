@@ -1,0 +1,38 @@
+{
+  "id": "gig-standard",
+  "name": "Gig standard",
+  "kind": "catalog",
+  "shoot_type": "Gig",
+  "tagger_profile": "gig",
+  "pass_bundle": "Standard",
+  "passes": [
+    "tagger",
+    "index",
+    "sharpness",
+    "bursts",
+    "schedule"
+  ],
+  "pass_settings": {
+    "tagger": {},
+    "index": {},
+    "sharpness": {},
+    "bursts": {},
+    "schedule": {}
+  },
+  "camera_tz": "Asia/Tokyo",
+  "camera_tz_other": "",
+  "buffer_min": 3,
+  "default_keywords": [
+    "Gig/Genre/Live",
+    "Gig/Shot/Stage"
+  ],
+  "keyword_set": "Gig",
+  "schedule_path": "",
+  "ocr_missing_car_number": false,
+  "apply_rank_keywords": false,
+  "apply_each": true,
+  "strictness": "Normal",
+  "notify": "Finish+Fail",
+  "advanced": {},
+  "updated": "2026-11-09T22:21:52"
+}

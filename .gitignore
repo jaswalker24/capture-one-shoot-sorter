@@ -49,3 +49,6 @@ gui/auth.token
 gui/jobs/
 gui/history/
 gui/dock-backup-*.plist
+gui/notify.json
+schedules/_dryrun-*.json
+schedules/apply-*.json

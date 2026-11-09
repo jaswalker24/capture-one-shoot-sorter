@@ -24,6 +24,12 @@ EXPORTS = Path("/Volumes/Photos/Camera Exports")
 
 sys.path.insert(0, str(HOME))
 import jobrunner as JR
+import schedule_ops as SO
+import notify as NF
+import undo_run as UR
+import profiles_ops as PR
+sys.path.insert(0, str(GUI))
+import review as RV  # race-number review queue (additive)
 
 JOBS.mkdir(parents=True, exist_ok=True)
 HISTORY.mkdir(parents=True, exist_ok=True)
@@ -163,6 +169,44 @@ def sys_stats():
             j.get("status") == "running" for j in _load_queue_unlocked()
         )
         stats["paused"] = _PAUSE.is_set()
+    # NAS / disk / C1 / thermal
+    try:
+        stats["nas_mounted"] = IMPORTS.is_dir()
+    except Exception:
+        stats["nas_mounted"] = False
+    try:
+        import shutil
+        du = shutil.disk_usage(str(Path.home()))
+        stats["disk_home_free_gb"] = round(du.free / (1 << 30), 1)
+        stats["disk_home_total_gb"] = round(du.total / (1 << 30), 1)
+    except Exception as e:
+        stats["disk_home_error"] = str(e)
+    try:
+        if stats.get("nas_mounted"):
+            import shutil
+            nu = shutil.disk_usage(str(IMPORTS))
+            stats["disk_nas_free_gb"] = round(nu.free / (1 << 30), 1)
+            stats["disk_nas_total_gb"] = round(nu.total / (1 << 30), 1)
+    except Exception as e:
+        stats["disk_nas_error"] = str(e)
+    try:
+        r = subprocess.run(["pgrep", "-x", "Capture One"], capture_output=True)
+        stats["capture_one_running"] = r.returncode == 0
+    except Exception:
+        stats["capture_one_running"] = None
+    try:
+        # thermal / memory pressure via `memory_pressure` / `pmset -g therm`
+        mp = subprocess.run(["memory_pressure"], capture_output=True, text=True, timeout=3)
+        line = next((ln for ln in mp.stdout.splitlines() if "free percentage" in ln.lower() or "pressure" in ln.lower()), "")
+        stats["memory_pressure_line"] = line.strip()[:160] or None
+        th = subprocess.run(["pmset", "-g", "therm"], capture_output=True, text=True, timeout=3)
+        stats["thermal"] = th.stdout.strip()[:200] if th.returncode == 0 else None
+    except Exception as e:
+        stats["thermal_error"] = str(e)
+    try:
+        stats["notify"] = NF.status()
+    except Exception as e:
+        stats["notify_error"] = str(e)
     return stats
 
 
@@ -317,6 +361,8 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 401, {"error": "login required"})
             if path == "/api/health":
                 return _json(self, 200, {"ok": True, "port": PORT})
+            if path.startswith("/api/review/"):
+                return self._review_get(path, parse_qs(u.query))
             if path == "/api/stats":
                 return _json(self, 200, sys_stats())
             if path == "/api/years":
@@ -334,8 +380,8 @@ class Handler(BaseHTTPRequestHandler):
                     item = dict(p)
                     item["available"] = True
                     if p["id"] == "rank":
-                        item["keywords_default"] = False
-                        item["note"] = p.get("note") or "Score keywords off by default (percentile calibration)."
+                        item["keywords_default"] = True
+                        item["note"] = p.get("note") or "Calibrated: top 10% General/Rank/Best, next 20% General/Rank/Good."
                     passes.append(item)
                 return _json(self, 200, {"passes": passes, "default_order": JR.DEFAULT_ORDER,
                                          "profiles": ["motorsport", "gig", "kyoto"]})
@@ -361,20 +407,83 @@ class Handler(BaseHTTPRequestHandler):
                         return _json(self, 404, {"error": "not found"})
                 j = json.load(open(p))
                 return _json(self, 200, j)
+
+            if path == "/api/schedule/list":
+                return _json(self, 200, {"schedules": SO.list_schedule_files(),
+                                         "camera_timezones": list(SO.CAMERA_TZ.keys())})
+            if path == "/api/schedule/preview":
+                qs = parse_qs(u.query)
+                sp = (qs.get("path") or [""])[0]
+                if not sp or not Path(sp).is_file():
+                    return _json(self, 400, {"error": "schedule path required"})
+                data = json.load(open(sp))
+                confirmed_only = (qs.get("confirmed_only") or ["1"])[0] != "0"
+                return _json(self, 200, SO.validate_schedule(data, confirmed_only))
+
+            if path == "/api/profiles":
+                return _json(self, 200, {"profiles": PR.list_profiles(), "catalogs": PR.catalogs()})
+            if path == "/api/profiles/get":
+                qs = parse_qs(u.query)
+                pid = (qs.get("id") or [""])[0]
+                pr = PR.get_profile(pid)
+                if not pr: return _json(self, 404, {"error": "not found"})
+                return _json(self, 200, {"profile": pr})
+            if path == "/api/presets":
+                pf = GUI / "presets.json"
+                return _json(self, 200, json.load(open(pf)) if pf.exists() else {"presets": []})
+            if path == "/api/notify/status":
+                return _json(self, 200, NF.status())
+            if path == "/api/history/detail":
+                qs = parse_qs(u.query)
+                jid = (qs.get("id") or [""])[0]
+                for base in (HISTORY, JOBS):
+                    hp = base / f"{jid}.json"
+                    if hp.exists():
+                        return _json(self, 200, json.load(open(hp)))
+                return _json(self, 404, {"error": "not found"})
+
             if path == "/api/history":
                 items = []
                 for p in sorted(HISTORY.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:50]:
                     try:
                         j = json.load(open(p))
                         items.append({k: j.get(k) for k in
-                                      ("id", "folder", "profile", "status", "created", "started", "finished",
-                                       "passes", "pass_results", "verify", "error", "sample", "dry_run")})
+                                      ("id", "folder", "folder_name", "profile", "status", "created", "started", "finished",
+                                       "passes", "pass_results", "verify", "error", "sample", "dry_run",
+                                       "added_keywords", "undo_result_files", "notify")}
+                                     | {"keyword_count": sum(len(v) for v in (j.get("added_keywords") or {}).values()),
+                                        "variant_count": len(j.get("added_keywords") or {})})
                     except Exception:
                         pass
                 return _json(self, 200, {"history": items})
             return _json(self, 404, {"error": "unknown api"})
         # static
+        if path in ("/review", "/review/"):
+            return self._serve_static("review.html")
         return self._serve_static(path)
+
+    def _review_get(self, path, qs):
+        g = lambda k, d="": (qs.get(k) or [d])[0]
+        try:
+            if path == "/api/review/shoots":
+                return _json(self, 200, {"shoots": RV.shoots()})
+            if path == "/api/review/queue":
+                return _json(self, 200, RV.queue(g("shoot"), g("status", "pending"), g("only_numbers") == "1"))
+            if path == "/api/review/apply_status":
+                return _json(self, 200, {"apply": RV.apply_status(g("shoot"))})
+            if path == "/api/review/thumb":
+                t = RV.thumb(g("shoot"), g("file"))
+                if not t:
+                    self.send_error(404); return
+                data = t.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "private, max-age=86400")
+                self.end_headers(); self.wfile.write(data); return
+        except ValueError as e:
+            return _json(self, 400, {"error": str(e)})
+        return _json(self, 404, {"error": "unknown api"})
 
     def do_POST(self):
         u = urlparse(self.path)
@@ -402,10 +511,30 @@ class Handler(BaseHTTPRequestHandler):
 
         data = _read_json(self)
 
+        if path == "/api/review/decide":
+            try:
+                d = RV.decide(data.get("shoot") or "", data.get("filename") or "", data.get("action") or "", data.get("numbers"))
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
+            return _json(self, 200, {"ok": True, "decision": d})
+        if path == "/api/review/apply":
+            try:
+                return _json(self, 200, {"ok": True, "apply": RV.start_apply(data.get("shoot") or "")})
+            except (ValueError, RuntimeError) as e:
+                return _json(self, 409, {"error": str(e)})
+
         if path == "/api/queue/add":
             folder = Path(data.get("folder") or "")
             if not folder.is_dir():
                 return _json(self, 400, {"error": f"folder not found: {folder}"})
+            if data.get("profile_id"):
+                pr = PR.get_profile(data["profile_id"])
+                if pr:
+                    fields = PR.job_fields_from_profile(pr)
+                    for k,v in fields.items():
+                        data.setdefault(k, v)
+                    if fields.get("kind") == "exports":
+                        return _json(self, 400, {"error": "use Exports tab for captions profiles"})
             # refuse Camera Exports for catalog passes (captions are separate)
             passes = data.get("passes") or list(JR.DEFAULT_ORDER)
             passes = [p for p in passes if p in JR.PASS_BY_ID]
@@ -425,11 +554,14 @@ class Handler(BaseHTTPRequestHandler):
                     "ocr_missing_car_number": bool(data.get("ocr_missing_car_number", False)),
                     "apply_rank_keywords": bool(data.get("apply_rank_keywords", False)),
                     "sample": int(data.get("sample") or 0),
+                    "schedule_path": data.get("schedule_path") or "",
+                    "camera_offset": data.get("camera_offset") or "",
                     "status": "queued",
                     "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "queue_order": _next_queue_order(),
                     "log": [],
                     "pass_results": {},
+                    "added_keywords": {},
                 }
                 json.dump(job, open(_job_path(jid), "w"), indent=1, ensure_ascii=False)
             ensure_worker()
@@ -469,6 +601,172 @@ class Handler(BaseHTTPRequestHandler):
                 j["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S")
             json.dump(j, open(p, "w"), indent=1)
             return _json(self, 200, {"ok": True, "job": j})
+
+        
+        if path == "/api/schedule/save":
+            raw = data.get("json")
+            if data.get("csv"):
+                try:
+                    raw = SO.csv_to_schedule(data["csv"], data.get("name") or "Imported schedule",
+                                            data.get("timezone") or "Asia/Tokyo",
+                                            int(data.get("buffer_min") or 3))
+                except Exception as e:
+                    return _json(self, 400, {"error": str(e)})
+            if not isinstance(raw, dict):
+                return _json(self, 400, {"error": "provide json object or csv text"})
+            confirmed_only = bool(data.get("confirmed_only", True))
+            preview = SO.validate_schedule(raw, confirmed_only)
+            path_out = SO.save_schedule(raw, data.get("filename"))
+            return _json(self, 200, {"ok": True, "path": str(path_out), "preview": preview})
+
+        if path == "/api/schedule/dry_run":
+            folder = Path(data.get("folder") or "")
+            sp = Path(data.get("schedule_path") or "")
+            if not folder.is_dir():
+                return _json(self, 400, {"error": "folder not found"})
+            if not sp.is_file():
+                return _json(self, 400, {"error": "schedule not found"})
+            try:
+                summary = SO.dry_run(folder, sp,
+                                     camera_tz=data.get("camera_tz") or "Europe/London",
+                                     buffer_min=int(data.get("buffer_min") or 3),
+                                     confirmed_only=bool(data.get("confirmed_only", True)),
+                                     sample=int(data.get("sample") or 0))
+            except Exception as e:
+                return _json(self, 500, {"error": str(e)})
+            return _json(self, 200, {"ok": True, "summary": summary})
+
+        if path == "/api/schedule/apply":
+            folder = Path(data.get("folder") or "")
+            sp = data.get("schedule_path")
+            if not folder.is_dir():
+                return _json(self, 400, {"error": "folder not found"})
+            try:
+                sched_data = json.load(open(sp)) if sp else data.get("json")
+                if not sched_data and not sp:
+                    return _json(self, 400, {"error": "schedule_path or json required"})
+                work = SO.prepare_apply_schedule(sched_data if isinstance(sched_data, dict) else None,
+                                                 sp, int(data.get("buffer_min") or 3),
+                                                 bool(data.get("confirmed_only", True)))
+                cam_off = SO.camera_offset_for(data.get("camera_tz") or "Europe/London", force=True)
+            except Exception as e:
+                return _json(self, 400, {"error": str(e)})
+            jid = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+            with _QUEUE_LOCK:
+                job = {
+                    "id": jid, "folder": str(folder), "folder_name": folder.name,
+                    "profile": "gig", "context": data.get("context") or "",
+                    "passes": ["schedule"], "apply_each": True,
+                    "dry_run": bool(data.get("dry_run", False)),
+                    "schedule_path": str(work),
+                    "camera_offset": cam_off,
+                    "camera_tz": data.get("camera_tz") or "Europe/London",
+                    "buffer_min": int(data.get("buffer_min") or 3),
+                    "ocr_missing_car_number": False, "apply_rank_keywords": False,
+                    "sample": int(data.get("sample") or 0),
+                    "status": "queued",
+                    "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "queue_order": _next_queue_order(),
+                    "log": [], "pass_results": {}, "added_keywords": {},
+                }
+                json.dump(job, open(_job_path(jid), "w"), indent=1, ensure_ascii=False)
+            ensure_worker()
+            return _json(self, 200, {"ok": True, "job": job})
+
+
+        if path == "/api/profiles/defaults":
+            st = data.get("shoot_type") or "Gig"
+            try:
+                return _json(self, 200, {"profile": PR.build_from_shoot_type(st, data.get("overrides") or {})})
+            except Exception as e:
+                return _json(self, 400, {"error": str(e)})
+
+        if path == "/api/profiles/save":
+            try:
+                pr = PR.save_profile(data.get("profile") or data, overwrite=True)
+            except Exception as e:
+                return _json(self, 400, {"error": str(e)})
+            return _json(self, 200, {"ok": True, "profile": pr, "profiles": PR.list_profiles()})
+
+        if path == "/api/profiles/delete":
+            try:
+                PR.delete_profile(data.get("id") or "")
+            except Exception as e:
+                return _json(self, 400, {"error": str(e)})
+            return _json(self, 200, {"ok": True, "profiles": PR.list_profiles()})
+
+        if path == "/api/profiles/duplicate":
+            try:
+                pr = PR.duplicate_profile(data.get("id") or "", data.get("name"))
+            except Exception as e:
+                return _json(self, 400, {"error": str(e)})
+            return _json(self, 200, {"ok": True, "profile": pr, "profiles": PR.list_profiles()})
+
+        if path == "/api/profiles/reorder":
+            order = PR.reorder(data.get("order") or [])
+            return _json(self, 200, {"ok": True, "order": order, "profiles": PR.list_profiles()})
+
+        if path == "/api/presets/save":
+            presets = data.get("presets")
+            if not isinstance(presets, list):
+                return _json(self, 400, {"error": "presets list required"})
+            # Safety: catalog presets must never include captions
+            for pr in presets:
+                if pr.get("kind") != "exports" and "captions" in (pr.get("passes") or []):
+                    return _json(self, 400, {"error": f"catalog preset {pr.get('name')} cannot include captions"})
+            json.dump({"presets": presets}, open(GUI / "presets.json", "w"), indent=2)
+            return _json(self, 200, {"ok": True, "presets": presets})
+
+        if path == "/api/notify/set":
+            # Only toggles / non-secret fields via API; tokens must be edited in notify.json on disk
+            cur = NF.load_cfg()
+            if "enabled" in data:
+                cur["enabled"] = bool(data["enabled"])
+            if "email_enabled" in data:
+                cur.setdefault("email", {})["enabled"] = bool(data["email_enabled"])
+            if "telegram_enabled" in data:
+                cur.setdefault("telegram", {})["enabled"] = bool(data["telegram_enabled"])
+            # Never accept bot_token over the API into logs — require file edit
+            json.dump(cur, open(NF.CFG, "w"), indent=2)
+            NF.CFG.chmod(0o600)
+            return _json(self, 200, {"ok": True, "status": NF.status()})
+
+        if path == "/api/history/undo_preview":
+            jid = data.get("id")
+            job = None
+            for base in (HISTORY, JOBS):
+                hp = base / f"{jid}.json"
+                if hp.exists():
+                    job = json.load(open(hp)); break
+            if not job:
+                return _json(self, 404, {"error": "job not found"})
+            plan = UR.collect_added_keywords(job)
+            return _json(self, 200, {"ok": True, "plan": plan})
+
+        if path == "/api/history/undo":
+            jid = data.get("id")
+            apply = bool(data.get("apply", False))
+            confirm = bool(data.get("confirm", False))
+            if apply and not confirm:
+                return _json(self, 400, {"error": "confirm=true required to remove keywords"})
+            job = None
+            job_path = None
+            for base in (HISTORY, JOBS):
+                hp = base / f"{jid}.json"
+                if hp.exists():
+                    job = json.load(open(hp)); job_path = hp; break
+            if not job:
+                return _json(self, 404, {"error": "job not found"})
+            try:
+                res = UR.run_undo(job, apply=apply)
+            except Exception as e:
+                return _json(self, 500, {"error": str(e)})
+            if apply and res.get("ok"):
+                job["undo"] = {"when": time.strftime("%Y-%m-%dT%H:%M:%S"), "removed": res.get("removed"),
+                               "result_path": res.get("result_path")}
+                json.dump(job, open(job_path, "w"), indent=1)
+            return _json(self, 200, res)
+
 
         if path == "/api/exports/captions":
             # separate export-only panel — does NOT go through catalog queue apply
@@ -512,6 +810,10 @@ def main():
         AUTH_FILE.write_text(secrets.token_urlsafe(24))
         AUTH_FILE.chmod(0o600)
         print("generated auth token at", AUTH_FILE)
+    try:
+        PR.seed_if_empty()
+    except Exception as _e:
+        print("profile seed:", _e, flush=True)
     ensure_worker()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Trips Local AI control panel on http://{HOST}:{PORT}", flush=True)

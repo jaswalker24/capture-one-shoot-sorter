@@ -1,0 +1,40 @@
+{
+  "id": "motorsport-full",
+  "name": "Motorsport full",
+  "kind": "catalog",
+  "shoot_type": "Motorsport",
+  "tagger_profile": "motorsport",
+  "pass_bundle": "Full",
+  "passes": [
+    "tagger",
+    "index",
+    "sharpness",
+    "bursts",
+    "ocr",
+    "schedule"
+  ],
+  "pass_settings": {
+    "tagger": {},
+    "index": {},
+    "sharpness": {},
+    "bursts": {},
+    "ocr": {},
+    "schedule": {}
+  },
+  "camera_tz": "Europe/London",
+  "camera_tz_other": "",
+  "buffer_min": 3,
+  "default_keywords": [
+    "Motorsport/Night",
+    "Motorsport/Session/Race"
+  ],
+  "keyword_set": "Motorsport",
+  "schedule_path": "",
+  "ocr_missing_car_number": true,
+  "apply_rank_keywords": false,
+  "apply_each": true,
+  "strictness": "Strict",
+  "notify": "Finish+Fail",
+  "advanced": {},
+  "updated": "2026-11-09T22:21:52"
+}

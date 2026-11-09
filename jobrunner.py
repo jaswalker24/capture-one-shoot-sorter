@@ -17,20 +17,20 @@ OUT = HOME / "out"
 IMPORTS_ROOT = Path("/Volumes/Photos/Camera Imports")
 EXPORTS_ROOT = Path("/Volumes/Photos/Camera Exports")
 
-# Pass catalogue. Rank is available (percentile calibration is in features.py) but
-# score keywords stay OFF unless apply_rank_keywords is explicitly True.
+# Pass catalogue. Rank is calibrated (features.py cmd_rank) and its General/Rank/{Best,Good}
+# keywords are applied by default (apply_rank_keywords=False turns them off).
 PASSES = [
     {"id": "tagger", "label": "Tag with Local AI", "needs_index": False},
     {"id": "index", "label": "Index (search)", "needs_index": False},
     {"id": "sharpness", "label": "Sharpness", "needs_index": True},
     {"id": "bursts", "label": "Bursts", "needs_index": True},
-    {"id": "rank", "label": "Rank", "needs_index": True,
-     "note": "Ordering CSV always; Score keywords opt-in (off by default)."},
+    {"id": "rank", "label": "Rank (calibrated)", "needs_index": True,
+     "note": "Top 10% General/Rank/Best, next 20% General/Rank/Good (calibrated on catalog star ratings)."},
     {"id": "ocr", "label": "Read Text in Frame", "needs_index": False},
     {"id": "schedule", "label": "Tag by Schedule", "needs_index": False},
 ]
 PASS_BY_ID = {p["id"]: p for p in PASSES}
-DEFAULT_ORDER = ["tagger", "index", "sharpness", "bursts", "ocr", "schedule"]  # rank omitted by default
+DEFAULT_ORDER = ["tagger", "index", "sharpness", "bursts", "rank", "ocr", "schedule"]
 
 
 def log(state, *a):
@@ -131,7 +131,7 @@ def _apply_pass(state, folder: Path, pass_id: str, profile: str, apply: bool):
     if pass_id in ("index",):
         return {"skipped": "no keywords"}
     if pass_id == "rank" and not state.get("apply_rank_keywords"):
-        log(state, "skip apply for rank (score keywords disabled)")
+        log(state, "skip apply for rank (rank keywords disabled)")
         return {"skipped": "rank keywords disabled"}
     prop = _proposal_file(folder, pass_id, profile)
     if not prop:
@@ -145,8 +145,8 @@ def _apply_pass(state, folder: Path, pass_id: str, profile: str, apply: bool):
     data = json.load(open(prop))
     images = [r for r in data.get("images", []) if r.get("proposed_keywords") and not r.get("needs_review") and not r.get("error")]
     if pass_id == "rank":
-        # even if apply_rank_keywords, only those with Score keywords
-        images = [r for r in images if any(k.startswith("General/Score/") for k in r.get("proposed_keywords") or [])]
+        # calibrated tiers only (legacy General/Score/* buckets are retired)
+        images = [r for r in images if any(k.startswith("General/Rank/") for k in r.get("proposed_keywords") or [])]
     if not images:
         log(state, f"apply {pass_id}: nothing confident to apply")
         return {"applied": 0, "variants": 0}
@@ -217,7 +217,7 @@ def run_job(state_path: Path):
     sample = int(state.get("sample") or 0)
     passes = ensure_pass_order([p for p in state.get("passes") or DEFAULT_ORDER if p in PASS_BY_ID], folder)
     state["passes"] = passes
-    state["apply_rank_keywords"] = bool(state.get("apply_rank_keywords", False))
+    state["apply_rank_keywords"] = bool(state.get("apply_rank_keywords", True))
     out = OUT / folder.name
     out.mkdir(parents=True, exist_ok=True)
 
@@ -279,8 +279,8 @@ def run_job(state_path: Path):
 
             elif pid == "rank":
                 cmd = [TAG, "rank", str(folder), "--top", "50"]
-                if state.get("apply_rank_keywords"):
-                    cmd.append("--apply-score-keywords")
+                if not state.get("apply_rank_keywords"):
+                    cmd.append("--no-keywords")
                 _run_streaming(state, cmd, pass_id=pid)
 
             elif pid == "ocr":
@@ -312,6 +312,8 @@ def run_job(state_path: Path):
                     cmd += ["--sample", str(sample)]
                 sched = state.get("schedule_path") or str(HOME / "schedules/example.json")
                 cmd += ["--schedule", sched]
+                if state.get("camera_offset"):
+                    cmd += ["--camera-offset", state["camera_offset"]]
                 _run_streaming(state, cmd, pass_id=pid)
 
             else:
@@ -322,6 +324,28 @@ def run_job(state_path: Path):
             if apply_each or dry_run:
                 try:
                     result["apply"] = _apply_pass(state, folder, pid, profile, apply=apply)
+                    # Track keywords this job added (for undo)
+                    if apply and isinstance(result.get("apply"), dict):
+                        state.setdefault("undo_result_files", [])
+                        state.setdefault("added_keywords", {})
+                        fo = OUT / folder.name
+                        for rp in sorted(fo.glob(f"gui-apply-{pid}-*-result.json")):
+                            # only results from this job id prefix if present
+                            if state["id"][:8] not in rp.name and state["id"] not in rp.name:
+                                # gui-apply-{pid}-{HHMMSS}-c000-result.json — accept recent ones from this pass call
+                                pass
+                            try:
+                                rr = json.load(open(rp))
+                            except Exception:
+                                continue
+                            if str(rp) not in state["undo_result_files"]:
+                                state["undo_result_files"].append(str(rp))
+                            for a in rr.get("applied") or []:
+                                if a.get("dry"): continue
+                                fn, kw = a.get("filename"), a.get("keyword")
+                                if not fn or not kw: continue
+                                lst = state["added_keywords"].setdefault(fn, [])
+                                if kw not in lst: lst.append(kw)
                 except Exception as e:
                     result["apply_error"] = str(e)
                     log(state, "apply error:", e)
@@ -366,12 +390,27 @@ def run_job(state_path: Path):
         state["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         state["current_pass"] = None
         log(state, "FINISHED", state["status"])
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(HOME / "gui"))
+            from notify import notify_job
+            nres = notify_job({k: state.get(k) for k in state if not str(k).startswith("_")})
+            state["notify"] = nres; log(state, "notify:", nres)
+        except Exception as _ne:
+            state["notify_error"] = str(_ne); log(state, "notify error:", _ne)
     except Exception as e:
         state["status"] = "cancelled" if state.get("cancel_requested") else "error"
         state["error"] = str(e)
         state["traceback"] = traceback.format_exc()[-2000:]
         state["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         log(state, "ERROR", e)
+        try:
+            import sys as _sys
+            _sys.path.insert(0, str(HOME / "gui"))
+            from notify import notify_job
+            state["notify"] = notify_job({k: state.get(k) for k in state if not str(k).startswith("_")})
+        except Exception:
+            pass
         _save(state)
         raise
     finally:

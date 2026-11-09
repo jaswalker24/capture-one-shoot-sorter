@@ -106,52 +106,29 @@ Use `--no-apply` on `fullrun.py` if you only want the proposal files.
 
 ---
 
-## Control panel (web GUI)
 
-A small local web app on the Mac lets you queue and reorder passes without using Terminal. It is meant for the headless M5 (Screen Sharing), and it also works from any device on your LAN.
+## Control panel (Trips Local AI)
 
-### Start it
+Local web UI on the M5 (and LAN): **http://127.0.0.1:8765/** or **http://127.0.0.1:8765/** / **http://127.0.0.1:8765/**.
 
-```bash
-# one-time: install the LaunchAgent (survives reboots)
-cp ~/localai/gui/com.trips.localai.gui.plist ~/Library/LaunchAgents/ 2>/dev/null ||   cp gui/com.trips.localai.gui.plist ~/Library/LaunchAgents/
-# if you installed via install.sh, the plist already points at ~/localai
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.trips.localai.gui.plist
-```
+LaunchAgent: `com.trips.localai.gui` (internal label unchanged). Dock app: **Trips Local AI** (opens already signed in via `?token=` from `~/localai/gui/auth.token`).
 
-Or run in the foreground:
+### Tabs
 
-```bash
-~/localai/venv/bin/python ~/localai/gui/server.py
-```
+- **Run** — pick a **Profile** (or custom passes), folder, queue jobs with live progress. Apply-after-each-pass is default. Caption model is never used for catalog jobs.
+- **Schedule importer** — load/paste JSON or CSV, preview events/slots/TBA/overlaps, dry-run EXIF mapping, queue additive schedule tagging (confirmed only by default).
+- **History & undo** — past runs with keyword counts; preview then remove **only** keywords that run added (never stars/colours).
+- **Profiles** — create/edit from dropdowns (shoot type, pass bundle, camera TZ, buffer, keyword set, linked schedule, sharpness strictness, notifications). Shoot type auto-fills the rest. Supersedes the old Presets list. Stored in `~/localai/profiles/`.
+- **Settings** — notification toggles. Telegram needs `bot_token` + `chat_id` in untracked `~/localai/gui/notify.json` (see `notify.example.json`). The inbound Telegram bridge cannot send alerts. Email uses local sendmail when enabled (postfix here is loopback-only unless a relay is configured).
+- **Exports** — Draft Captions only for Camera Exports folders.
 
-Open:
+### Health strip
 
-- `http://127.0.0.1:8765/` on the Mac
-- `http://127.0.0.1:8765/` or `http://<LAN-IP>:8765/` from another device on the network
+CPU, memory, NAS mount, free disk (M5 + NAS), Capture One running, Ollama/caption-model status, thermal/pressure, queue pause, notify on/off — refreshes every few seconds.
 
-Log in with the shared secret in `~/localai/gui/auth.token` (one line, no spaces). On the M5, the Dock shortcut opens the panel already signed in. From another device, run `cat ~/localai/gui/auth.token` on the M5 and paste that value. The installer creates a random token; change it if you like.
+### Profiles (examples)
 
-Optional Dock shortcut:
-
-```bash
-~/localai/gui/macos/install-dock-app.sh
-# or from this repo after install:
-./gui/macos/install-dock-app.sh
-```
-
-### What the page does
-
-- Pick a year / folder under `Camera Imports`, a profile (`motorsport` / `gig` / `kyoto`), and optional context text.
-- Tick passes and drag (or use arrows) to order them: Tag with Local AI, Index, Sharpness, Bursts, Rank, Read Text in Frame, Tag by Schedule.
-- **Apply keywords after each pass** is on by default (tag → apply → next pass).
-- Caption model is never used for catalog jobs (`--no-caption` always).
-- Optional: run the text pass only on motorsport frames still missing a car number.
-- Rank can run for ordering CSVs; Score keywords stay off unless you tick “Apply Rank score keywords”.
-- Queue: add several jobs, pause next, cancel, watch live progress and a log tail.
-- Separate **Exports · Draft Captions** panel — only folders under `Camera Exports`.
-
-Safety: additive keywords only; stars and colour tags are never written. Full jobs snapshot ratings/colours before and after (sample jobs skip the snapshot so they do not stall Capture One).
+Seeded under `profiles/`: Gig standard, Idol gig, Motorsport full, Temple/travel, Schedule tags only, Exports only (Draft Captions). Catalog profiles must never include captions.
 
 
 ## What each Scripts menu action does

@@ -1,0 +1,27 @@
+{
+  "id": "exports-captions",
+  "name": "Exports only (Draft Captions)",
+  "kind": "exports",
+  "shoot_type": "Exports only",
+  "tagger_profile": "gig",
+  "pass_bundle": "Exports captions",
+  "passes": [
+    "captions"
+  ],
+  "pass_settings": {
+    "captions": {}
+  },
+  "camera_tz": "Europe/London",
+  "camera_tz_other": "",
+  "buffer_min": 3,
+  "default_keywords": [],
+  "keyword_set": "Exports only",
+  "schedule_path": "",
+  "ocr_missing_car_number": false,
+  "apply_rank_keywords": false,
+  "apply_each": true,
+  "strictness": "Normal",
+  "notify": "Finish",
+  "advanced": {},
+  "updated": "2026-11-09T22:21:52"
+}

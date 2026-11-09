@@ -54,6 +54,7 @@ _extra = {
  "General": {
   "Burst Best": [],
   "Score": ["Below 5", "5", "6", "7", "8+"],
+  "Rank": ["Best", "Good"],
  },
  "Gig": {
   "Cheki": [],

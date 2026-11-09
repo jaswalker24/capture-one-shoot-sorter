@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Full-folder pipeline (resumable): tagger -> index -> sharpness/bursts/rank -> OCR -> additive apply -> verification.
+"""Full-folder pipeline (resumable): tagger -> index -> sharpness/bursts/rank (calibrated, General/Rank/Best|Good) -> OCR
+-> additive apply -> Cull smart albums -> verification.
 Draft Captions are NOT part of this pipeline. Usage: venv/bin/python fullrun.py <folder> [--profile motorsport] [--context ...]"""
 import argparse, json, os, re, subprocess, sys, time
 from pathlib import Path
@@ -29,7 +30,8 @@ def snap(path):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("folder"); ap.add_argument("--profile", default="motorsport")
-    ap.add_argument("--context", default=""); ap.add_argument("--no-apply", action="store_true"); a = ap.parse_args()
+    ap.add_argument("--context", default=""); ap.add_argument("--no-apply", action="store_true")
+    ap.add_argument("--no-cull-albums", action="store_true", help="skip the Cull smart albums step"); a = ap.parse_args()
     folder = Path(a.folder); fo = folder.name; out = HOME / "out" / fo; out.mkdir(parents=True, exist_ok=True)
     st_f = out / "fullrun-state.json"
     st = json.load(open(st_f)) if st_f.exists() else {"done": [], "started": time.strftime("%Y-%m-%dT%H:%M:%S"), "timings": {}}
@@ -76,6 +78,9 @@ def main():
                 res = apply_proposals(str(out / f"fullrun-chunk-{ci:03d}.json"), apply=True, prefix=str(out / f"apply-chunk-{ci:03d}"))
                 st.setdefault("chunks", {})[str(ci)] = {"applied": len(res["applied"]), "skipped": len(res["skipped"]), "failures": len(res["failures"])}
             step(f"apply:chunk{ci:03d}", go)
+        if not a.no_cull_albums:
+            # keyword-based smart albums (Sharp+Burst Best / Rank Best / Shortlist) for this shoot; collections only
+            step("cull_albums", lambda: run([str(HOME / "venv/bin/python"), str(HOME / "cull_album.py"), str(folder)]))
     def verify():
         before = json.load(open(out / "fullrun-flags-before.json")); after = snap(out / "fullrun-flags-after.json")
         changed = [{"id": k, "before": before[k], "after": after.get(k)} for k in before if after.get(k, {}).get("rating") != before[k]["rating"] or after.get(k, {}).get("color") != before[k]["color"]]

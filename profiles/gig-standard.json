@@ -10,14 +10,18 @@
     "index",
     "sharpness",
     "bursts",
-    "schedule"
+    "rank",
+    "schedule",
+    "cull"
   ],
   "pass_settings": {
     "tagger": {},
     "index": {},
     "sharpness": {},
     "bursts": {},
-    "schedule": {}
+    "schedule": {},
+    "rank": {},
+    "cull": {}
   },
   "camera_tz": "Asia/Tokyo",
   "camera_tz_other": "",

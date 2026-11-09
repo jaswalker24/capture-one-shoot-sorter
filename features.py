@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Local AI features for Capture One (all on-device, originals read-only).
+Local AI features for this Mac (all on-device, originals read-only).
 
   index      build/extend the image index (SigLIP embedding, aesthetic score, sharpness, EXIF)
   search     text search over the index
   ocr        Apple Vision text in frame (en + ja [+ zh]), optional Japanese->English via Ollama
   bursts     near-duplicate burst groups with a suggested best frame
   sharpness  Quality/Sharp | Motion Blur | Soft Focus flags (subject region, per-folder normalised)
-  rank       aesthetic ranking + top-N shortlist
+  rank       calibrated rank (sharpness+aesthetic+burst) -> General/Rank/Best|Good
   journal    markdown day summary for a folder (local LLM)
   ask        question answering over the local index (local LLM, simple RAG)
-  faces      detect + embed + cluster faces into anonymous groups (Person 001 ...)
-  name-person  give an anonymous face group a local name
+  faces      People pass: detect + embed + cluster + match ~/localai/people library
+  name-person  name a cluster (writes persistent people library; use --shoot)
   captions   draft captions (sidecar JSON for Salamander)
 Index: ~/localai/index/catalog.sqlite (+ index/siglip/*.npy, keyed by SHA-256).
 """
@@ -196,11 +196,13 @@ def import_proposals(c, folder_name):
             sha = r.get("sha256")
             if not sha: continue
             kw.setdefault(sha, set()).update(r.get("proposed_keywords", []) + r.get("tentative_keywords", []))
-            if tagger_file and r.get("caption"): cap[sha] = r["caption"]
+            # Captions are export-only (Salamander). Never import into the catalog index here.
+            # if tagger_file and r.get("caption"): cap[sha] = r["caption"]
+            pass  # captions intentionally ignored
             if tagger_file and r.get("labels"): lab[sha] = r["labels"]
     for sha, k in kw.items():
-        c.execute("UPDATE images SET keywords=?, caption=COALESCE(?, caption), labels=COALESCE(?, labels) WHERE sha256=?",
-                  (json.dumps(sorted(k)), cap.get(sha), json.dumps(lab[sha]) if sha in lab else None, sha))
+        c.execute("UPDATE images SET keywords=?, labels=COALESCE(?, labels) WHERE sha256=?",
+                  (json.dumps(sorted(k)), json.dumps(lab[sha]) if sha in lab else None, sha))
     c.commit()
 
 def t_parse(s):
@@ -460,32 +462,115 @@ def cmd_bursts(args):
             print(f"  group {gi}: " + ", ".join(("*" if r is max(g, key=lambda r: 0.6*r['sharp_pct']+0.4*r['aes_pct']) else "") + r["filename"] for r in g))
 
 # ------------------------------------------------------------------ rank
-def score_bucket(a):
+def score_bucket_absolute(a):
+    """Legacy absolute NIMA-style buckets. Collapses on shoots where scores cluster ~4-6."""
     return "8+" if a >= 8 else ("Below 5" if a < 5 else str(int(a)))
 
+def score_bucket_percentile(rank_index, n):
+    """Relative 1-10 score from 0-based rank within the shoot (0=best)."""
+    if n <= 1:
+        return "5"
+    pct_from_top = rank_index / (n - 1)
+    score = int(round(10 - 9 * pct_from_top))
+    return str(max(1, min(10, score)))
+
+RANK_DEFAULTS = {  # calibrated 2026-11-09 on Brands Hatch against star ratings in that catalog (override in config.json "rank")
+    "weights": {"sharp": 0.5, "aes": 0.15, "burst_best": 0.3, "burst_other": 0.1, "blur": 0.3},
+    "best_pct": 0.10,   # top 10% of the shoot -> General/Rank/Best
+    "good_pct": 0.20,   # next 20%             -> General/Rank/Good
+    "min_rated_for_calibration": 10,
+}
+
+def rank_cfg():
+    r = json.loads(json.dumps(RANK_DEFAULTS)); u = CFG.get("rank", {})
+    r["weights"].update(u.get("weights", {})); r.update({k: v for k, v in u.items() if k != "weights"})
+    return r
+
+def _auc(s, lab):
+    s = np.asarray(s, float); lab = np.asarray(lab, bool); pos, neg = s[lab], s[~lab]
+    if not len(pos) or not len(neg): return float("nan")
+    return float((pos[:, None] > neg[None, :]).mean() + 0.5 * (pos[:, None] == neg[None, :]).mean())
+
+def rank_features(fo, rows):
+    """aes_pct / sharp_pct from the index + burst membership + blur flag (read from this shoot's outputs)."""
+    d = OUT / fo; inb = {}
+    if (d / "bursts.csv").exists():
+        for r in csv.DictReader(open(d / "bursts.csv")): inb[r["filename"]] = (r["best"] == "True")
+    for r in rows:
+        r["burst_best"] = 1.0 if inb.get(r["filename"]) is True else 0.0
+        r["burst_other"] = 1.0 if inb.get(r["filename"]) is False else 0.0
+        r["blur"] = 1.0 if r["flag"] in ("Motion Blur", "Soft Focus") else 0.0
+    return rows
+
+def rank_score(r, w):
+    return (w["sharp"] * r["sharp_pct"] + w["aes"] * r["aes_pct"] + w["burst_best"] * r["burst_best"]
+            - w["burst_other"] * r["burst_other"] - w["blur"] * r["blur"])
+
+def user_ratings(fo):
+    """Star ratings for this shoot from the latest read-only catalog snapshot (never written)."""
+    d = OUT / fo; snaps = sorted([p for p in d.glob("*flags-*.json")], key=lambda p: p.stat().st_mtime)
+    if not snaps: return {}, None
+    s = json.load(open(snaps[-1]))
+    return {v["name"]: v.get("rating", 0) for v in s.values() if isinstance(v, dict) and "name" in v}, snaps[-1].name
+
+def calibrate_weights(rows, ratings, rc):
+    """Small regularised grid search maximising AUC of 3+ and 4+ star frames; aesthetic weight kept >= 0.15."""
+    import itertools
+    lab4 = [ratings.get(r["filename"].rsplit(".", 1)[0], 0) >= 4 for r in rows]
+    lab3 = [ratings.get(r["filename"].rsplit(".", 1)[0], 0) >= 3 for r in rows]
+    if sum(lab3) < rc["min_rated_for_calibration"]: return None
+    best = None
+    for ws, wa, wb, wo, wl in itertools.product([0.25, 0.5, 0.75], [0.15, 0.3], [0.1, 0.2, 0.3], [0, 0.1, 0.2], [0.1, 0.2, 0.3, 0.4]):
+        w = dict(sharp=ws, aes=wa, burst_best=wb, burst_other=wo, blur=wl); s = [rank_score(r, w) for r in rows]
+        m = 0.5 * _auc(s, lab4) + 0.5 * _auc(s, lab3) if sum(lab4) else _auc(s, lab3)
+        if best is None or m > best[0] + 1e-9: best = (m, w)
+    return best
+
 def cmd_rank(args):
-    c = db(); fos, shas = target_folders(c, args)
+    """Calibrated rank: composite of subject sharpness, aesthetic, burst-best and blur flags, tiered by percentile
+    within the shoot. Emits General/Rank/Best (top best_pct) and General/Rank/Good (next good_pct) by default."""
+    c = db(); fos, shas = target_folders(c, args); rc = rank_cfg()
     for fo in fos:
-        rows = quality_rows(c, fo, shas)
-        for r in rows: r["rank_score"] = round(r["aesthetic"] + (0.5 * (r["sharp_pct"] - 0.5) if args.blend else 0), 3)
-        rows.sort(key=lambda r: -r["rank_score"])
+        rows = rank_features(fo, quality_rows(c, fo))   # tiers are always relative to the whole shoot
+        if not rows: print(fo, "no indexed frames"); continue
+        w = dict(rc["weights"]); ratings, snapname = user_ratings(fo); cal = None
+        if getattr(args, "calibrate", False):
+            cal = calibrate_weights(rows, ratings, rc)
+            if cal: w = cal[1]; print(f"calibrated on {snapname}: weights={w} metric={cal[0]:.3f}")
+            else: print("not enough rated frames to calibrate; using stored weights")
+        for r in rows: r["rank_score"] = round(rank_score(r, w), 4)
+        rows.sort(key=lambda r: (-r["rank_score"], r["filename"]))
+        n = len(rows); nb = int(round(rc["best_pct"] * n)); ng = int(round((rc["best_pct"] + rc["good_pct"]) * n))
+        for i, r in enumerate(rows): r["tier"] = "Best" if i < nb else ("Good" if i < ng else "")
         d = OUT / fo; d.mkdir(parents=True, exist_ok=True)
         cap = dict(c.execute("SELECT sha256, caption FROM images WHERE folder=?", (fo,)).fetchall())
-        fields = ["rank", "filename", "rank_score", "aesthetic", "sharp_pct", "flag", "capture_time", "caption", "sha256"]
+        fields = ["rank", "filename", "tier", "rank_score", "sharp_pct", "aes_pct", "aesthetic", "burst_best", "burst_other", "flag", "capture_time", "caption", "sha256"]
         def dump(path, rr):
             with open(path, "w", newline="") as fh:
-                w = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore"); w.writeheader()
-                for i, r in enumerate(rr, 1): w.writerow(dict(r, rank=i, caption=cap.get(r["sha256"]) or ""))
+                wr = csv.DictWriter(fh, fieldnames=fields, extrasaction="ignore"); wr.writeheader()
+                for i, r in enumerate(rr, 1): wr.writerow(dict(r, rank=i, caption=cap.get(r["sha256"]) or ""))
         dump(d / "rank.csv", rows); dump(d / f"rank-top{args.top}.csv", rows[:args.top])
+        emit = not getattr(args, "no_keywords", False)
         recs = [dict(filename=r["filename"], sha256=r["sha256"], needs_review=False,
-                     proposed_keywords=[f"General/Score/{score_bucket(r['aesthetic'])}"]) for r in rows]
+                     proposed_keywords=[f"General/Rank/{r['tier']}"] if (emit and r["tier"]) else [],
+                     tier=r["tier"], rank_score=r["rank_score"], rank=i + 1) for i, r in enumerate(rows)
+                if not shas or r["sha256"] in shas]   # a selection only gets its own rows, ranked shoot-wide
         pf = write_proposals(folder_path_for(c, fo), "rank", recs)
-        print(f"{fo}: {len(rows)} ranked; aesthetic min/median/max = {min(r['aesthetic'] for r in rows):.2f}/"
-              f"{np.median([r['aesthetic'] for r in rows]):.2f}/{max(r['aesthetic'] for r in rows):.2f}; top{args.top} -> {d/f'rank-top{args.top}.csv'}")
+        lab = [ratings.get(r["filename"].rsplit(".", 1)[0], 0) for r in rows]
+        stats = {"frames": n, "Best": nb, "Good": ng - nb, "untiered": n - ng, "weights": w}
+        if any(x >= 3 for x in lab):
+            stats["user_3plus_in_best"] = sum(1 for r, x in zip(rows, lab) if x >= 3 and r["tier"] == "Best")
+            stats["user_3plus_in_best_or_good"] = sum(1 for r, x in zip(rows, lab) if x >= 3 and r["tier"])
+            stats["user_3plus_total"] = sum(1 for x in lab if x >= 3)
+            stats["auc_user_3plus"] = round(_auc([r["rank_score"] for r in rows], [x >= 3 for x in lab]), 3)
+            stats["ratings_snapshot"] = snapname
+        json.dump(stats, open(d / "rank-calibration.json", "w"), indent=1)
+        print(f"{fo}: {n} ranked -> Best {nb}, Good {ng - nb}, untiered {n - ng}; keywords {'on' if emit else 'off'}; {pf}")
+        print("  ", json.dumps({k: v for k, v in stats.items() if k != "weights"}))
         for i, r in enumerate(rows[:min(5, args.top)], 1):
-            print(f"  {i}. {r['filename']} aes={r['aesthetic']:.2f} sharp_pct={r['sharp_pct']:.2f} {r['flag'] or ''}")
+            print(f"  {i}. {r['filename']} score={r['rank_score']:.3f} sharp={r['sharp_pct']:.2f} aes={r['aes_pct']:.2f} {r['flag'] or ''}")
 
-# ------------------------------------------------------------------ captions (Salamander sidecar)
+
 def cmd_captions(args):
     """Export-only: drafts captions for files under '[03] Photos/Camera Exports'. Never part of catalog tagging."""
     c = db(); files = resolve_files(args); out = []
@@ -625,28 +710,13 @@ def embed_face(img_rgb, five):
     return e / np.linalg.norm(e), crop
 
 def cmd_faces(args):
-    c = db(); files = resolve_files(args) if (args.folder or args.files) else []
-    t0 = time.time(); nf = 0
-    for i, p in enumerate(files, 1):
-        sha = file_sha(c, p)
-        if c.execute("SELECT 1 FROM faces_done WHERE sha256=?", (sha,)).fetchone(): continue
-        t1 = time.time()
-        im, full = T.load_preview(p, sha, CFG["preview_max_px"], want_full=True)
-        src = full or im
-        tp = HOME / "cache" / "_faces.jpg"; src.save(tp, quality=92)
-        arr = np.asarray(src)
-        dets = detect_faces(tp, src.width, src.height); tp.unlink(missing_ok=True)
-        kept = 0
-        for box, five, _aligned in dets:
-            if min(box[2], box[3]) < FCFG["face_min_px"]: continue
-            e, crop = embed_face(arr, five)
-            cur = c.execute("INSERT INTO faces(sha256,bbox,size_px,emb) VALUES(?,?,?,?)",
-                            (sha, json.dumps([round(v) for v in box]), min(box[2], box[3]), e.astype(np.float32).tobytes()))
-            Image.fromarray(crop).save(FACEDIR / f"{cur.lastrowid}.jpg"); kept += 1
-        c.execute("INSERT OR IGNORE INTO faces_done VALUES(?)", (sha,)); c.commit(); nf += kept
-        print(f"[{i}/{len(files)}] {p.name}: {len(dets)} faces detected, {kept} embedded ({time.time()-t1:.2f}s)", flush=True)
-    if files: print(f"faces: {nf} new faces from {len(files)} images in {time.time()-t0:.0f}s")
-    cluster_faces(c)
+    """People pass: detect + embed + cluster + library match. Proposals only (no C1 writes)."""
+    import people_pass as PP
+    files = resolve_files(args) if (args.folder or args.files) else []
+    if not files:
+        print("faces: no images"); return
+    folder = Path(args.folder).resolve() if args.folder else Path(files[0]).parent
+    PP.run_people_pass(folder, files=files, sample=0, resume=True, proposals_only=True)
 
 def cluster_faces(c):
     from sklearn.cluster import DBSCAN
@@ -690,10 +760,24 @@ def cluster_faces(c):
           ", ".join(f"Person {k:03d}={cnt[k]}" for k in sorted(remap.values())) + f"; csv {d/'faces.csv'}")
 
 def cmd_name_person(args):
+    """Name a cluster for a shoot (preferred) or legacy global persons table."""
+    import people_pass as PP
+    shoot = getattr(args, "shoot", None) or getattr(args, "folder", None)
+    if shoot:
+        shoot = Path(shoot).name
+        info = PP.name_cluster(shoot, int(args.person), args.name)
+        print(f"Person {args.person:03d} -> {args.name!r} in library + {shoot} proposals")
+        print(info)
+        return
     c = db()
     if not c.execute("SELECT 1 FROM persons WHERE cluster=?", (args.person,)).fetchone(): sys.exit("no such group")
     c.execute("UPDATE persons SET name=? WHERE cluster=?", (args.name, args.person)); c.commit()
-    print(f"Person {args.person:03d} -> {args.name!r} (stored only in {DB})")
+    # also push centroid into persistent library if present
+    row = c.execute("SELECT centroid FROM persons WHERE cluster=?", (args.person,)).fetchone()
+    if row and row[0]:
+        import numpy as np
+        PP.upsert_person(args.name, np.frombuffer(row[0], np.float32))
+    print(f"Person {args.person:03d} -> {args.name!r} (library + {DB})")
 
 # ------------------------------------------------------------------ schedule
 def cmd_schedule(args):
@@ -723,14 +807,14 @@ def main():
     p = sp.add_parser("ocr"); sel(p); p.add_argument("--langs"); p.add_argument("--resume", action="store_true"); p.add_argument("--translate", action="store_true"); p.set_defaults(fn=cmd_ocr)
     p = sp.add_parser("sharpness"); sel(p); p.set_defaults(fn=cmd_sharpness)
     p = sp.add_parser("bursts"); sel(p); p.set_defaults(fn=cmd_bursts)
-    p = sp.add_parser("rank"); sel(p); p.add_argument("--top", type=int, default=20); p.add_argument("--blend", action="store_true"); p.set_defaults(fn=cmd_rank)
+    p = sp.add_parser("rank"); sel(p); p.add_argument("--top", type=int, default=20); p.add_argument("--blend", action="store_true"); p.add_argument("--apply-score-keywords", action="store_true", help="(legacy, ignored) old General/Score/* buckets are retired"); p.add_argument("--no-keywords", action="store_true", help="CSV only, no General/Rank/* keywords"); p.add_argument("--calibrate", action="store_true", help="refit weights from star ratings in the latest catalog snapshot"); p.set_defaults(fn=cmd_rank)
     p = sp.add_parser("captions"); sel(p); p.add_argument("--profile", default="motorsport", choices=list(T.PROFILES)); p.add_argument("--context", default=""); p.set_defaults(fn=cmd_captions)
     p = sp.add_parser("schedule"); sel(p); p.add_argument("--schedule", default=str(HOME / "schedules/example.json"))
     p.add_argument("--camera-offset", help='camera UTC offset if EXIF OffsetTimeOriginal is missing, e.g. +00:00; prefix "force:" to override EXIF'); p.set_defaults(fn=cmd_schedule)
     p = sp.add_parser("journal"); p.add_argument("folder"); p.set_defaults(fn=cmd_journal)
     p = sp.add_parser("ask"); p.add_argument("question"); p.add_argument("--top", type=int, default=25); p.set_defaults(fn=cmd_ask)
     p = sp.add_parser("faces"); sel(p); p.set_defaults(fn=cmd_faces)
-    p = sp.add_parser("name-person"); p.add_argument("person", type=int); p.add_argument("name"); p.set_defaults(fn=cmd_name_person)
+    p = sp.add_parser("name-person"); p.add_argument("person", type=int); p.add_argument("name"); p.add_argument("--shoot", help="shoot folder name under out/ (preferred)"); p.set_defaults(fn=cmd_name_person)
     a = ap.parse_args(); a.fn(a)
 
 if __name__ == "__main__":

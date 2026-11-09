@@ -27,10 +27,14 @@ PASSES = [
     {"id": "rank", "label": "Rank (calibrated)", "needs_index": True,
      "note": "Top 10% General/Rank/Best, next 20% General/Rank/Good (calibrated on catalog star ratings)."},
     {"id": "ocr", "label": "Read Text in Frame", "needs_index": False},
+    {"id": "people", "label": "People (faces)", "needs_index": False,
+     "note": "Local face clusters + People/<Name> keywords. Off by default; name clusters in the People tab first."},
     {"id": "schedule", "label": "Tag by Schedule", "needs_index": False},
+    {"id": "cull", "label": "Cull smart albums", "needs_index": False,
+     "note": "Smart albums in group 'Trips Local AI': Sharp + Burst Best, Rank Best, Shortlist (no blur). Collections only."},
 ]
 PASS_BY_ID = {p["id"]: p for p in PASSES}
-DEFAULT_ORDER = ["tagger", "index", "sharpness", "bursts", "rank", "ocr", "schedule"]
+DEFAULT_ORDER = ["tagger", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"]
 
 
 def log(state, *a):
@@ -100,6 +104,7 @@ def _proposal_file(folder: Path, pass_id: str, profile: str) -> Path | None:
         "bursts": fo / "bursts-proposals.json",
         "rank": fo / "rank-proposals.json",
         "ocr": fo / "ocr-proposals.json",
+        "people": fo / "people-proposals.json",
         "schedule": fo / "schedule-proposals.json",
     }
     p = mapping.get(pass_id)
@@ -128,7 +133,7 @@ def _files_missing_car_number(folder: Path, profile: str) -> list[Path]:
 
 
 def _apply_pass(state, folder: Path, pass_id: str, profile: str, apply: bool):
-    if pass_id in ("index",):
+    if pass_id in ("index", "cull"):
         return {"skipped": "no keywords"}
     if pass_id == "rank" and not state.get("apply_rank_keywords"):
         log(state, "skip apply for rank (rank keywords disabled)")
@@ -306,6 +311,12 @@ def run_job(state_path: Path):
                 else:
                     _run_streaming(state, cmd, pass_id=pid)
 
+            elif pid == "people":
+                cmd = [TAG, "faces", str(folder)]
+                if sample:
+                    cmd += ["--sample", str(sample)]
+                _run_streaming(state, cmd, pass_id=pid)
+
             elif pid == "schedule":
                 cmd = [TAG, "schedule", str(folder)]
                 if sample:
@@ -315,6 +326,12 @@ def run_job(state_path: Path):
                 if state.get("camera_offset"):
                     cmd += ["--camera-offset", state["camera_offset"]]
                 _run_streaming(state, cmd, pass_id=pid)
+
+            elif pid == "cull":
+                if sample or dry_run:
+                    log(state, "cull albums skipped (sample/dry-run)")
+                else:
+                    _run_streaming(state, [str(HOME / "venv/bin/python"), str(HOME / "cull_album.py"), str(folder)], pass_id=pid)
 
             else:
                 raise RuntimeError(f"unknown pass {pid}")

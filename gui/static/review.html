@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Race number review · Trips Local AI</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .rv-top{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+    .rv-main{display:grid;grid-template-columns:1fr 340px;gap:16px}
+    .rv-img{background:#000;border-radius:10px;display:flex;align-items:center;justify-content:center;min-height:60vh}
+    .rv-img img{max-width:100%;max-height:78vh;object-fit:contain}
+    .rv-num{font-size:44px;font-weight:700;letter-spacing:1px}
+    .rv-cands span{display:inline-block;margin:3px 6px 3px 0;padding:3px 8px;border-radius:6px;background:rgba(127,127,127,.18);font-size:13px}
+    .rv-keys{font-size:12px;line-height:1.7;opacity:.85}
+    .rv-keys kbd{border:1px solid rgba(127,127,127,.5);border-radius:4px;padding:0 5px;font-family:inherit}
+    .rv-status{font-weight:600}
+    .rv-strip{display:flex;gap:4px;overflow-x:auto;margin-top:10px}
+    .rv-strip div{min-width:10px;height:8px;border-radius:2px;background:rgba(127,127,127,.3);cursor:pointer}
+    .rv-strip .confirm,.rv-strip .fix{background:#3a9d5d}.rv-strip .reject{background:#c0504d}.rv-strip .skip{background:#c9a227}.rv-strip .cur{outline:2px solid #4a90e2}
+    #fixInput{font-size:22px;width:100%}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div><h1>Race number review</h1>
+        <div class="sub">Confirm, fix or reject unsure car numbers. Only confirmed or fixed numbers are added as keywords, and only when you press Apply. <a href="/">Back to the control panel</a></div></div>
+      <div class="stats" id="counts"></div>
+    </header>
+    <div class="rv-top card">
+      <label>Shoot <select id="shoot"></select></label>
+      <label>Show <select id="filter"><option value="pending">To review</option><option value="reviewed">Reviewed</option><option value="skip">Skipped</option><option value="all">All</option></select></label>
+      <label class="inline"><input type="checkbox" id="onlyNums" checked /> Only frames with a number guess</label>
+      <button id="applyBtn">Apply reviewed numbers to Capture One</button>
+      <span id="applyMsg" class="note"></span>
+    </div>
+    <div class="rv-main">
+      <div class="rv-img card"><img id="img" alt="" /></div>
+      <div class="card">
+        <div class="note" id="pos"></div>
+        <h2 id="fname" style="margin:4px 0"></h2>
+        <div class="note">Proposed number</div>
+        <div class="rv-num" id="proposed">–</div>
+        <div class="rv-cands" id="cands"></div>
+        <p class="note" id="reasons"></p>
+        <p class="rv-status" id="status"></p>
+        <label>Fix: type the correct number(s), then Enter
+          <input id="fixInput" inputmode="numeric" autocomplete="off" placeholder="e.g. 46 or 46, 12" />
+        </label>
+        <div class="row" style="margin-top:10px;gap:6px;flex-wrap:wrap">
+          <button id="bConfirm">Confirm (Enter)</button>
+          <button class="secondary" id="bFix">Fix</button>
+          <button class="secondary" id="bReject">Reject (X)</button>
+          <button class="secondary" id="bSkip">Skip (S)</button>
+          <button class="secondary" id="bUndo">Undo (U)</button>
+        </div>
+        <div class="hr"></div>
+        <div class="rv-keys">
+          <kbd>Enter</kbd>/<kbd>Y</kbd> confirm proposed · type <kbd>0-9</kbd> then <kbd>Enter</kbd> to fix ·
+          <kbd>X</kbd>/<kbd>R</kbd> reject (no number keyword) · <kbd>S</kbd> skip for later ·
+          <kbd>←</kbd>/<kbd>→</kbd> previous/next · <kbd>U</kbd> undo this frame · <kbd>Esc</kbd> leave the fix box
+        </div>
+        <div class="rv-strip" id="strip"></div>
+      </div>
+    </div>
+  </div>
+  <script src="/review.js"></script>
+</body>
+</html>

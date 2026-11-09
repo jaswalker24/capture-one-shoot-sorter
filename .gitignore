@@ -52,3 +52,6 @@ gui/dock-backup-*.plist
 gui/notify.json
 schedules/_dryrun-*.json
 schedules/apply-*.json
+
+# Persistent face library (local names + embeddings)
+people/

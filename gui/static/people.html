@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>People · Trips Local AI</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .pe-grid{display:grid;grid-template-columns:220px 1fr;gap:16px}
+    .pe-clusters{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+    .pe-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+    .pe-card img{width:100%;border-radius:8px;background:#000;aspect-ratio:2/1;object-fit:cover}
+    .pe-card .meta{font-size:12px;color:var(--muted)}
+    .pe-card input{width:100%}
+    .pe-badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;border:1px solid var(--border)}
+    .pe-badge.matched{color:var(--accent2);border-color:#2f6b4f}
+    .pe-badge.review{color:var(--warn);border-color:#6b5a2f}
+    .pe-badge.anonymous{color:var(--muted)}
+    .pe-lib{display:flex;flex-wrap:wrap;gap:8px}
+    .pe-lib span{padding:4px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--border);font-size:12px}
+    @media(max-width:900px){.pe-grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>People</h1>
+        <div class="sub">Name face clusters once. Names stay on this Mac in <code>~/localai/people/</code> and become <code>People/&lt;Name&gt;</code> keywords on the next apply. <a href="/">Back to the control panel</a></div>
+      </div>
+      <div class="pill" id="libCount">Library: –</div>
+    </header>
+
+    <div class="pe-grid">
+      <section class="card">
+        <h2>Shoots with face runs</h2>
+        <div id="shoots" class="folder-list"></div>
+        <p class="note" style="margin-top:12px">Run the <strong>People (faces)</strong> pass from the Run tab (off by default) to populate a shoot. Proposals only until you apply.</p>
+        <h2 style="margin-top:18px">Named library</h2>
+        <div id="library" class="pe-lib"></div>
+      </section>
+      <section>
+        <div class="card" style="margin-bottom:12px">
+          <h2 id="shootTitle">Clusters</h2>
+          <div class="note" id="summary">Pick a shoot.</div>
+        </div>
+        <div id="clusters" class="pe-clusters"></div>
+      </section>
+    </div>
+  </div>
+  <script src="/people.js"></script>
+</body>
+</html>

@@ -18,8 +18,8 @@ SHOOT_TYPES = [
 
 PASS_BUNDLES = {
     "Quick": ["tagger", "sharpness", "bursts"],
-    "Standard": ["tagger", "index", "sharpness", "bursts", "schedule"],
-    "Full": ["tagger", "index", "sharpness", "bursts", "ocr", "schedule"],
+    "Standard": ["tagger", "index", "sharpness", "bursts", "rank", "schedule", "cull"],
+    "Full": ["tagger", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"],
     "Schedule tags only": ["schedule"],
     "Exports captions": ["captions"],
     "Custom": [],

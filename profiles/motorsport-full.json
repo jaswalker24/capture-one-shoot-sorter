@@ -10,8 +10,10 @@
     "index",
     "sharpness",
     "bursts",
+    "rank",
     "ocr",
-    "schedule"
+    "schedule",
+    "cull"
   ],
   "pass_settings": {
     "tagger": {},
@@ -19,7 +21,9 @@
     "sharpness": {},
     "bursts": {},
     "ocr": {},
-    "schedule": {}
+    "schedule": {},
+    "rank": {},
+    "cull": {}
   },
   "camera_tz": "Europe/London",
   "camera_tz_other": "",

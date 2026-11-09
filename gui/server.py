@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 HOME = Path.home() / "localai"
+OUT = HOME / "out"
 GUI = HOME / "gui"
 STATIC = GUI / "static"
 JOBS = GUI / "jobs"
@@ -30,6 +31,7 @@ import undo_run as UR
 import profiles_ops as PR
 sys.path.insert(0, str(GUI))
 import review as RV  # race-number review queue (additive)
+import people_pass as PP  # face clusters / People/<Name>
 
 JOBS.mkdir(parents=True, exist_ok=True)
 HISTORY.mkdir(parents=True, exist_ok=True)
@@ -456,10 +458,46 @@ class Handler(BaseHTTPRequestHandler):
                     except Exception:
                         pass
                 return _json(self, 200, {"history": items})
+
+            if path == "/api/people/shoots":
+                return _json(self, 200, {"shoots": PP.list_shoots_with_people()})
+            if path == "/api/people/library":
+                return _json(self, 200, PP.library_summary())
+            if path == "/api/people/clusters":
+                qs = parse_qs(u.query)
+                shoot = (qs.get("shoot") or [""])[0]
+                try:
+                    return _json(self, 200, PP.get_clusters(shoot))
+                except FileNotFoundError:
+                    return _json(self, 404, {"error": "no people run for shoot"})
+                except Exception as e:
+                    return _json(self, 400, {"error": str(e)})
+            if path == "/api/people/sheet":
+                qs = parse_qs(u.query)
+                shoot = (qs.get("shoot") or [""])[0]
+                try:
+                    cl = int((qs.get("cluster") or ["0"])[0])
+                except ValueError:
+                    return _json(self, 400, {"error": "bad cluster"})
+                sheet = (OUT / shoot / "people" / f"person_{cl:03d}.jpg").resolve()
+                root = (OUT / shoot / "people").resolve()
+                if not str(sheet).startswith(str(root)) or not sheet.is_file():
+                    self.send_error(404); return
+                data = sheet.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "image/jpeg")
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
             return _json(self, 404, {"error": "unknown api"})
         # static
         if path in ("/review", "/review/"):
             return self._serve_static("review.html")
+        if path in ("/people", "/people/"):
+            return self._serve_static("people.html")
         return self._serve_static(path)
 
     def _review_get(self, path, qs):
@@ -523,6 +561,27 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, RuntimeError) as e:
                 return _json(self, 409, {"error": str(e)})
 
+
+        if path == "/api/people/name":
+            try:
+                info = PP.name_cluster(data.get("shoot") or "", int(data.get("cluster")), data.get("name") or "")
+            except (ValueError, KeyError, FileNotFoundError) as e:
+                return _json(self, 400, {"error": str(e)})
+            except Exception as e:
+                return _json(self, 500, {"error": str(e)})
+            return _json(self, 200, {"ok": True, **info})
+        if path == "/api/people/library/rename":
+            try:
+                person = PP.rename_person(data.get("id") or "", data.get("name") or "")
+            except KeyError:
+                return _json(self, 404, {"error": "not found"})
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
+            return _json(self, 200, {"ok": True, "person": person})
+        if path == "/api/people/library/delete":
+            ok = PP.delete_person(data.get("id") or "")
+            return _json(self, 200 if ok else 404, {"ok": ok})
+
         if path == "/api/queue/add":
             folder = Path(data.get("folder") or "")
             if not folder.is_dir():
@@ -552,7 +611,7 @@ class Handler(BaseHTTPRequestHandler):
                     "apply_each": bool(data.get("apply_each", True)),
                     "dry_run": bool(data.get("dry_run", False)),
                     "ocr_missing_car_number": bool(data.get("ocr_missing_car_number", False)),
-                    "apply_rank_keywords": bool(data.get("apply_rank_keywords", False)),
+                    "apply_rank_keywords": bool(data.get("apply_rank_keywords", True)),
                     "sample": int(data.get("sample") or 0),
                     "schedule_path": data.get("schedule_path") or "",
                     "camera_offset": data.get("camera_offset") or "",

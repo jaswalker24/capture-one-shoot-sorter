@@ -151,3 +151,22 @@ Quick smoke test from Terminal:
 SigLIP / CLIP weights download themselves on first tagging run
 (~1–2 GB into $DEST/models/hf). Keep the Mac awake for that.
 EOF
+
+# Control panel LaunchAgent (optional; starts on login)
+mkdir -p "$HOME/Library/LaunchAgents" "$HOME/localai/gui" "$HOME/localai/logs/gui"
+if [ -f "$ROOT/gui/com.trips.localai.gui.plist" ]; then
+  cp "$ROOT/gui/server.py" "$HOME/localai/gui/server.py"
+  cp -R "$ROOT/gui/static" "$HOME/localai/gui/"
+  cp "$ROOT/jobrunner.py" "$HOME/localai/jobrunner.py"
+  # rewrite plist paths for this user
+  sed "s|__HOME__|$HOME|g" "$ROOT/gui/com.trips.localai.gui.plist" > "$HOME/Library/LaunchAgents/com.trips.localai.gui.plist"
+  cp "$HOME/Library/LaunchAgents/com.trips.localai.gui.plist" "$HOME/localai/gui/com.trips.localai.gui.plist"
+  if [ ! -f "$HOME/localai/gui/auth.token" ]; then
+    python3 -c 'import secrets; open("'"$HOME"'/localai/gui/auth.token","w").write(secrets.token_urlsafe(24))'
+    chmod 600 "$HOME/localai/gui/auth.token"
+  fi
+  mkdir -p "$HOME/localai/gui/macos"
+  cp -R "$ROOT/gui/macos/"* "$HOME/localai/gui/macos/" 2>/dev/null || true
+  echo "Control panel installed. Start with: launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.trips.localai.gui.plist"
+  echo "Open http://127.0.0.1:8765/  (token in ~/localai/gui/auth.token)"
+fi

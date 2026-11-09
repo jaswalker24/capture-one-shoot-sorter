@@ -1,0 +1,4 @@
+#!/bin/bash
+URL="http://127.0.0.1:8765/"
+# Prefer local hostname for Screen Sharing sessions too
+open "$URL" || open -a Safari "$URL"

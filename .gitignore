@@ -45,3 +45,7 @@ secrets*
 ._*
 __pycache__/
 *.pyc
+gui/auth.token
+gui/jobs/
+gui/history/
+gui/dock-backup-*.plist

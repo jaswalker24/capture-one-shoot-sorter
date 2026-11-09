@@ -104,6 +104,56 @@ Use `--no-apply` on `fullrun.py` if you only want the proposal files.
 
 ---
 
+---
+
+## Control panel (web GUI)
+
+A small local web app on the Mac lets you queue and reorder passes without using Terminal. It is meant for the headless M5 (Screen Sharing), and it also works from any device on your LAN.
+
+### Start it
+
+```bash
+# one-time: install the LaunchAgent (survives reboots)
+cp ~/localai/gui/com.trips.localai.gui.plist ~/Library/LaunchAgents/ 2>/dev/null ||   cp gui/com.trips.localai.gui.plist ~/Library/LaunchAgents/
+# if you installed via install.sh, the plist already points at ~/localai
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.trips.localai.gui.plist
+```
+
+Or run in the foreground:
+
+```bash
+~/localai/venv/bin/python ~/localai/gui/server.py
+```
+
+Open:
+
+- `http://127.0.0.1:8765/` on the Mac
+- `http://127.0.0.1:8765/` or `http://<LAN-IP>:8765/` from another device on the network
+
+Log in with the shared secret in `~/localai/gui/auth.token` (one line). The installer creates a random token; change it if you like.
+
+Optional Dock shortcut:
+
+```bash
+~/localai/gui/macos/install-dock-app.sh
+# or from this repo after install:
+./gui/macos/install-dock-app.sh
+```
+
+### What the page does
+
+- Pick a year / folder under `Camera Imports`, a profile (`motorsport` / `gig` / `kyoto`), and optional context text.
+- Tick passes and drag (or use arrows) to order them: Tag with Local AI, Index, Sharpness, Bursts, Rank, Read Text in Frame, Tag by Schedule.
+- **Apply keywords after each pass** is on by default (tag → apply → next pass).
+- Caption model is never used for catalog jobs (`--no-caption` always).
+- Optional: run the text pass only on motorsport frames still missing a car number.
+- Rank can run for ordering CSVs; Score keywords stay off unless you tick “Apply Rank score keywords”.
+- Queue: add several jobs, pause next, cancel, watch live progress and a log tail.
+- Separate **Exports · Draft Captions** panel — only folders under `Camera Exports`.
+
+Safety: additive keywords only; stars and colour tags are never written. Full jobs snapshot ratings/colours before and after (sample jobs skip the snapshot so they do not stall Capture One).
+
+
 ## What each Scripts menu action does
 
 | Script | What it does |

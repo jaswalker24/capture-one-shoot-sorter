@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trip Local AI</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="loginView" class="login">
+    <h1>Trip Local AI</h1>
+    <p class="note">Enter the shared secret from <code>~/localai/gui/auth.token</code> on the M5.</p>
+    <label>Shared secret
+      <input type="password" id="tokenInput" autocomplete="current-password" />
+    </label>
+    <div style="margin-top:12px;display:flex;gap:8px">
+      <button id="loginBtn">Log in</button>
+    </div>
+    <p id="loginErr" class="note" style="color:var(--danger)"></p>
+  </div>
+
+  <div id="appView" class="wrap hidden">
+    <header>
+      <div>
+        <h1>Trip Local AI</h1>
+        <div class="sub">Control panel · catalog tagging (no captions) · additive keywords only</div>
+      </div>
+      <div class="stats" id="stats"></div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>New catalog job</h2>
+        <div class="row">
+          <label>Year
+            <select id="year"></select>
+          </label>
+          <label>Profile
+            <select id="profile">
+              <option>motorsport</option>
+              <option>gig</option>
+              <option>kyoto</option>
+            </select>
+          </label>
+          <label>Sample (0 = all)
+            <input type="number" id="sample" min="0" value="0" />
+          </label>
+        </div>
+        <label>Folder under Camera Imports
+          <div id="folders" class="folder-list"></div>
+        </label>
+        <p class="note" id="folderPath">No folder selected</p>
+        <label style="margin-top:10px">Context (optional)
+          <input type="text" id="context" placeholder="Britcar Into The Night, Brands Hatch" />
+        </label>
+
+        <div class="hr"></div>
+        <h2>Passes (drag or use arrows to order)</h2>
+        <ul id="passes" class="passes"></ul>
+        <p class="note">Index is auto-inserted before Sharpness / Bursts / Rank if you leave it out. Draft Captions are not here — use the Exports panel.</p>
+
+        <div class="row" style="margin-top:12px">
+          <label class="inline"><input type="checkbox" id="applyEach" checked /> Apply keywords after each pass</label>
+          <label class="inline"><input type="checkbox" id="dryRun" /> Dry run (proposals only)</label>
+          <label class="inline"><input type="checkbox" id="ocrMissing" /> Text pass only on frames missing a car number</label>
+          <label class="inline"><input type="checkbox" id="rankKw" /> Apply Rank score keywords</label>
+        </div>
+        <div class="row">
+          <button id="addJob">Add to queue</button>
+        </div>
+      </section>
+
+      <section>
+        <div class="card" style="margin-bottom:16px">
+          <div class="row" style="justify-content:space-between;align-items:center">
+            <h2 style="margin:0">Queue</h2>
+            <div style="display:flex;gap:8px">
+              <button class="secondary" id="pauseBtn">Pause next</button>
+              <button class="secondary" id="resumeBtn">Resume</button>
+            </div>
+          </div>
+          <div id="queue"></div>
+        </div>
+
+        <div class="card" style="margin-bottom:16px">
+          <h2>Exports · Draft Captions</h2>
+          <p class="note">Runs only on folders under Camera Exports. Never part of catalog tagging.</p>
+          <label>Export folder
+            <select id="exportFolder"></select>
+          </label>
+          <div class="row" style="margin-top:10px">
+            <label>Profile
+              <select id="exportProfile"><option>gig</option><option>motorsport</option><option>kyoto</option></select>
+            </label>
+            <label>Sample
+              <input type="number" id="exportSample" min="0" value="3" />
+            </label>
+          </div>
+          <label>Context
+            <input type="text" id="exportContext" />
+          </label>
+          <div class="row"><button id="runCaptions">Draft captions</button></div>
+        </div>
+
+        <div class="card">
+          <h2>History</h2>
+          <div id="history"></div>
+        </div>
+      </section>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>

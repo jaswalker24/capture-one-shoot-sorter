@@ -78,7 +78,9 @@ def run_undo(job: dict, apply: bool = False, prefix: str | None = None):
     plan_path = prefix + "-plan.json"
     result_path = prefix + "-result.json"
     json.dump({"library": "Trip Keywords", "items": plan_data["items"], "job_id": job.get("id"),
-               "sources": plan_data["sources"]}, open(plan_path, "w"), indent=1)
+               "sources": plan_data["sources"],
+               # folder scope: undo_c1.js selects this folder and matches by image path (never by name alone)
+               "scope_folder": job.get("folder") or plan_data.get("folder")}, open(plan_path, "w"), indent=1)
     cmd = ["osascript", "-l", "JavaScript", str(HOME / "undo_c1.js"), plan_path, result_path] + ([] if apply else ["dry"])
     p = subprocess.run(cmd, capture_output=True, text=True)
     if p.returncode:

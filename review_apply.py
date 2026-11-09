@@ -9,8 +9,10 @@ from pathlib import Path
 HOME = Path.home() / "localai"; sys.path.insert(0, str(HOME))
 OUT = HOME / "out"
 
-def snap(path):
-    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)], check=True, capture_output=True, timeout=300)
+def snap(path, folder=None):
+    # folder-scoped (snap.js --folder): never snapshot whatever collection Capture One happens to show
+    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)] + (["--folder", str(folder)] if folder else []),
+                   check=True, capture_output=True, timeout=300)
     return json.load(open(path))
 
 def main():
@@ -39,7 +41,7 @@ def main():
     from apply_c1 import apply_proposals
     before = after = None
     if a.apply:
-        before = snap(d / f"review-apply-{stamp}-flags-before.json"); print("snapshot before:", len(before), "variants", flush=True)
+        before = snap(d / f"review-apply-{stamp}-flags-before.json", folder); print("snapshot before:", len(before), "variants", flush=True)
     tot_kw = tot_fail = 0
     for i in range(0, len(todo), 200):
         chunk = todo[i:i + 200]
@@ -57,7 +59,7 @@ def main():
             tmp = af.with_suffix(".tmp"); tmp.write_text(json.dumps({"items": applied}, indent=1)); tmp.replace(af)
     verify = None
     if a.apply:
-        after = snap(d / f"review-apply-{stamp}-flags-after.json")
+        after = snap(d / f"review-apply-{stamp}-flags-after.json", folder)
         changed = [k for k in before if after.get(k, {}).get("rating") != before[k]["rating"] or after.get(k, {}).get("color") != before[k]["color"]]
         verify = {"variants": len(before), "rating_or_colour_changed": len(changed), "examples": changed[:10]}
         print("verify:", verify, flush=True)
@@ -83,7 +85,7 @@ def apply_focus(a, d, stamp):
         json.dump({"status": "done", "finished": time.strftime("%Y-%m-%dT%H:%M:%S"), "applied": 0, "failures": 0}, open(lastf, "w"))
         return
     from apply_c1 import apply_proposals
-    before = snap(d / f"review-focus-apply-{stamp}-flags-before.json") if a.apply else None
+    before = snap(d / f"review-focus-apply-{stamp}-flags-before.json", folder) if a.apply else None
     tot_kw = tot_fail = 0
     for i in range(0, len(todo), 200):
         chunk = todo[i:i + 200]
@@ -100,7 +102,7 @@ def apply_focus(a, d, stamp):
             tmp = af.with_suffix(".tmp"); tmp.write_text(json.dumps({"items": applied}, indent=1)); tmp.replace(af)
     verify = None
     if a.apply:
-        after = snap(d / f"review-focus-apply-{stamp}-flags-after.json")
+        after = snap(d / f"review-focus-apply-{stamp}-flags-after.json", folder)
         changed = [k for k in before if after.get(k, {}).get("rating") != before[k]["rating"] or after.get(k, {}).get("color") != before[k]["color"]]
         verify = {"variants": len(before), "rating_or_colour_changed": len(changed), "examples": changed[:10]}
         print("verify:", verify, flush=True)

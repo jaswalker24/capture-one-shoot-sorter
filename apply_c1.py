@@ -5,6 +5,7 @@ SHA-256 of each original is re-checked before applying."""
 import argparse, hashlib, json, subprocess, sys, time
 from pathlib import Path
 HOME = Path.home() / "localai"
+IMAGE_EXT = {".cr3", ".cr2", ".dng", ".arw", ".nef", ".raf", ".jpg", ".jpeg", ".heic", ".tif", ".tiff", ".png"}  # MP4/MOV ignored
 
 def sha256(p):
     h = hashlib.sha256()
@@ -34,6 +35,13 @@ def apply_proposals(proposals_json, apply=False, prefix=None, library="Trip Keyw
         items.append({"filename": r["filename"], "path": str(p), "sha256": r.get("sha256"),
                       "keywords": r.get("proposed_keywords", []), "description": None})
     plan = {"folder": str(folder), "library": library, "items": items, "skipped_by_policy": skipped}
+    # Folder scope (fix 2026-11-09): apply_c1.js selects this folder in Capture One, checks the variants match,
+    # refuses to write if they don't, then restores what Capture One was showing.
+    plan["scope_folder"] = str(folder)
+    try:
+        plan["expected_count"] = sum(1 for p in folder.iterdir() if p.suffix.lower() in IMAGE_EXT and not p.name.startswith("."))
+    except OSError:
+        plan["expected_count"] = None
     json.dump(plan, open(prefix + "-plan.json", "w"), indent=1)
     out = subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "apply_c1.js"), prefix + "-plan.json",
                           prefix + "-result.json"] + ([] if apply else ["dry"]), capture_output=True, text=True)
@@ -41,6 +49,8 @@ def apply_proposals(proposals_json, apply=False, prefix=None, library="Trip Keyw
         raise SystemExit("osascript failed: " + out.stderr)
     res = json.load(open(prefix + "-result.json"))
     json.dump(res["before"], open(prefix + "-before.json", "w"), indent=1)
+    if res.get("refused"):
+        print("REFUSED (nothing written):", res["refused"], "| scope:", json.dumps(res.get("scope"))[:300])
     print(f"{'APPLIED' if apply else 'DRY RUN'}: {len(res['applied'])} keywords/fields on "
           f"{len({a['filename'] for a in res['applied']})} variants; skipped {len(res['skipped'])} "
           f"(+{len(skipped)} images by policy); failures {len(res['failures'])}")

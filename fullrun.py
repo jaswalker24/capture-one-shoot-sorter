@@ -24,8 +24,10 @@ def run(cmd, env=None):
     if p.wait(): raise RuntimeError(f"step failed: {' '.join(cmd[:3])}")
     return tail
 
-def snap(path):
-    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)], check=True, capture_output=True)
+def snap(path, folder=None):
+    # folder-scoped (snap.js --folder): never snapshot whatever collection Capture One happens to show
+    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)] + (["--folder", str(folder)] if folder else []),
+                   check=True, capture_output=True)
     return json.load(open(path))
 
 def main():
@@ -40,7 +42,7 @@ def main():
         t = time.time(); log("STEP", name); fn()
         st["done"].append(name); st["timings"][name] = round(time.time() - t)
         json.dump(st, open(st_f, "w"), indent=1)
-    step("snapshot_before", lambda: snap(out / "fullrun-flags-before.json"))
+    step("snapshot_before", lambda: snap(out / "fullrun-flags-before.json", folder))
     step("tagger", lambda: run([TAG, str(folder), "--profile", a.profile, "--tag", "full", "--resume", "--no-caption"] + (["--context", a.context] if a.context else []),
                                env={"LOCALAI_NO_APPLY_STEP": "1"}))
     step("index", lambda: run([TAG, "index", str(folder)]))
@@ -86,7 +88,7 @@ def main():
             # keyword-based smart albums (Sharp+Burst Best / Rank Best / Shortlist) for this shoot; collections only
             step("cull_albums", lambda: run([str(HOME / "venv/bin/python"), str(HOME / "cull_album.py"), str(folder)]))
     def verify():
-        before = json.load(open(out / "fullrun-flags-before.json")); after = snap(out / "fullrun-flags-after.json")
+        before = json.load(open(out / "fullrun-flags-before.json")); after = snap(out / "fullrun-flags-after.json", folder)
         changed = [{"id": k, "before": before[k], "after": after.get(k)} for k in before if after.get(k, {}).get("rating") != before[k]["rating"] or after.get(k, {}).get("color") != before[k]["color"]]
         st["verify"] = {"variants": len(before), "rating_or_colour_changed": len(changed), "examples": changed[:20]}
     step("verify", verify)

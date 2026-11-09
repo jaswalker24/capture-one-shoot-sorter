@@ -258,14 +258,14 @@ def run_job(state_path: Path):
             state["snapshot_before_skipped"] = "sample" if sample else "dry_run"
         else:
             try:
-                log(state, "snapshot before (90s timeout)...")
-                proc = subprocess.Popen(["osascript", "-l", "JavaScript", str(SNAP_JS), str(before_path)],
+                log(state, "snapshot before, this folder only (180s timeout)...")
+                proc = subprocess.Popen(["osascript", "-l", "JavaScript", str(SNAP_JS), str(before_path), "--folder", str(folder)],
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 try:
-                    proc.communicate(timeout=90)
+                    proc.communicate(timeout=180)
                 except subprocess.TimeoutExpired:
                     proc.kill(); proc.wait()
-                    raise TimeoutError("snapshot before timed out after 90s")
+                    raise TimeoutError("snapshot before timed out after 180s")
                 if proc.returncode:
                     raise RuntimeError(f"snapshot rc={proc.returncode}")
                 state["snapshot_before"] = str(before_path)
@@ -404,14 +404,14 @@ def run_job(state_path: Path):
         else:
             try:
                 after_path = out / f"gui-flags-after-{state['id']}.json"
-                log(state, "snapshot after (90s timeout)...")
-                proc = subprocess.Popen(["osascript", "-l", "JavaScript", str(SNAP_JS), str(after_path)],
+                log(state, "snapshot after, this folder only (180s timeout)...")
+                proc = subprocess.Popen(["osascript", "-l", "JavaScript", str(SNAP_JS), str(after_path), "--folder", str(folder)],
                                         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 try:
-                    proc.communicate(timeout=90)
+                    proc.communicate(timeout=180)
                 except subprocess.TimeoutExpired:
                     proc.kill(); proc.wait()
-                    raise TimeoutError("snapshot after timed out after 90s")
+                    raise TimeoutError("snapshot after timed out after 180s")
                 if proc.returncode:
                     raise RuntimeError(f"snapshot after rc={proc.returncode}")
                 after = json.load(open(after_path))

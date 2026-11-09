@@ -6,8 +6,10 @@ import argparse, json, subprocess, sys, time
 from pathlib import Path
 HOME = Path.home() / "localai"; sys.path.insert(0, str(HOME))
 
-def snap(path):
-    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)], check=True, capture_output=True, timeout=300)
+def snap(path, folder=None):
+    # folder-scoped (snap.js --folder): never snapshot whatever collection Capture One happens to show
+    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)] + (["--folder", str(folder)] if folder else []),
+                   check=True, capture_output=True, timeout=300)
     return json.load(open(path))
 
 def main():
@@ -22,7 +24,7 @@ def main():
         kws = [k for k in r.get("proposed_keywords", []) if k.startswith(a.prefix_keyword)]
         if kws: imgs.append(dict(r, proposed_keywords=kws))
     print(time.strftime("%H:%M:%S"), f"{a.tag}: {len(imgs)} frames to {'APPLY' if a.apply else 'dry-run'}", flush=True)
-    before = snap(d / f"{a.tag}-{stamp}-flags-before.json") if a.apply else None
+    before = snap(d / f"{a.tag}-{stamp}-flags-before.json", data["folder"]) if a.apply else None
     tot = {"applied": 0, "skipped": 0, "failures": 0, "variants": 0}
     for i in range(0, len(imgs), a.chunk):
         cf = d / f"{a.tag}-{stamp}-chunk-{i // a.chunk:03d}.json"
@@ -32,7 +34,7 @@ def main():
         tot["variants"] += len({x["filename"] for x in res["applied"]})
         print(time.strftime("%H:%M:%S"), f"chunk {i // a.chunk}: {json.dumps(tot)}", flush=True)
     if a.apply:
-        after = snap(d / f"{a.tag}-{stamp}-flags-after.json")
+        after = snap(d / f"{a.tag}-{stamp}-flags-after.json", data["folder"])
         changed = [k for k in before if after.get(k, {}).get("rating") != before[k]["rating"] or after.get(k, {}).get("color") != before[k]["color"]]
         tot["verify"] = {"variants": len(before), "rating_or_colour_changed": len(changed), "examples": changed[:10]}
     tot["stamp"] = stamp

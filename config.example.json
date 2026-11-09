@@ -1,0 +1,25 @@
+{
+  "siglip_model": "ViT-B-16-SigLIP-256",
+  "siglip_pretrained": "webli",
+  "ollama_url": "http://127.0.0.1:11434",
+  "vlm_model": "qwen2.5vl:3b",
+  "preview_max_px": 2400,
+  "vlm_max_px": 1120,
+  "thresholds": {
+    "label_min": 0.55,
+    "colour_min": 0.45,
+    "is_car_min": 0.5,
+    "ocr_min": 0.6,
+    "ocr_min_height": 0.012,
+    "binary_tag_min": 0.85
+  },
+  "script_context": {
+    "EXAMPLE_FOLDER_NAME": "Optional context string for Script-menu tagging"
+  },
+  "script_profile_default": "gig",
+  "profile_by_folder": {
+    "BrandsHatch|Britcar|Silverstone|Donington|Snetterton|Oulton|Thruxton|Goodwood|Fuji Speedway|Suzuka|Motegi": "motorsport",
+    "Kyoto|Gion|Arashiyama|Fushimi": "kyoto"
+  },
+  "camera_utc_offset": null
+}

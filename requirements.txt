@@ -1,0 +1,36 @@
+# Generated from the working Apple-silicon venv (Python 3.12).
+# Install with: uv pip install -r requirements.txt
+# On Apple silicon, install torch/torchvision for macOS ARM first if needed:
+#   uv pip install torch torchvision
+torch==2.15.0
+torchvision==0.29.2
+open_clip_torch==4.2.1
+rawpy==0.28.0
+pyobjc-core==13.0
+pyobjc-framework-Cocoa==13.0
+pyobjc-framework-Quartz==13.0
+pyobjc-framework-Vision==13.0
+pyobjc-framework-CoreML==13.0
+transformers==5.22.2
+huggingface_hub==2.4.0
+pillow==13.0.0
+requests==2.34.2
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+scikit-image==0.26.0
+scikit-learn==1.9.1
+scipy==1.18.1
+onnxruntime==1.31.1
+timm==1.0.31
+ftfy==6.3.1
+regex==2026.11.9
+safetensors==0.8.0
+tokenizers==0.23.3
+sentencepiece==0.2.3
+tiktoken==0.14.0
+tqdm==4.70.1
+PyYAML==6.0.3
+filelock==4.2.9
+fsspec==2026.9.0
+packaging==26.3
+typing_extensions==4.16.0

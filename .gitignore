@@ -1,0 +1,42 @@
+# Runtime / local
+venv/
+python/
+.uvcache/
+__pycache__/
+*.py[cod]
+*.bak
+.DS_Store
+
+# Heavy / downloaded
+ollama/
+models/
+bin/uv
+bin/uvx
+bin/exiftool
+tools/
+
+# Working data (never commit)
+cache/
+index/
+out/
+logs/
+*.CR3
+*.CR2
+*.NEF
+*.ARW
+*.JPG
+*.JPEG
+*.PNG
+*.MP4
+*.MOV
+
+# Local overrides
+config.json
+export/
+
+# Secrets
+.env
+*.pem
+*.key
+credentials*
+secrets*

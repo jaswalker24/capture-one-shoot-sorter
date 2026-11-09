@@ -156,6 +156,7 @@ async function addJob() {
     folder: selectedFolder, profile: $("profile").value, context: $("context").value, passes,
     apply_each: $("applyEach").checked, dry_run: $("dryRun").checked,
     ocr_missing_car_number: $("ocrMissing").checked, apply_rank_keywords: $("rankKw").checked,
+    afpoints: $("afPoints").checked, afpoints_annotate: Number($("afAnnotate").value || 0),
     sample: Number($("sample").value || 0),
   };
   if ($("presetSelect").dataset.profileId) body.profile_id = $("presetSelect").dataset.profileId;

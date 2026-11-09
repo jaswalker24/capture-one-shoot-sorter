@@ -22,7 +22,8 @@ EXPORTS_ROOT = Path("/Volumes/Photos/Camera Exports")
 PASSES = [
     {"id": "tagger", "label": "Tag with Local AI", "needs_index": False},
     {"id": "index", "label": "Index (search)", "needs_index": False},
-    {"id": "sharpness", "label": "Sharpness", "needs_index": True},
+    {"id": "sharpness", "label": "Sharpness", "needs_index": True,
+     "note": "Includes the AF focus check (Canon AF points) unless turned off below: On Target applies, Missed goes to Review."},
     {"id": "bursts", "label": "Bursts", "needs_index": True},
     {"id": "rank", "label": "Rank (calibrated)", "needs_index": True,
      "note": "Top 10% General/Rank/Best, next 20% General/Rank/Good (calibrated on catalog star ratings)."},
@@ -106,6 +107,7 @@ def _proposal_file(folder: Path, pass_id: str, profile: str) -> Path | None:
         "ocr": fo / "ocr-proposals.json",
         "people": fo / "people-proposals.json",
         "schedule": fo / "schedule-proposals.json",
+        "afpoints": fo / "afpoints-proposals.json",
     }
     p = mapping.get(pass_id)
     return p if p and p.exists() else None
@@ -133,6 +135,22 @@ def _files_missing_car_number(folder: Path, profile: str) -> list[Path]:
 
 
 def _apply_pass(state, folder: Path, pass_id: str, profile: str, apply: bool):
+    """Apply one pass's proposals. Sharpness also carries the AF focus check (afpoints) when enabled."""
+    res = _apply_source(state, folder, pass_id, profile, apply)
+    if pass_id == "sharpness" and state.get("afpoints", True) and not state.get("sample"):
+        prop = _proposal_file(folder, "afpoints", profile)
+        if prop and prop.stat().st_mtime >= (state.get("_pass_t0") or 0) - 5:
+            n_missed = sum(1 for r in json.load(open(prop)).get("images", []) if r.get("needs_review"))
+            af = _apply_source(state, folder, "afpoints", profile, apply, label="sharpness-afpoints")
+            af["missed_to_review"] = n_missed
+            log(state, f"AF focus check: {n_missed} Missed frames sent to Review (not applied)")
+            res = {"sharpness": res, "afpoints": af}
+        else:
+            log(state, "AF focus check: no fresh afpoints proposals (no AF data or hook skipped)")
+    return res
+
+
+def _apply_source(state, folder: Path, pass_id: str, profile: str, apply: bool, label: str | None = None):
     if pass_id in ("index", "cull"):
         return {"skipped": "no keywords"}
     if pass_id == "rank" and not state.get("apply_rank_keywords"):
@@ -143,7 +161,7 @@ def _apply_pass(state, folder: Path, pass_id: str, profile: str, apply: bool):
         log(state, "no proposals for", pass_id)
         return {"skipped": "no proposals"}
     from apply_c1 import apply_proposals
-    prefix = str(OUT / folder.name / f"gui-apply-{pass_id}-{time.strftime('%H%M%S')}")
+    prefix = str(OUT / folder.name / f"gui-apply-{label or pass_id}-{time.strftime('%H%M%S')}")
     # Only apply confident rows; filter needs_review already in apply_proposals
     # For tagger: prefer non-review. apply_proposals handles that.
     # Chunk large sets
@@ -161,7 +179,7 @@ def _apply_pass(state, folder: Path, pass_id: str, profile: str, apply: bool):
     failures = 0
     for i in range(0, len(images), chunk_n):
         chunk = {"folder": str(folder), "images": images[i:i + chunk_n]}
-        cf = OUT / folder.name / f"gui-{pass_id}-chunk-{i // chunk_n:03d}.json"
+        cf = OUT / folder.name / f"gui-{label or pass_id}-chunk-{i // chunk_n:03d}.json"
         json.dump(chunk, open(cf, "w"))
         res = apply_proposals(str(cf), apply=apply, prefix=f"{prefix}-c{i // chunk_n:03d}")
         total_applied += len(res.get("applied", []))
@@ -263,6 +281,7 @@ def run_job(state_path: Path):
             state["progress"] = {"pass": pid, "n": 0, "total": 0, "line": ""}
             log(state, f"PASS {i+1}/{len(passes)}:", pid)
             t0 = time.time()
+            state["_pass_t0"] = t0
 
             if pid == "tagger":
                 cmd = [TAG, str(folder), "--profile", profile, "--tag", "full", "--resume", "--no-caption"]
@@ -280,7 +299,14 @@ def run_job(state_path: Path):
 
             elif pid in ("sharpness", "bursts"):
                 cmd = [TAG, pid, str(folder)]
-                _run_streaming(state, cmd, pass_id=pid)
+                env = None
+                if pid == "sharpness":
+                    # AF-point focus check runs inside the sharpness step (features.py hook -> afpoints.py)
+                    env = {"LOCALAI_AFPOINTS": "1" if state.get("afpoints", True) else "0",
+                           "LOCALAI_AFPOINTS_ANNOTATE": str(int(state.get("afpoints_annotate") or 0))}
+                    log(state, "AF focus check:", "on" if state.get("afpoints", True) else "off",
+                        f"(annotate {env['LOCALAI_AFPOINTS_ANNOTATE']})" if env["LOCALAI_AFPOINTS_ANNOTATE"] != "0" else "")
+                _run_streaming(state, cmd, env=env, pass_id=pid)
 
             elif pid == "rank":
                 cmd = [TAG, "rank", str(folder), "--top", "50"]

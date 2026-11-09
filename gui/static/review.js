@@ -1,4 +1,5 @@
 let items = [], idx = 0, shoot = null, history = [];
+const KIND = new URLSearchParams(location.search).get("kind") === "focus" ? "focus" : "numbers";
 const $ = id => document.getElementById(id);
 async function api(path, opts = {}) {
   const r = await fetch(path, { credentials: "same-origin", headers: { "Content-Type": "application/json" }, ...opts });
@@ -7,9 +8,21 @@ async function api(path, opts = {}) {
   if (!r.ok) throw new Error(d.error || r.statusText);
   return d;
 }
-function q() { return `shoot=${encodeURIComponent(shoot)}`; }
+function q() { return `shoot=${encodeURIComponent(shoot)}&kind=${KIND}`; }
+function setupKind() {
+  if (KIND !== "focus") return;
+  document.title = "Missed focus review · Trips Local AI";
+  document.querySelector("header h1").textContent = "Missed focus review";
+  document.querySelector("header .sub").innerHTML = 'The AF focus check thinks the camera\'s AF box (red) is soft while something else is sharp. Confirm adds <b>General/Focus/Missed</b>; reject adds nothing. Only applied when you press Apply. <a href="/">Back to the control panel</a> · <a href="/review">Race numbers</a>';
+  $("onlyNums").closest("label").style.display = "none";
+  $("fixInput").closest("label").style.display = "none";
+  $("bFix").style.display = "none";
+  $("applyBtn").textContent = "Apply confirmed Focus/Missed to Capture One";
+  $("bConfirm").textContent = "Confirm missed (Enter)";
+}
 async function init() {
-  const s = await api("/api/review/shoots");
+  setupKind();
+  const s = await api(`/api/review/shoots?kind=${KIND}`);
   $("shoot").innerHTML = s.shoots.map(x => `<option value="${x.shoot}">${x.shoot} (${x.reviewed || 0}/${x.needs_review || 0})</option>`).join("");
   const want = new URLSearchParams(location.search).get("shoot");
   if (want) $("shoot").value = want;
@@ -47,7 +60,7 @@ function render() {
   $("pos").textContent = `${idx + 1} of ${items.length}`;
   $("img").src = `/api/review/thumb?${q()}&file=${encodeURIComponent(it.filename)}`;
   $("fname").textContent = it.filename;
-  $("proposed").textContent = it.proposed.length ? it.proposed.join(", ") : "none";
+  $("proposed").textContent = KIND === "focus" ? "Focus missed?" : (it.proposed.length ? it.proposed.join(", ") : "none");
   $("cands").innerHTML = it.candidates.map(c => `<span>${c.number} · ${c.sources.join("+")}${c.conf != null ? " " + (+c.conf).toFixed(2) : ""}</span>`).join("") + (it.car_colour ? `<span>colour: ${it.car_colour}</span>` : "");
   $("reasons").textContent = (it.reasons || []).join(" · ");
   const d = it.decision;
@@ -59,7 +72,7 @@ function render() {
 async function act(action, numbers) {
   const it = items[idx]; if (!it) return;
   try {
-    const r = await api("/api/review/decide", { method: "POST", body: JSON.stringify({ shoot, filename: it.filename, action, numbers }) });
+    const r = await api("/api/review/decide", { method: "POST", body: JSON.stringify({ shoot, filename: it.filename, action, numbers, kind: KIND }) });
     it.decision = r.decision; it.status = r.decision ? r.decision.action : "pending";
     history.push(it.filename);
     if (action !== "undo") idx = Math.min(idx + 1, items.length - 1);
@@ -70,8 +83,10 @@ function fix() { const v = $("fixInput").value.trim(); if (!v) { $("fixInput").f
 async function refreshCounts() { try { const d = await api(`/api/review/queue?${q()}&status=none`); showCounts(d.counts, d.apply); } catch (e) {} }
 async function pollApply() { try { const d = await api(`/api/review/apply_status?${q()}`); showApply(d.apply); } catch (e) {} }
 async function applyNow() {
-  if (!confirm("Add the confirmed and fixed car numbers to Capture One as keywords? Nothing else changes.")) return;
-  try { const r = await api("/api/review/apply", { method: "POST", body: JSON.stringify({ shoot }) }); showApply(r.apply); }
+  const msg = KIND === "focus" ? "Add General/Focus/Missed to the confirmed frames in Capture One? Nothing else changes."
+                               : "Add the confirmed and fixed car numbers to Capture One as keywords? Nothing else changes.";
+  if (!confirm(msg)) return;
+  try { const r = await api("/api/review/apply", { method: "POST", body: JSON.stringify({ shoot, kind: KIND }) }); showApply(r.apply); }
   catch (e) { alert(e.message); }
 }
 document.addEventListener("keydown", e => {
@@ -82,7 +97,7 @@ document.addEventListener("keydown", e => {
     return;
   }
   if (e.target.tagName === "SELECT" || e.metaKey || e.ctrlKey) return;
-  if (/^[0-9]$/.test(e.key)) { $("fixInput").focus(); return; }  // digit goes into the box
+  if (KIND === "numbers" && /^[0-9]$/.test(e.key)) { $("fixInput").focus(); return; }  // digit goes into the box
   const k = e.key.toLowerCase();
   if (e.key === "Enter" || k === "y") { e.preventDefault(); act("confirm"); }
   else if (k === "x" || k === "r") act("reject");

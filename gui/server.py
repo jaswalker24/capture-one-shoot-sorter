@@ -506,14 +506,15 @@ class Handler(BaseHTTPRequestHandler):
     def _review_get(self, path, qs):
         g = lambda k, d="": (qs.get(k) or [d])[0]
         try:
+            kind = g("kind", "numbers")  # numbers (race numbers) | focus (AF focus Missed)
             if path == "/api/review/shoots":
-                return _json(self, 200, {"shoots": RV.shoots()})
+                return _json(self, 200, {"shoots": RV.shoots(kind), "kind": kind})
             if path == "/api/review/queue":
-                return _json(self, 200, RV.queue(g("shoot"), g("status", "pending"), g("only_numbers") == "1"))
+                return _json(self, 200, RV.queue(g("shoot"), g("status", "pending"), g("only_numbers") == "1", kind))
             if path == "/api/review/apply_status":
-                return _json(self, 200, {"apply": RV.apply_status(g("shoot"))})
+                return _json(self, 200, {"apply": RV.apply_status(g("shoot"), kind)})
             if path == "/api/review/thumb":
-                t = RV.thumb(g("shoot"), g("file"))
+                t = RV.thumb(g("shoot"), g("file"), kind)
                 if not t:
                     self.send_error(404); return
                 data = t.read_bytes()
@@ -554,13 +555,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/review/decide":
             try:
-                d = RV.decide(data.get("shoot") or "", data.get("filename") or "", data.get("action") or "", data.get("numbers"))
+                d = RV.decide(data.get("shoot") or "", data.get("filename") or "", data.get("action") or "", data.get("numbers"),
+                              data.get("kind") or "numbers")
             except ValueError as e:
                 return _json(self, 400, {"error": str(e)})
             return _json(self, 200, {"ok": True, "decision": d})
         if path == "/api/review/apply":
             try:
-                return _json(self, 200, {"ok": True, "apply": RV.start_apply(data.get("shoot") or "")})
+                return _json(self, 200, {"ok": True, "apply": RV.start_apply(data.get("shoot") or "", data.get("kind") or "numbers")})
             except (ValueError, RuntimeError) as e:
                 return _json(self, 409, {"error": str(e)})
 
@@ -624,6 +626,9 @@ class Handler(BaseHTTPRequestHandler):
                     "dry_run": bool(data.get("dry_run", False)),
                     "ocr_missing_car_number": bool(data.get("ocr_missing_car_number", False)),
                     "apply_rank_keywords": bool(data.get("apply_rank_keywords", True)),
+                    # AF focus check (Canon AF points) inside the sharpness pass; off -> LOCALAI_AFPOINTS=0
+                    "afpoints": bool(data.get("afpoints", True)),
+                    "afpoints_annotate": max(0, min(50, int(data.get("afpoints_annotate") or 0))),
                     "sample": int(data.get("sample") or 0),
                     "schedule_path": data.get("schedule_path") or "",
                     "camera_offset": data.get("camera_offset") or "",

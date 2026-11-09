@@ -10,7 +10,8 @@ sharpness inside the AF box with the rest of the frame.
 Proposed (additive) keywords:
   General/Focus/On Target  - AF box is the sharpest part of the frame and sharp in absolute terms
   General/Focus/Missed     - AF box soft while other parts of the frame are clearly sharp (front/back focus,
-                             or AF locked on the wrong thing)
+                             or AF locked on the wrong thing). Written as needs_review: only applied after a
+                             human confirms it in the panel's review screen.
 Frames with no AF data, or where everything is soft (motion blur / low light), get no focus keyword:
 the existing General/Quality/* flags cover those.
 
@@ -188,6 +189,9 @@ def classify(rows, C, sharp_flags=None):
     return rows
 
 def run_folder(folder, annotate=0, sample=0, refresh=False, quiet=False):
+    if not annotate:
+        try: annotate = int(os.environ.get("LOCALAI_AFPOINTS_ANNOTATE") or 0)
+        except ValueError: annotate = 0
     folder = Path(folder); fo = folder.name; d = OUT / fo; d.mkdir(parents=True, exist_ok=True)
     C = cfg(); idx = index_rows(fo)
     files = sorted(p for p in folder.iterdir() if p.suffix.lower() in RAW_EXT and not p.name.startswith("."))
@@ -215,8 +219,19 @@ def run_folder(folder, annotate=0, sample=0, refresh=False, quiet=False):
     with open(d / "afpoints.csv", "w", newline="") as fh:
         keys = ["filename", "focus", "af_sharp", "other_sharp", "ratio", "af_pct", "af_mode", "af_state", "valid_points", "n_boxes", "orientation", "box", "sha256"]
         w = csv.DictWriter(fh, fieldnames=keys, extrasaction="ignore"); w.writeheader(); w.writerows(rows)
-    recs = [dict(filename=r["filename"], sha256=r["sha256"], needs_review=False,
-                 proposed_keywords=[f"General/Focus/{r['focus']}"] if r["focus"] else []) for r in rows]
+    # On Target is applied like any other confident proposal. Missed is never auto-applied: it is marked
+    # needs_review so it lands in the panel's review screen (Review -> Missed focus) for a human decision.
+    recs = []
+    for r in rows:
+        rec = dict(filename=r["filename"], sha256=r["sha256"], needs_review=False, proposed_keywords=[])
+        if r["focus"] == "On Target":
+            rec["proposed_keywords"] = ["General/Focus/On Target"]
+        elif r["focus"] == "Missed":
+            rec.update(needs_review=True, proposed_keywords=["General/Focus/Missed"], af_box=r["box"],
+                       af_sharp=r["af_sharp"], other_sharp=r["other_sharp"], ratio=r.get("ratio"),
+                       review_reasons=[f"AF box soft ({r['af_sharp']:.0f}) while elsewhere is sharp ({r['other_sharp']:.0f}), "
+                                       f"ratio {r.get('ratio')}: front/back focus or AF on the wrong thing?"])
+        recs.append(rec)
     pf = d / "afpoints-proposals.json"
     json.dump({"folder": str(folder), "profile": "afpoints", "images": recs}, open(pf, "w"), indent=1)
     dist = dict(Counter(r["focus"] or ("no usable AF box" if not r["box"] else "no tag") for r in rows))

@@ -51,6 +51,10 @@ def main():
         from apply_c1 import apply_proposals
         srcs = {"tagger": f"{a.profile}-proposals-full", "sharpness": "sharpness-proposals", "bursts": "bursts-proposals",
                 "rank": "rank-proposals", "ocr": "ocr-proposals"}
+        # AF-point focus check (afpoints.py, written by the sharpness step). On Target applies; Missed is
+        # needs_review and goes to the panel's review screen. Skip with LOCALAI_AFPOINTS=0.
+        if os.environ.get("LOCALAI_AFPOINTS", "1") != "0" and (out / "afpoints-proposals.json").exists():
+            srcs["afpoints"] = "afpoints-proposals"
         def merge():
             merged, review = {}, {}
             for src, f in srcs.items():

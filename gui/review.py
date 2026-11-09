@@ -1,4 +1,7 @@
-"""Needs-review queue for race-number proposals (Trips Local AI panel).
+"""Needs-review queues for the Trips Local AI panel.
+
+kind="numbers" (default): unsure race-number proposals.
+kind="focus": AF focus check frames flagged General/Focus/Missed by afpoints.py (never auto-applied).
 
 Reads out/<shoot>/<profile>-proposals-full.json (needs_review rows), stores review decisions in
 out/<shoot>/review-decisions.json and applies ONLY confirmed/fixed numbers through review_apply.py
@@ -26,20 +29,37 @@ def _safe_shoot(shoot: str) -> Path:
     return p
 
 
-def _prop_file(d: Path) -> Path | None:
-    for name in ("motorsport-proposals-full.json",):
-        if (d / name).exists():
-            return d / name
-    return None
+KINDS = {
+    "numbers": {"file": "motorsport-proposals-full.json", "decisions": "review-decisions.json",
+                "applied": "review-applied.json", "last": "review-apply-last.json"},
+    "focus": {"file": "afpoints-proposals.json", "decisions": "review-focus-decisions.json",
+              "applied": "review-focus-applied.json", "last": "review-focus-apply-last.json"},
+}
+FOCUS_KW = "General/Focus/Missed"
 
 
-def shoots():
+def _kind(kind) -> str:
+    kind = kind or "numbers"
+    if kind not in KINDS:
+        raise ValueError("unknown review kind")
+    return kind
+
+
+def _prop_file(d: Path, kind: str = "numbers") -> Path | None:
+    f = d / KINDS[_kind(kind)]["file"]
+    return f if f.exists() else None
+
+
+def shoots(kind: str = "numbers"):
+    kind = _kind(kind)
     out = []
     for d in sorted(OUT.iterdir(), key=lambda x: x.name, reverse=True):
-        if d.is_dir() and _prop_file(d):
+        if d.is_dir() and _prop_file(d, kind):
             try:
-                rows = _rows(d.name)
-                dec = _decisions(d)
+                rows = _rows(d.name, kind)
+                if kind == "focus" and not rows:
+                    continue
+                dec = _decisions(d, kind)
                 done = sum(1 for r in rows if r["filename"] in dec)
                 out.append({"shoot": d.name, "needs_review": len(rows), "reviewed": done})
             except Exception as e:
@@ -67,12 +87,16 @@ def _candidates(r):
     return nums
 
 
-def _rows(shoot: str):
-    d = _safe_shoot(shoot); pf = _prop_file(d)
+def _rows(shoot: str, kind: str = "numbers"):
+    kind = _kind(kind)
+    d = _safe_shoot(shoot); pf = _prop_file(d, kind)
+    if not pf:
+        raise ValueError("no proposals of this kind for shoot")
     m = pf.stat().st_mtime
+    key = (shoot, kind)
     with _LOCK:
-        if shoot in _DATA and _DATA[shoot][0] == m:
-            return _DATA[shoot][1]
+        if key in _DATA and _DATA[key][0] == m:
+            return _DATA[key][1]
     data = json.load(open(pf))
     folder = data.get("folder", "")
     rows = []
@@ -81,6 +105,12 @@ def _rows(shoot: str):
             continue
         fn = r["filename"]
         if fn.lower().endswith((".mp4", ".mov")):
+            continue
+        if kind == "focus":
+            rows.append({"filename": fn, "sha256": r.get("sha256"), "folder": folder,
+                         "proposed": [FOCUS_KW], "candidates": [], "reasons": r.get("review_reasons") or [],
+                         "af_box": r.get("af_box"), "af_sharp": r.get("af_sharp"),
+                         "other_sharp": r.get("other_sharp"), "ratio": r.get("ratio")})
             continue
         cands = _candidates(r)
         rows.append({"filename": fn, "sha256": r.get("sha256"), "folder": folder,
@@ -91,25 +121,26 @@ def _rows(shoot: str):
                      "already_confident": [k for k in r.get("proposed_keywords") or [] if "Car Number/" in k]})
     rows.sort(key=lambda x: x["filename"])
     with _LOCK:
-        _DATA[shoot] = (m, rows)
+        _DATA[key] = (m, rows)
     return rows
 
 
-def _decisions(d: Path) -> dict:
-    f = d / "review-decisions.json"
+def _decisions(d: Path, kind: str = "numbers") -> dict:
+    f = d / KINDS[_kind(kind)]["decisions"]
     return json.load(open(f)).get("items", {}) if f.exists() else {}
 
 
-def _applied(d: Path) -> dict:
-    f = d / "review-applied.json"
+def _applied(d: Path, kind: str = "numbers") -> dict:
+    f = d / KINDS[_kind(kind)]["applied"]
     return json.load(open(f)).get("items", {}) if f.exists() else {}
 
 
-def queue(shoot: str, status: str = "pending", only_numbers: bool = False):
-    d = _safe_shoot(shoot); rows = _rows(shoot); dec = _decisions(d); app = _applied(d)
+def queue(shoot: str, status: str = "pending", only_numbers: bool = False, kind: str = "numbers"):
+    kind = _kind(kind)
+    d = _safe_shoot(shoot); rows = _rows(shoot, kind); dec = _decisions(d, kind); app = _applied(d, kind)
     items = []
     for r in rows:
-        if only_numbers and not r["candidates"]:
+        if kind == "numbers" and only_numbers and not r["candidates"]:
             continue
         x = dict(r); x["decision"] = dec.get(r["filename"]); x["applied"] = app.get(r["filename"])
         st = "pending" if not x["decision"] else x["decision"]["action"]
@@ -119,22 +150,29 @@ def queue(shoot: str, status: str = "pending", only_numbers: bool = False):
     counts = {"total": len(rows), "pending": 0, "confirm": 0, "fix": 0, "reject": 0, "skip": 0}
     for r in rows:
         dd = dec.get(r["filename"]); counts["pending" if not dd else dd["action"]] = counts.get("pending" if not dd else dd["action"], 0) + 1
-    to_apply = sum(1 for fn, dd in dec.items() if dd["action"] in ("confirm", "fix") and dd.get("numbers")
-                   and sorted(app.get(fn, {}).get("numbers", [])) != sorted(dd["numbers"]))
+    if kind == "focus":
+        to_apply = sum(1 for fn, dd in dec.items() if dd["action"] == "confirm" and fn not in app)
+    else:
+        to_apply = sum(1 for fn, dd in dec.items() if dd["action"] in ("confirm", "fix") and dd.get("numbers")
+                       and sorted(app.get(fn, {}).get("numbers", [])) != sorted(dd["numbers"]))
     counts["ready_to_apply"] = to_apply
     counts["applied"] = len(app)
-    return {"shoot": shoot, "items": items, "counts": counts, "apply": apply_status(shoot)}
+    return {"shoot": shoot, "kind": kind, "items": items, "counts": counts, "apply": apply_status(shoot, kind)}
 
 
-def decide(shoot: str, filename: str, action: str, numbers=None):
+def decide(shoot: str, filename: str, action: str, numbers=None, kind: str = "numbers"):
+    kind = _kind(kind)
     d = _safe_shoot(shoot)
     if action not in ("confirm", "fix", "reject", "skip", "undo"):
         raise ValueError("bad action")
-    rows = {r["filename"]: r for r in _rows(shoot)}
+    rows = {r["filename"]: r for r in _rows(shoot, kind)}
     if filename not in rows:
         raise ValueError("not in review queue")
     nums = []
-    if action == "confirm":
+    if kind == "focus":
+        if action == "fix":
+            raise ValueError("focus frames are confirm (add Focus/Missed) or reject only")
+    elif action == "confirm":
         nums = rows[filename]["proposed"]
         if not nums:
             raise ValueError("nothing proposed to confirm; type the number to fix")
@@ -149,7 +187,7 @@ def decide(shoot: str, filename: str, action: str, numbers=None):
             if str(int(n)) not in nums: nums.append(str(int(n)))
         if not nums:
             raise ValueError("type at least one number")
-    f = d / "review-decisions.json"
+    f = d / KINDS[kind]["decisions"]
     with _LOCK:
         data = json.load(open(f)) if f.exists() else {"items": {}}
         if action == "undo":
@@ -160,13 +198,27 @@ def decide(shoot: str, filename: str, action: str, numbers=None):
     return data["items"].get(filename)
 
 
-def thumb(shoot: str, filename: str) -> Path | None:
-    rows = {r["filename"]: r for r in _rows(shoot)}
+def thumb(shoot: str, filename: str, kind: str = "numbers") -> Path | None:
+    kind = _kind(kind)
+    rows = {r["filename"]: r for r in _rows(shoot, kind)}
     r = rows.get(filename)
     if not r or not r.get("sha256"):
         return None
     key = r["sha256"][:24]
     THUMBS.mkdir(parents=True, exist_ok=True)
+    if kind == "focus" and r.get("af_box"):
+        # preview with the camera's AF box drawn (red), via afpoints.draw
+        t = THUMBS / f"{key}-af.jpg"
+        if t.exists():
+            return t
+        import sys
+        sys.path.insert(0, str(HOME))
+        import afpoints
+        f = afpoints.draw({"filename": filename, "sha256": r["sha256"], "box": r["af_box"], "focus": "Missed",
+                           "af_sharp": r.get("af_sharp") or 0, "other_sharp": r.get("other_sharp") or 0,
+                           "ratio": r.get("ratio"), "af_state": "AF box"}, r["folder"], THUMBS)
+        Path(f).replace(t)
+        return t
     t = THUMBS / f"{key}.jpg"
     if t.exists():
         return t
@@ -196,10 +248,11 @@ def thumb(shoot: str, filename: str) -> Path | None:
 _APPLY: dict = {}
 
 
-def apply_status(shoot: str):
-    s = _APPLY.get(shoot)
+def apply_status(shoot: str, kind: str = "numbers"):
+    kind = _kind(kind)
+    s = _APPLY.get((shoot, kind))
     if not s:
-        f = OUT / shoot / "review-apply-last.json"
+        f = OUT / shoot / KINDS[kind]["last"]
         return json.load(open(f)) if f.exists() else None
     if s.get("proc") and s["proc"].poll() is not None and s.get("status") == "running":
         s["status"] = "done" if s["proc"].returncode == 0 else "error"
@@ -221,15 +274,16 @@ def catalog_busy():
     return None
 
 
-def start_apply(shoot: str):
+def start_apply(shoot: str, kind: str = "numbers"):
+    kind = _kind(kind)
     _safe_shoot(shoot)
     busy = catalog_busy()
     if busy:
         raise RuntimeError(f"Capture One is busy ({busy}); try again when it finishes")
-    log = HOME / "logs" / "gui" / f"review-apply-{shoot}-{time.strftime('%Y%m%d-%H%M%S')}.log"
+    log = HOME / "logs" / "gui" / f"review-apply-{kind}-{shoot}-{time.strftime('%Y%m%d-%H%M%S')}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.Popen([str(HOME / "venv/bin/python"), str(HOME / "review_apply.py"), shoot, "--apply"],
+    proc = subprocess.Popen([str(HOME / "venv/bin/python"), str(HOME / "review_apply.py"), shoot, "--apply", "--kind", kind],
                             cwd=str(HOME), stdout=open(log, "w"), stderr=subprocess.STDOUT)
-    _APPLY[shoot] = {"status": "running", "proc": proc, "pid": proc.pid, "log": str(log),
-                     "started": time.strftime("%Y-%m-%dT%H:%M:%S")}
-    return apply_status(shoot)
+    _APPLY[(shoot, kind)] = {"status": "running", "proc": proc, "pid": proc.pid, "log": str(log),
+                             "started": time.strftime("%Y-%m-%dT%H:%M:%S")}
+    return apply_status(shoot, kind)

@@ -170,3 +170,7 @@ if [ -f "$ROOT/gui/com.trips.localai.gui.plist" ]; then
   echo "Control panel installed. Start with: launchctl bootstrap gui/\$(id -u) ~/Library/LaunchAgents/com.trips.localai.gui.plist"
   echo "Open http://127.0.0.1:8765/  (token in ~/localai/gui/auth.token)"
 fi
+
+# Profiles (seed examples)
+mkdir -p "$HOME/localai/profiles"
+if [ -d "$ROOT/profiles" ]; then cp -R "$ROOT/profiles/"*.json "$HOME/localai/profiles/" 2>/dev/null || true; fi

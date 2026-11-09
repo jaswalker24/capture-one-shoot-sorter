@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trip Local AI control panel — LAN web UI on port 8765.
+"""Trips Local AI control panel — LAN web UI on port 8765.
 
 Stdlib only (no Flask/FastAPI) so it can run while a catalog job uses the venv.
 Auth: shared secret in ~/localai/gui/auth.token → cookie after POST /api/login.
@@ -514,7 +514,7 @@ def main():
         print("generated auth token at", AUTH_FILE)
     ensure_worker()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Trip Local AI control panel on http://{HOST}:{PORT}", flush=True)
+    print(f"Trips Local AI control panel on http://{HOST}:{PORT}", flush=True)
     print(f"Auth token file: {AUTH_FILE}", flush=True)
     try:
         httpd.serve_forever()

@@ -256,4 +256,20 @@ $("runCaptions").onclick = async () => {
   } catch (e) { alert(e.message); }
 };
 
-checkLogin().catch(() => {});
+async function start() {
+  const u = new URL(location.href);
+  const urlToken = u.searchParams.get("token");
+  if (urlToken) {
+    u.searchParams.delete("token");
+    history.replaceState({}, "", u.pathname + u.search + u.hash);
+    try {
+      $("tokenInput").value = urlToken;
+      await doLogin();
+      return;
+    } catch (e) {
+      $("loginErr").textContent = (e && e.message) || "Auto-login failed — paste the token from ~/localai/gui/auth.token";
+    }
+  }
+  try { await checkLogin(); } catch (e) {}
+}
+start();

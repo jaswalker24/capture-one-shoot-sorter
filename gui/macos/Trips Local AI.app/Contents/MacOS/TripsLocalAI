@@ -1,4 +1,10 @@
 #!/bin/bash
-URL="http://127.0.0.1:8765/"
-# Prefer local hostname for Screen Sharing sessions too
-open "$URL" || open -a Safari "$URL"
+TOKEN_FILE="$HOME/localai/gui/auth.token"
+BASE="http://127.0.0.1:8765/"
+if [ -f "$TOKEN_FILE" ]; then
+  TOKEN=$(tr -d '\r\n' < "$TOKEN_FILE")
+  # URL-encode minimally (token is urlsafe)
+  open "${BASE}?token=${TOKEN}"
+else
+  open "$BASE"
+fi

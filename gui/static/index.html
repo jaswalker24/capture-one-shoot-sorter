@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trip Local AI</title>
+  <title>Trips Local AI</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div id="loginView" class="login">
-    <h1>Trip Local AI</h1>
-    <p class="note">Enter the shared secret from <code>~/localai/gui/auth.token</code> on the M5.</p>
+    <h1>Trips Local AI</h1>
+    <p class="note">On this Mac, the Dock shortcut signs you in automatically. From another device, copy the one-line secret from the M5: open Terminal there and run <code>cat ~/localai/gui/auth.token</code>, then paste it below (no extra spaces or newline).</p>
     <label>Shared secret
       <input type="password" id="tokenInput" autocomplete="current-password" />
     </label>
@@ -22,7 +22,7 @@
   <div id="appView" class="wrap hidden">
     <header>
       <div>
-        <h1>Trip Local AI</h1>
+        <h1>Trips Local AI</h1>
         <div class="sub">Control panel · catalog tagging (no captions) · additive keywords only</div>
       </div>
       <div class="stats" id="stats"></div>

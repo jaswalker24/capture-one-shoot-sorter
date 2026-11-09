@@ -1,4 +1,4 @@
-# Trip Local AI for Capture One
+# Trips Local AI for Capture One
 
 On-device photo tagging for Capture One on Apple silicon. Adds keywords only. It never changes your stars or colour tags, and it never sends your photos to the cloud.
 
@@ -49,7 +49,7 @@ The Scripts menu actions look keywords up in this library, so the name must matc
 
 ### 5. Find the Scripts menu
 
-In Capture One: **Scripts → Trip Local AI**. You should see:
+In Capture One: **Scripts → Trips Local AI**. You should see:
 
 - Tag with Local AI
 - Find Bursts
@@ -62,7 +62,7 @@ In Capture One: **Scripts → Trip Local AI**. You should see:
 ### 6. First test on a few frames
 
 1. Select 3–5 images in Capture One.
-2. Run **Scripts → Trip Local AI → Tag with Local AI**.
+2. Run **Scripts → Trips Local AI → Tag with Local AI**.
 3. Wait for the macOS notification.
 4. Check that keywords appeared and that stars / colour tags did not change.
 
@@ -130,7 +130,7 @@ Open:
 - `http://127.0.0.1:8765/` on the Mac
 - `http://127.0.0.1:8765/` or `http://<LAN-IP>:8765/` from another device on the network
 
-Log in with the shared secret in `~/localai/gui/auth.token` (one line). The installer creates a random token; change it if you like.
+Log in with the shared secret in `~/localai/gui/auth.token` (one line, no spaces). On the M5, the Dock shortcut opens the panel already signed in. From another device, run `cat ~/localai/gui/auth.token` on the M5 and paste that value. The installer creates a random token; change it if you like.
 
 Optional Dock shortcut:
 
@@ -190,7 +190,7 @@ Draft captions are a separate path:
 ~/localai/tag captions --files /path/to/Camera\ Exports/image.jpg
 ```
 
-or **Scripts → Trip Local AI → Draft Captions (Exports)** with export files selected.
+or **Scripts → Trips Local AI → Draft Captions (Exports)** with export files selected.
 
 ---
 
@@ -287,7 +287,7 @@ kill "$(cat ~/localai/logs/ollama.pid)"
 
 ```bash
 rm -rf ~/localai
-rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"
+rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trips Local AI"
 ```
 
 ---

@@ -147,6 +147,22 @@ None of these change stars or colour tags. Keyword writes are additive only.
 
 ---
 
+## AF-point focus check (afpoints.py)
+
+Canon bodies record the AF area they used in the CR3 maker notes. `afpoints.py` reads it with the bundled ExifTool (read-only), maps the box onto the oriented preview, and compares sharpness **inside the AF box** with the sharpest region elsewhere in the frame.
+
+- Tested on the EOS R6 (Face + Tracking, AI Servo, subject = Vehicles): every frame carries one tracking box (`ValidAFPoints = 1`, `AFAreaX/YPositions`, `AFAreaWidths/Heights` on a 5472×3648 AF image, +Y up from centre). Before the tracker locks the camera records a 651-point grid with the in-focus points flagged; frames with nothing in focus are skipped.
+- Proposed keywords (additive, proposals only): `General/Focus/On Target` (AF box sharp and the sharpest part of the frame) and `General/Focus/Missed` (AF box soft while something else is clearly sharp: front/back focus or AF on the wrong thing). No tag when there is no AF data or the whole frame is soft (the `General/Quality/*` flags cover that). On Target is suppressed on frames the sharpness pass flags Motion Blur / Soft Focus.
+- Runs automatically at the end of `tag sharpness` (set `LOCALAI_AFPOINTS=0` or `"features": {"af_points": false}` to skip), or on its own:
+
+```
+venv/bin/python afpoints.py "/path/to/shoot" [--annotate 8]
+```
+
+Outputs in `~/localai/out/<shoot>/`: `afpoints-exif.json` (metadata cache), `afpoints.csv`, `afpoints-proposals.json`. `--annotate N` writes previews with the AF box drawn to `~/localai/out/afcheck/`. Thresholds live under `"features": {"afpoints": {...}}` in `config.json` (defaults calibrated on 2,332 Brands Hatch frames). `fullrun.py` does not apply these tags yet; add `"afpoints": "afpoints-proposals"` to its merge sources to include them.
+
+---
+
 ## Safety notes
 
 - **Additive keywords only.** Existing keywords are never removed.
@@ -178,6 +194,7 @@ or **Scripts → Trips Local AI → Draft Captions (Exports)** with export files
   tag                 wrapper command
   tagger.py           main tagger
   features.py         bursts, rank, sharpness, OCR, search, faces, captions, …
+  afpoints.py         Canon AF-point focus check (On Target / Missed)
   fullrun.py          whole-shoot pipeline (no captions)
   schedule_tag.py     gig schedule matcher
   apply_c1.py/.js     additive Capture One writer

@@ -408,6 +408,14 @@ def cmd_sharpness(args):
         pf = write_proposals(folder_path_for(c, fo), "sharpness", recs)
         from collections import Counter
         print(fo, dict(Counter(r["flag"] for r in rows)), "->", d / "sharpness.csv", pf)
+        # >>> afpoints hook (AF-point focus check, proposals only; see afpoints.py). Off: LOCALAI_AFPOINTS=0 or features.af_points=false
+        if os.environ.get("LOCALAI_AFPOINTS", "1") != "0" and FCFG.get("af_points", True):
+            try:
+                import afpoints
+                afpoints.run_folder(folder_path_for(c, fo), quiet=True)
+            except Exception as e:
+                print("afpoints skipped:", str(e)[:200])
+        # <<< afpoints hook
 
 # ------------------------------------------------------------------ bursts
 def cmd_bursts(args):

@@ -40,3 +40,8 @@ export/
 *.key
 credentials*
 secrets*
+
+# macOS AppleDouble / resource forks
+._*
+__pycache__/
+*.pyc

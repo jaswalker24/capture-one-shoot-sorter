@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+"""Wait until the Trips Local AI job queue is empty, then reload the GUI LaunchAgent.
+
+Used so code changes (e.g. People path UI) go live without interrupting a running catalog job.
+Safe to leave detached: polls jobs/*.json; exits after one successful kickstart.
+"""
+from __future__ import annotations
+import json, os, subprocess, sys, time
+from pathlib import Path
+
+HOME = Path.home() / "localai"
+JOBS = HOME / "gui" / "jobs"
+LOG = HOME / "logs" / "gui" / "reload-when-idle.log"
+POLL = float(os.environ.get("LOCALAI_RELOAD_POLL", "20"))
+LABEL = "com.trips.localai.gui"
+
+
+def log(msg: str):
+    line = time.strftime("%Y-%m-%dT%H:%M:%S") + " " + msg
+    print(line, flush=True)
+    LOG.parent.mkdir(parents=True, exist_ok=True)
+    with open(LOG, "a") as f:
+        f.write(line + "\n")
+
+
+def busy_jobs():
+    out = []
+    if not JOBS.is_dir():
+        return out
+    for p in JOBS.glob("*.json"):
+        try:
+            j = json.load(open(p))
+        except Exception:
+            continue
+        if j.get("status") in ("running", "queued"):
+            out.append({"id": j.get("id") or p.stem, "status": j.get("status"),
+                        "folder": j.get("folder_name") or j.get("folder"),
+                        "pass": j.get("current_pass")})
+    return out
+
+
+def main():
+    log(f"watcher start; poll={POLL}s; waiting for empty queue before kickstart {LABEL}")
+    while True:
+        busy = busy_jobs()
+        if not busy:
+            break
+        log("busy: " + ", ".join(f"{b['id']}={b['status']}/{b.get('pass') or '-'} ({b.get('folder')})" for b in busy))
+        time.sleep(POLL)
+    log("queue empty — kickstarting LaunchAgent")
+    uid = os.getuid()
+    cmd = ["launchctl", "kickstart", "-k", f"gui/{uid}/{LABEL}"]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode:
+        log(f"kickstart FAILED rc={r.returncode} stdout={r.stdout!r} stderr={r.stderr!r}")
+        sys.exit(1)
+    log(f"kickstart ok: {' '.join(cmd)}")
+    # stop any leftover NO_WORKER test server on 8766
+    subprocess.run(["pkill", "-f", "LOCALAI_GUI_PORT=8766"], capture_output=True)
+    log("done")
+
+
+if __name__ == "__main__":
+    main()

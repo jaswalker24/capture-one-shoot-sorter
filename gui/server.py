@@ -317,6 +317,9 @@ def _worker_loop():
 
 def ensure_worker():
     global _WORKER
+    # Test / secondary servers set LOCALAI_GUI_NO_WORKER=1 so they never touch the live queue.
+    if os.environ.get("LOCALAI_GUI_NO_WORKER") == "1":
+        return
     if _WORKER and _WORKER.is_alive():
         return
     _WORKER = threading.Thread(target=_worker_loop, name="localai-queue", daemon=True)
@@ -581,6 +584,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/people/library/delete":
             ok = PP.delete_person(data.get("id") or "")
             return _json(self, 200 if ok else 404, {"ok": ok})
+        if path == "/api/people/reveal":
+            try:
+                return _json(self, 200, PP.reveal_in_finder(data.get("path") or ""))
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
+            except FileNotFoundError as e:
+                return _json(self, 404, {"error": str(e)})
+            except Exception as e:
+                return _json(self, 500, {"error": str(e)})
 
         if path == "/api/queue/add":
             folder = Path(data.get("folder") or "")

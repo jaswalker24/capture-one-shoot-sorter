@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/style.css" />
   <style>
     .pe-grid{display:grid;grid-template-columns:220px 1fr;gap:16px}
-    .pe-clusters{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+    .pe-clusters{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
     .pe-card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
     .pe-card img{width:100%;border-radius:8px;background:#000;aspect-ratio:2/1;object-fit:cover}
     .pe-card .meta{font-size:12px;color:var(--muted)}
@@ -18,6 +18,13 @@
     .pe-badge.anonymous{color:var(--muted)}
     .pe-lib{display:flex;flex-wrap:wrap;gap:8px}
     .pe-lib span{padding:4px 10px;border-radius:999px;background:var(--panel2);border:1px solid var(--border);font-size:12px}
+    .pe-path{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--muted);word-break:break-all;line-height:1.4}
+    .pe-path-row{display:flex;flex-wrap:wrap;gap:6px;align-items:flex-start;margin-top:4px}
+    .pe-path-row code{flex:1 1 180px;background:var(--panel2);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;word-break:break-all}
+    .pe-path-row button{font-size:11px;padding:4px 8px}
+    .pe-paths-card h3{margin:0 0 8px;font-size:13px}
+    .pe-paths-card .row-block{margin-bottom:10px}
+    .pe-paths-card .row-block:last-child{margin-bottom:0}
     @media(max-width:900px){.pe-grid{grid-template-columns:1fr}}
   </style>
 </head>
@@ -38,11 +45,13 @@
         <p class="note" style="margin-top:12px">Run the <strong>People (faces)</strong> pass from the Run tab (off by default) to populate a shoot. Proposals only until you apply.</p>
         <h2 style="margin-top:18px">Named library</h2>
         <div id="library" class="pe-lib"></div>
+        <div id="libPaths" class="pe-paths-card" style="margin-top:12px"></div>
       </section>
       <section>
         <div class="card" style="margin-bottom:12px">
           <h2 id="shootTitle">Clusters</h2>
           <div class="note" id="summary">Pick a shoot.</div>
+          <div id="shootPaths" class="pe-paths-card" style="margin-top:12px"></div>
         </div>
         <div id="clusters" class="pe-clusters"></div>
       </section>

@@ -55,6 +55,8 @@ def library_summary() -> dict:
     people = _load_lib()
     return {
         "count": len(people),
+        "library_path": str(LIB_PATH),
+        "people_dir": str(PEOPLE_DIR),
         "people": [
             {"id": p["id"], "name": p["name"], "face_count": p.get("face_count", 0),
              "updated": p.get("updated"), "shoots": p.get("shoots") or []}
@@ -524,7 +526,66 @@ def list_shoots_with_people() -> list[dict]:
 
 
 def get_clusters(shoot: str) -> dict:
-    cl = OUT / shoot / "people" / "clusters.json"
+    people_dir = (OUT / shoot / "people").resolve()
+    cl = people_dir / "clusters.json"
     if not cl.exists():
         raise FileNotFoundError(shoot)
-    return json.load(open(cl))
+    data = json.load(open(cl))
+    # Attach absolute paths for the GUI naming page (folder + each contact sheet)
+    data["paths"] = {
+        "people_dir": str(people_dir),
+        "clusters_json": str(cl),
+        "centroids_json": str(people_dir / "centroids.json"),
+        "faces_csv": str(people_dir / "faces.csv"),
+        "proposals_json": str((OUT / shoot / "people-proposals.json").resolve()),
+        "library_json": str(LIB_PATH),
+    }
+    for c in data.get("clusters") or []:
+        sheet = people_dir / f"person_{int(c['cluster']):03d}.jpg"
+        c["sheet_path"] = str(sheet) if sheet.is_file() else None
+        # keep relative contact_sheet if present; prefer absolute for UI
+        if c.get("sheet_path"):
+            c["contact_sheet"] = c["sheet_path"]
+    return data
+
+
+def allowed_reveal_roots() -> list[Path]:
+    return [(OUT).resolve(), (PEOPLE_DIR).resolve()]
+
+
+def is_allowed_reveal_path(path: str | Path) -> Path:
+    """Resolve and ensure path is under ~/localai/out or ~/localai/people (no escape)."""
+    raw = Path(path).expanduser()
+    try:
+        resolved = raw.resolve(strict=False)
+    except Exception as e:
+        raise ValueError(f"bad path: {e}") from e
+    # Reject null bytes / empty
+    if not str(path) or "\x00" in str(path):
+        raise ValueError("empty path")
+    allowed = False
+    for root in allowed_reveal_roots():
+        try:
+            resolved.relative_to(root)
+            allowed = True
+            break
+        except ValueError:
+            continue
+    if not allowed:
+        raise ValueError("path not under ~/localai/out or ~/localai/people")
+    if not resolved.exists():
+        raise FileNotFoundError(str(resolved))
+    return resolved
+
+
+def reveal_in_finder(path: str | Path) -> dict:
+    """Reveal a file/folder in Finder. Only paths under out/ or people/."""
+    target = is_allowed_reveal_path(path)
+    # open -R reveals in Finder; works for files and folders
+    r = __import__("subprocess").run(
+        ["open", "-R", str(target)],
+        capture_output=True, text=True, timeout=15,
+    )
+    if r.returncode:
+        raise RuntimeError((r.stderr or r.stdout or f"open failed rc={r.returncode}").strip())
+    return {"ok": True, "path": str(target)}

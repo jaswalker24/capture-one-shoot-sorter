@@ -48,8 +48,9 @@ function runScoped(argv, plan, C1, d){
   if(plan.scope_folder){
     const folder=String(plan.scope_folder).replace(/\/+$/,'');
     scopeToFolder(C1, d, folder);
-    const vs=d.variants, names=vs.name(), paths=vs.parentImage.path(); byName={};
-    names.forEach((n,i)=>{ if(folderOf(paths[i])===folder) (byName[n]=byName[n]||[]).push(i); });
+    const vs=d.variants, names=vs.name(), paths=vs.parentImage.path(), vids=vs.id(); byName={};
+    // store variant ids (not indexes) so a collection switch mid-run can't retarget a removal
+    names.forEach((n,i)=>{ if(folderOf(paths[i])===folder) (byName[n]=byName[n]||[]).push(vids[i]); });
     if(!Object.keys(byName).length){
       const res={dry:!!dry, refused:'no variants of '+folder+' in Capture One', removed:[], skipped:[], before:[], after:[],
                  failures:(plan.items||[]).map(it=>({filename:it.filename, reason:'refused: folder not found in Capture One'}))};
@@ -67,7 +68,7 @@ function runScoped(argv, plan, C1, d){
       if(byName){
         const ix=byName[String(it.filename).replace(/\.[^.]+$/,'')]||byName[it.filename]||[];
         if(ix.length!==1) throw new Error(ix.length? 'multiple variants in folder' : 'not in this folder in Capture One');
-        v=d.variants[ix[0]];
+        v=d.variants.byId(ix[0]);
       } else { v=d.variants.whose({name:it.filename})[0]; }
       if(!v) throw new Error('not in catalog');
     }

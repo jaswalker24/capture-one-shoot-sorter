@@ -73,12 +73,15 @@ function runScoped(argv, plan, dry, C1, d){
   // variants of current collection, indexed by name (base name without extension)
   const cur=d.currentCollection().name();
   const vs=d.variants; const names=vs.name(); const idx={};
+  // id-based references: stay on the same variant even if something else switches the collection mid-run
+  const vids=scopedPaths? vs.id() : null;
   names.forEach((n,i)=>{ (idx[n]=idx[n]||[]).push(i); });
   const res={dry:dry, collection:cur, scope:scope, before:[], applied:[], skipped:[], failures:[], after:[]};
   for(const it of plan.items){
     const base=it.filename.replace(/\.[^.]+$/,'');
     const cands=(idx[base]||[]).filter(i=>{ if(scopedPaths) return scopedPaths[i]===it.path;
-                     try{return vs[i].parentImage().path()===it.path}catch(e){return false} }).map(i=>vs[i]);
+                     try{return vs[i].parentImage().path()===it.path}catch(e){return false} })
+                   .map(i=>vids? d.variants.byId(vids[i]) : vs[i]);
     if(cands.length!==1){ res.failures.push({filename:it.filename, reason: cands.length? 'multiple variants':'variant not in current collection ('+cur+')'}); continue; }
     const v=cands[0];
     const b={id:v.id(), filename:it.filename, keywords:kwList(v), rating:v.rating(), color:v.colorTag()};

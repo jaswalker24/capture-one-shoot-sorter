@@ -116,3 +116,25 @@ textarea.code { font-family:ui-monospace, Menlo, monospace; font-size:12px; min-
 .pv-tag.off { text-decoration: line-through; opacity: .45; }
 .pv-chip .note { margin-left: 2px; }
 .badge.awaiting_approval { color: var(--warn); border-color: #6b5a2f; }
+
+/* responsive: phones / narrow windows */
+@media (max-width: 640px) {
+  .wrap { padding: 14px 10px 40px; }
+  header { flex-direction: column; align-items: flex-start; gap: 8px; margin-bottom: 12px; }
+  .tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 4px; }
+  .tabs button { flex: 0 0 auto; white-space: nowrap; }
+  .card { padding: 12px; }
+  .row { gap: 8px; }
+  label { min-width: 100%; }
+  label.inline { min-width: 0; }
+  button, .btn { min-height: 40px; }
+  input[type=text], input[type=password], input[type=number], select { font-size: 16px; } /* no iOS zoom */
+  table.data { display: block; overflow-x: auto; white-space: nowrap; }
+  .job .top { flex-direction: column; }
+  .job .log { max-height: 140px; overflow: auto; font-size: 11px; }
+  .modal { padding: 0; }
+  .modal-box { border-radius: 0; min-height: 100vh; padding: 12px; }
+  .pv-table { max-height: none; }
+  .pv-table table.data { display: table; white-space: normal; }
+  .preset-row { flex-wrap: wrap; }
+}

@@ -1,30 +1,59 @@
 // usage: osascript -l JavaScript snap.js out.json [name ...]   (no names = whole current collection: rating/colour only)
 //        osascript -l JavaScript snap.js out.json --folder <abs folder>   (rating/colour of that folder's variants only;
-//        selects the "<shoot> · Apply scope" smart album, then restores the previous collection)
+//        selects the catalog folder collection for that path, then restores the previous collection)
 ObjC.import('Foundation');
 
-// ---- folder scope (2026-11-09 fix): never trust whatever collection Capture One is showing.
-// Selects a smart album "<shoot> · Apply scope" (group "Trips Local AI", rule folderPath contains <shoot>,
-// same mechanism as cull_album.py), keeps only variants whose image is directly in <folder>, and the caller
-// restores the previous collection afterwards.
+// ---- folder scope (2026-11-10): never trust whatever collection Capture One is showing.
+// Select the catalog folder collection whose `folder` path equals the job folder (exact match).
+// Fall back to a uniquely named catalog folder under the Camera Imports tree.
+// Do not use folderPath smart albums: on Capture One 16.8.5.30 those rules can return 0
+// variants even when the catalog folder itself has every frame and the same path.
+function posixFolder(c){
+  try{
+    const f=c.folder();
+    if(f===undefined||f===null) return '';
+    return String(f).replace(/^file:\/\//,'').replace(/\/+$/,'');
+  }catch(e){ return ''; }
+}
+function isCatalogFolder(c){
+  try{ return c.kind()==='catalog folder'; }catch(e){ return false; }
+}
+function catalogFoldersNamed(d, shoot){
+  const direct=d.collections.whose({name:shoot})().filter(isCatalogFolder);
+  if(direct.length) return direct;
+  const acc=[];
+  const roots=d.collections.whose({name:'Camera Imports'})().filter(isCatalogFolder);
+  function walk(parent){
+    let kids; try{ kids=parent.collections(); }catch(e){ return; }
+    for(const c of kids){
+      try{ if(isCatalogFolder(c) && c.name()===shoot) acc.push(c); }catch(e){}
+      walk(c);
+    }
+  }
+  roots.forEach(walk);
+  return acc;
+}
 function scopeToFolder(C1, d, folder){
-  const shoot=folder.replace(/\/+$/,'').split('/').pop();
-  const GROUP='Trips Local AI', NAME=shoot+' · Apply scope';
-  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const rules='<?xml version="1.0" encoding="UTF-8"?><MatchOperator Kind="AND"><Condition Enabled="YES"><Key>folderPath</Key><Operator>6</Operator><Criterion>'+esc(shoot)+'</Criterion></Condition></MatchOperator>';
-  // (JXA cannot filter on the kind enumeration in whose(); filter by name, then check kind)
-  let gs=d.collections.whose({name:GROUP})().filter(c=>c.kind()==='group');
-  // (JXA make() fails with "Can't convert types"; push a new Collection object instead)
-  if(!gs.length){ d.collections.push(C1.Collection({kind:'group', name:GROUP})); gs=d.collections.whose({name:GROUP})().filter(c=>c.kind()==='group'); }
-  const g=gs[0];
-  let ss=g.collections.whose({name:NAME})().filter(c=>c.kind()==='smart album');
-  if(!ss.length){ g.collections.push(C1.Collection({kind:'smart album', name:NAME, rules:rules})); ss=g.collections.whose({name:NAME})().filter(c=>c.kind()==='smart album'); }
-  if(!ss.length) throw new Error('could not create scope collection '+NAME);
-  const s=ss[0];
-  d.currentCollection=s;
+  const want=folder.replace(/\/+$/,'');
+  const shoot=want.split('/').pop();
+  const named=catalogFoldersNamed(d, shoot);
+  const exact=named.filter(c=>posixFolder(c)===want);
+  let chosen=null, how=null;
+  if(exact.length===1){ chosen=exact[0]; how='exact-path'; }
+  else if(exact.length>1) throw new Error('multiple catalog folders at '+want);
+  else {
+    const under=named.filter(c=>{
+      const p=posixFolder(c);
+      return p.indexOf('/Camera Imports/')>=0 || p.endsWith('/Camera Imports');
+    });
+    if(under.length===1){ chosen=under[0]; how='name-under-camera-imports'; }
+    else if(under.length>1) throw new Error('multiple catalog folders named '+shoot+' under Camera Imports');
+    else throw new Error('catalog folder not found for '+want);
+  }
+  d.currentCollection=chosen;
   const cur=d.currentCollection();
-  if(cur.name()!==NAME) throw new Error('could not select scope collection '+NAME+' (showing '+cur.name()+')');
-  return NAME;
+  if(cur.name()!==chosen.name()) throw new Error('could not select catalog folder '+shoot+' (showing '+cur.name()+')');
+  return {name:cur.name(), how:how, folder:posixFolder(cur)||want};
 }
 function folderOf(p){ return String(p).replace(/\/[^\/]*$/,''); }
 function run(argv){

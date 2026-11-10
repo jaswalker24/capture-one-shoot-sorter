@@ -13,7 +13,8 @@ models/
 bin/uv
 bin/uvx
 bin/exiftool
-tools/
+tools/*
+!tools/reapply_folder.py
 
 # Working data (never commit)
 cache/

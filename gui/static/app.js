@@ -44,7 +44,7 @@ function setupTabs() {
       if (btn.dataset.tab === "schedule") loadScheduleTab();
       if (btn.dataset.tab === "history") renderHistory();
       if (btn.dataset.tab === "profiles") renderProfiles();
-      if (btn.dataset.tab === "settings") loadNotify();
+      if (btn.dataset.tab === "settings") { loadNotify(); loadAutoqueue(); }
     };
   });
 }
@@ -616,6 +616,34 @@ $("notifySave").onclick = async () => {
   })});
   await loadNotify();
   alert("Saved toggles. Put bot_token/chat_id in notify.json for Telegram.");
+};
+
+/* ---- auto-queue new shoots ---- */
+async function loadAutoqueue() {
+  if (!$("aqEnabled")) return;
+  let s;
+  try { s = await api("/api/autoqueue/status"); } catch (e) { $("aqStatus").textContent = "Auto-queue not available yet (panel restart pending)."; return; }
+  $("aqEnabled").checked = !!s.enabled;
+  $("aqPreview").checked = !!s.preview_before_apply;
+  $("aqProfile").innerHTML = (s.profiles || []).map(p =>
+    `<option value="${escapeHtml(p.id)}" ${p.id === s.profile_id ? "selected" : ""}>${escapeHtml(p.name || p.id)}</option>`).join("");
+  const waiting = Object.entries(s.waiting || {}).map(([k, v]) => `${escapeHtml(k)}: ${escapeHtml(v.why_waiting || "waiting")} (${v.sig ? v.sig.n : 0} images)`);
+  const queued = Object.entries(s.queued || {}).slice(-5).map(([k, v]) => `${escapeHtml(k)} → ${escapeHtml(v)}`);
+  $("aqStatus").innerHTML = `${s.enabled ? "On" : "Off"}${s.nas_mounted ? "" : " · NAS not mounted"}` +
+    `${s.last_poll ? ` · last look ${escapeHtml(s.last_poll)}` : ""}${s.next_poll ? ` · next ~${escapeHtml(s.next_poll)}` : ""}` +
+    `${waiting.length ? `<br>Waiting: ${waiting.join("; ")}` : ""}${queued.length ? `<br>Queued: ${queued.join("; ")}` : ""}` +
+    `${(s.events || []).length ? `<br><span class="note">${s.events.slice(-4).map(escapeHtml).join("<br>")}</span>` : ""}`;
+}
+if ($("aqSave")) $("aqSave").onclick = async () => {
+  try {
+    await api("/api/autoqueue/set", { method: "POST", body: JSON.stringify({
+      enabled: $("aqEnabled").checked, profile_id: $("aqProfile").value, preview_before_apply: $("aqPreview").checked }) });
+    await loadAutoqueue();
+  } catch (e) { alert(e.message); }
+};
+if ($("aqPoll")) $("aqPoll").onclick = async () => {
+  try { await api("/api/autoqueue/poll_now", { method: "POST", body: "{}" }); setTimeout(loadAutoqueue, 4000); }
+  catch (e) { alert(e.message); }
 };
 
 /* ---- wires ---- */

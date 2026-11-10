@@ -232,6 +232,18 @@
           <button id="notifySave">Save toggles</button>
         </div>
       </section>
+      <section class="card">
+        <h2>Auto-queue new shoots</h2>
+        <p class="note">Every ~30 minutes, in step with Capture One referencing new imports, looks in <code>[03] Photos/Camera Imports/&lt;year&gt;/</code> for new <code>YYYY-MM-DD…</code> folders. A new folder is queued with the profile below once Capture One has it, or once it has stopped changing (same images on two looks in a row). Folders that exist when you switch this on, and folders that already have a job, are left alone. Off by default.</p>
+        <div class="row">
+          <label class="inline"><input type="checkbox" id="aqEnabled" /> Auto-queue new shoots</label>
+          <label>Profile <select id="aqProfile"></select></label>
+          <label class="inline"><input type="checkbox" id="aqPreview" /> Preview keywords before applying</label>
+          <button id="aqSave">Save</button>
+          <button class="secondary" id="aqPoll">Check now</button>
+        </div>
+        <div id="aqStatus" class="note"></div>
+      </section>
     </div>
 
     <div id="tab-exports" class="panel-section">

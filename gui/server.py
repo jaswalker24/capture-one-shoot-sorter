@@ -33,6 +33,7 @@ sys.path.insert(0, str(GUI))
 import review as RV  # race-number review queue (additive)
 import people_pass as PP  # face clusters / People/<Name>
 import preview_ops as PV  # keyword preview before apply
+import autoqueue as AQ  # auto-queue new shoots (off by default)
 
 JOBS.mkdir(parents=True, exist_ok=True)
 HISTORY.mkdir(parents=True, exist_ok=True)
@@ -316,6 +317,84 @@ def _worker_loop():
         time.sleep(0.5)
 
 
+def _create_job(data: dict) -> dict:
+    """queue/add (also used by auto-queue). Raises ValueError for bad input."""
+    folder = Path(data.get("folder") or "")
+    if not folder.is_dir():
+        raise ValueError(f"folder not found: {folder}")
+    if data.get("profile_id"):
+        pr = PR.get_profile(data["profile_id"])
+        if pr:
+            fields = PR.job_fields_from_profile(pr)
+            for k,v in fields.items():
+                data.setdefault(k, v)
+            if fields.get("kind") == "exports":
+                raise ValueError("use Exports tab for captions profiles")
+    # refuse Camera Exports for catalog passes (captions are separate)
+    passes = data.get("passes") or list(JR.DEFAULT_ORDER)
+    passes = [p for p in passes if p in JR.PASS_BY_ID]
+    if not passes:
+        raise ValueError("no valid passes")
+    jid = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+    with _QUEUE_LOCK:
+        job = {
+            "id": jid,
+            "folder": str(folder),
+            "folder_name": folder.name,
+            "profile": data.get("profile") or "motorsport",
+            "context": data.get("context") or "",
+            "passes": passes,
+            "apply_each": bool(data.get("apply_each", True)),
+            "dry_run": bool(data.get("dry_run", False)),
+            "ocr_missing_car_number": bool(data.get("ocr_missing_car_number", False)),
+            "apply_rank_keywords": bool(data.get("apply_rank_keywords", True)),
+            # AF focus check (Canon AF points) inside the sharpness pass; off -> LOCALAI_AFPOINTS=0
+            "afpoints": bool(data.get("afpoints", True)),
+            "afpoints_annotate": max(0, min(50, int(data.get("afpoints_annotate") or 0))),
+            # Keyword preview: run passes without writing, then wait for approval (awaiting_approval)
+            "preview_before_apply": bool(data.get("preview_before_apply", False)),
+            "sample": int(data.get("sample") or 0),
+            "schedule_path": data.get("schedule_path") or "",
+            "camera_offset": data.get("camera_offset") or "",
+            "status": "queued",
+            "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "queue_order": _next_queue_order(),
+            "log": [],
+            "pass_results": {},
+            "added_keywords": {},
+            "auto_queued": bool(data.get("auto_queued", False)),
+        }
+        json.dump(job, open(_job_path(jid), "w"), indent=1, ensure_ascii=False)
+    return job
+
+
+def _folders_with_jobs() -> set:
+    out = set()
+    for base in (JOBS, HISTORY):
+        for p in base.glob("*.json"):
+            try:
+                f = json.load(open(p)).get("folder")
+            except Exception:
+                continue
+            if f:
+                out.add(str(f).rstrip("/"))
+    return out
+
+
+def _autoqueue_enqueue(folder: Path, cfg: dict) -> str:
+    job = _create_job({"folder": str(folder), "profile_id": cfg.get("profile_id") or "",
+                       "preview_before_apply": bool(cfg.get("preview_before_apply")), "auto_queued": True})
+    ensure_worker()
+    return job["id"]
+
+
+def ensure_autoqueue():
+    # Test / secondary servers never auto-queue into anything
+    if os.environ.get("LOCALAI_GUI_NO_WORKER") == "1" or os.environ.get("LOCALAI_GUI_NO_AUTOQUEUE") == "1":
+        return
+    AQ.start_thread(_autoqueue_enqueue, _folders_with_jobs, RV.catalog_busy)
+
+
 def ensure_worker():
     global _WORKER
     # Test / secondary servers set LOCALAI_GUI_NO_WORKER=1 so they never touch the live queue.
@@ -437,6 +516,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/presets":
                 pf = GUI / "presets.json"
                 return _json(self, 200, json.load(open(pf)) if pf.exists() else {"presets": []})
+            if path == "/api/autoqueue/status":
+                st = AQ.status()
+                st["profiles"] = [{"id": p.get("id"), "name": p.get("name")} for p in PR.list_profiles()
+                                  if p.get("kind", "catalog") != "exports"]
+                return _json(self, 200, st)
             if path == "/api/notify/status":
                 return _json(self, 200, NF.status())
             if path == "/api/preview":
@@ -609,51 +693,10 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 500, {"error": str(e)})
 
         if path == "/api/queue/add":
-            folder = Path(data.get("folder") or "")
-            if not folder.is_dir():
-                return _json(self, 400, {"error": f"folder not found: {folder}"})
-            if data.get("profile_id"):
-                pr = PR.get_profile(data["profile_id"])
-                if pr:
-                    fields = PR.job_fields_from_profile(pr)
-                    for k,v in fields.items():
-                        data.setdefault(k, v)
-                    if fields.get("kind") == "exports":
-                        return _json(self, 400, {"error": "use Exports tab for captions profiles"})
-            # refuse Camera Exports for catalog passes (captions are separate)
-            passes = data.get("passes") or list(JR.DEFAULT_ORDER)
-            passes = [p for p in passes if p in JR.PASS_BY_ID]
-            if not passes:
-                return _json(self, 400, {"error": "no valid passes"})
-            jid = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
-            with _QUEUE_LOCK:
-                job = {
-                    "id": jid,
-                    "folder": str(folder),
-                    "folder_name": folder.name,
-                    "profile": data.get("profile") or "motorsport",
-                    "context": data.get("context") or "",
-                    "passes": passes,
-                    "apply_each": bool(data.get("apply_each", True)),
-                    "dry_run": bool(data.get("dry_run", False)),
-                    "ocr_missing_car_number": bool(data.get("ocr_missing_car_number", False)),
-                    "apply_rank_keywords": bool(data.get("apply_rank_keywords", True)),
-                    # AF focus check (Canon AF points) inside the sharpness pass; off -> LOCALAI_AFPOINTS=0
-                    "afpoints": bool(data.get("afpoints", True)),
-                    "afpoints_annotate": max(0, min(50, int(data.get("afpoints_annotate") or 0))),
-                    # Keyword preview: run passes without writing, then wait for approval (awaiting_approval)
-                    "preview_before_apply": bool(data.get("preview_before_apply", False)),
-                    "sample": int(data.get("sample") or 0),
-                    "schedule_path": data.get("schedule_path") or "",
-                    "camera_offset": data.get("camera_offset") or "",
-                    "status": "queued",
-                    "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "queue_order": _next_queue_order(),
-                    "log": [],
-                    "pass_results": {},
-                    "added_keywords": {},
-                }
-                json.dump(job, open(_job_path(jid), "w"), indent=1, ensure_ascii=False)
+            try:
+                job = _create_job(data)
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
             ensure_worker()
             return _json(self, 200, {"ok": True, "job": job})
 
@@ -876,6 +919,20 @@ class Handler(BaseHTTPRequestHandler):
             json.dump({"presets": presets}, open(GUI / "presets.json", "w"), indent=2)
             return _json(self, 200, {"ok": True, "presets": presets})
 
+        if path == "/api/autoqueue/set":
+            if data.get("profile_id") and not PR.get_profile(data["profile_id"]):
+                return _json(self, 400, {"error": "unknown profile"})
+            return _json(self, 200, {"ok": True, "status": AQ.enable(data)})
+
+        if path == "/api/autoqueue/poll_now":
+            if not AQ.load_cfg()["enabled"]:
+                return _json(self, 409, {"error": "auto-queue is off"})
+            if os.environ.get("LOCALAI_GUI_NO_WORKER") == "1":
+                return _json(self, 409, {"error": "test server: auto-queue disabled"})
+            threading.Thread(target=AQ.poll, args=(_autoqueue_enqueue, _folders_with_jobs, RV.catalog_busy, True),
+                             daemon=True).start()
+            return _json(self, 200, {"ok": True})
+
         if path == "/api/notify/set":
             # Only toggles / non-secret fields via API; tokens must be edited in notify.json on disk
             cur = NF.load_cfg()
@@ -974,6 +1031,7 @@ def main():
     except Exception as _e:
         print("profile seed:", _e, flush=True)
     ensure_worker()
+    ensure_autoqueue()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Trips Local AI control panel on http://{HOST}:{PORT}", flush=True)
     print(f"Auth token file: {AUTH_FILE}", flush=True)

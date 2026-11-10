@@ -1,11 +1,288 @@
-# Local AI tagger (this-mac)
+# Trips Local AI for Capture One
+
+On-device photo tagging for Capture One on Apple silicon. Adds keywords only. It never changes your stars or colour tags, and it never sends your photos to the cloud.
+
+---
+
+## Simple setup guide
+
+You need:
+
+- An Apple-silicon Mac (M1 or newer)
+- macOS 14 or newer
+- Capture One 16.8 or newer
+- About 15 GB free disk space the first time (models + cache)
+
+### 1. Get the code
+
+Clone this private repository (or unpack the tarball) somewhere convenient, for example your Desktop.
+
+### 2. Run the installer
+
+Open **Terminal** and run:
+
+```bash
+cd /path/to/this-repo
+./install.sh
+```
+
+That puts everything in `~/localai`, creates a Python 3.12 environment, installs the packages, downloads a local copy of Ollama, pulls the small vision model, and copies the Scripts menu into Capture One.
+
+The first run can take 10–20 minutes depending on your internet connection.
+
+### 3. Start the local model server (if it is not already running)
+
+```bash
+~/localai/start-ollama.sh
+```
+
+It only listens on your Mac (`127.0.0.1`). Nothing is exposed to the network.
+
+### 4. Import the keyword library in Capture One
+
+1. Open Capture One.
+2. Open the **Keyword Library** tool.
+3. Create a library named exactly **Trip Keywords** (or import into one with that name).
+4. Import `~/localai/keywords/trip-keyword-library.txt` (tab-indented list).
+
+The Scripts menu actions look keywords up in this library, so the name must match.
+
+### 5. Find the Scripts menu
+
+In Capture One: **Scripts → Trips Local AI**. You should see:
+
+- Tag with Local AI
+- Find Bursts
+- Rank Selection
+- Check Sharpness
+- Read Text in Frame
+- Tag by Schedule
+- Draft Captions (Exports) — export folders only
+
+### 6. First test on a few frames
+
+1. Select 3–5 images in Capture One.
+2. Run **Scripts → Trips Local AI → Tag with Local AI**.
+3. Wait for the macOS notification.
+4. Check that keywords appeared and that stars / colour tags did not change.
+
+The first tagging run also downloads the SigLIP image model into `~/localai/models/hf` (about 1–2 GB). Keep the Mac awake until it finishes.
+
+### 7. Run a whole shoot from Terminal
+
+Dry run first (writes proposals only, does not touch Capture One):
+
+```bash
+~/localai/tag "/path/to/your/shoot/folder" \
+  --profile motorsport \
+  --context "Britcar Into The Night, Brands Hatch" \
+  --no-caption
+```
+
+Profiles: `motorsport`, `gig`, or `kyoto`.
+
+When you are happy, apply confident keywords:
+
+```bash
+~/localai/tag "/path/to/your/shoot/folder" \
+  --profile motorsport \
+  --context "Britcar Into The Night, Brands Hatch" \
+  --no-caption \
+  --apply
+```
+
+Or run the full pipeline (tag → index → sharpness / bursts / rank → OCR → apply), still **without** draft captions:
+
+```bash
+~/localai/venv/bin/python ~/localai/fullrun.py \
+  "/path/to/your/shoot/folder" \
+  --profile motorsport \
+  --context "Britcar Into The Night, Brands Hatch"
+```
+
+Use `--no-apply` on `fullrun.py` if you only want the proposal files.
+
+---
+
+---
+
+
+## Control panel (Trips Local AI)
+
+Local web UI on the M5 (and LAN): **http://127.0.0.1:8765/** or **http://127.0.0.1:8765/** / **http://127.0.0.1:8765/**.
+
+LaunchAgent: `com.trips.localai.gui` (internal label unchanged). Dock app: **Trips Local AI** (opens already signed in via `?token=` from `~/localai/gui/auth.token`).
+
+### Tabs
+
+- **Run** — pick a **Profile** (or custom passes), folder, queue jobs with live progress. Apply-after-each-pass is default. Caption model is never used for catalog jobs.
+- **Schedule importer** — load/paste JSON or CSV, preview events/slots/TBA/overlaps, dry-run EXIF mapping, queue additive schedule tagging (confirmed only by default).
+- **History & undo** — past runs with keyword counts; preview then remove **only** keywords that run added (never stars/colours).
+- **Profiles** — create/edit from dropdowns (shoot type, pass bundle, camera TZ, buffer, keyword set, linked schedule, sharpness strictness, notifications). Shoot type auto-fills the rest. Supersedes the old Presets list. Stored in `~/localai/profiles/`.
+- **Settings** — notification toggles. Telegram needs `bot_token` + `chat_id` in untracked `~/localai/gui/notify.json` (see `notify.example.json`). The inbound Telegram bridge cannot send alerts. Email uses local sendmail when enabled (postfix here is loopback-only unless a relay is configured).
+- **Exports** — Draft Captions only for Camera Exports folders.
+
+### Health strip
+
+CPU, memory, NAS mount, free disk (M5 + NAS), Capture One running, Ollama/caption-model status, thermal/pressure, queue pause, notify on/off — refreshes every few seconds.
+
+### Profiles (examples)
+
+Seeded under `profiles/`: Gig standard, Idol gig, Motorsport full, Temple/travel, Schedule tags only, Exports only (Draft Captions). Catalog profiles must never include captions.
+
+
+## What each Scripts menu action does
+
+| Script | What it does |
+|---|---|
+| **Tag with Local AI** | Proposes scene / colour / number keywords for the selection and adds the confident ones. |
+| **Find Bursts** | Groups near-duplicate frames and marks the best frame in each burst. |
+| **Rank Selection** | Scores the selection and adds a quality-score keyword band. |
+| **Check Sharpness** | Flags sharp, soft-focus and motion-blurred frames. |
+| **Read Text in Frame** | Reads text in the frame (including Japanese) and, when empty, writes a short Description. |
+| **Tag by Schedule** | Matches capture time to a gig schedule and adds Event / Venue / Act / Cheki keywords. |
+| **Draft Captions (Exports)** | Writes draft captions for **export** folders only (for Salamander). It refuses camera originals. Keep this separate from catalog tagging. |
+
+None of these change stars or colour tags. Keyword writes are additive only.
+
+---
+
+## Safety notes
+
+- **Additive keywords only.** Existing keywords are never removed.
+- **Stars and colour tags are never touched.**
+- **Dry run by default** for Terminal tagging. Pass `--apply` only when you want Capture One updated.
+- **Originals are read-only.** Previews are cached under `~/localai/cache/`; nothing is written next to your RAW files.
+- **Everything stays on the Mac.** Ollama listens on localhost only. No cloud vision APIs.
+
+---
+
+## `--no-caption` (important for catalog runs)
+
+Catalog / Scripts-menu tagging does **not** load the caption model. Terminal tagging should usually include `--no-caption` so only SigLIP labels and Apple Vision OCR run (about 0.5 s per image instead of about 3 s, and much less memory).
+
+Draft captions are a separate path:
+
+```bash
+~/localai/tag captions --files /path/to/Camera\ Exports/image.jpg
+```
+
+or **Scripts → Trips Local AI → Draft Captions (Exports)** with export files selected.
+
+---
+
+## Layout
+
+```
+~/localai/
+  tag                 wrapper command
+  tagger.py           main tagger
+  features.py         bursts, rank, sharpness, OCR, search, faces, captions, …
+  fullrun.py          whole-shoot pipeline (no captions)
+  schedule_tag.py     gig schedule matcher
+  apply_c1.py/.js     additive Capture One writer
+  config.json         local settings (from config.example.json)
+  keywords/           Trip Keywords library source
+  schedules/          confirmed-show schedules (JSON)
+  scripts/src/        AppleScript sources for the Scripts menu
+  venv/               Python 3.12 environment
+  ollama/             standalone Ollama binary
+  models/             Ollama + Hugging Face + optional weights
+  cache/ index/ out/ logs/   working data (not in git)
+```
+
+---
+
+## Config
+
+Copy `config.example.json` to `config.json` (the installer does this). Useful keys:
+
+- `thresholds` — confidence cut-offs for auto-tagging
+- `script_profile_default` — profile used by the Scripts menu when the folder name does not match a pattern (`gig` by default)
+- `profile_by_folder` — regex → profile map
+- `script_context` — optional per-folder context strings for the Scripts menu
+- `camera_utc_offset` — set if the camera clock is not in the schedule timezone (for example `"+00:00"` when shooting Japan on London time)
+
+---
+
+## Keyword library
+
+Rebuild the tab-indented list and CSV:
+
+```bash
+~/localai/venv/bin/python ~/localai/keywords/build_library.py
+```
+
+Then re-import `trip-keyword-library.txt` into the **Trip Keywords** library in Capture One. The builder includes motorsport, gig, Kyoto, Japan, aviation, wildlife, static vehicles, film, general quality flags, and the confirmed Japan November 2026 event / venue / act names.
+
+---
+
+## Schedule tagging
+
+Confirmed shows only live in `schedules/example.json`. Tag a folder:
+
+```bash
+~/localai/tag schedule "/path/to/japan/shoot" \
+  --schedule ~/localai/schedules/example.json
+```
+
+Unit tests (no photos needed):
+
+```bash
+~/localai/venv/bin/python ~/localai/tests_schedule.py
+```
+
+---
+
+## Troubleshooting
+
+**Scripts menu is empty**  
+Capture One only reads `~/Library/Scripts/Capture One Scripts/`. Re-run `./install.sh`, then restart Capture One.
+
+**“keyword library not found”**  
+The library must be named exactly `Trip Keywords`. Import `~/localai/keywords/trip-keyword-library.txt`.
+
+**Nothing happens / notification says failed**  
+Check the latest log in `~/localai/logs/scripts/`. Also confirm Ollama is up: `curl -s http://127.0.0.1:11434/api/version`.
+
+**Mac feels memory-tight**  
+Make sure catalog runs use `--no-caption` (Scripts menu already does). Quit other heavy apps on 16 GB machines during a full shoot.
+
+**Variant not in current collection**  
+Apply only runs against Capture One’s *current* collection. Select the album / folder that contains the frames before applying.
+
+**First run is slow**  
+SigLIP / CLIP weights download on first use into `~/localai/models/hf`. Later runs reuse them.
+
+**Stop Ollama**
+
+```bash
+kill "$(cat ~/localai/logs/ollama.pid)"
+```
+
+**Remove everything**
+
+```bash
+rm -rf ~/localai
+rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trips Local AI"
+```
+
+---
+
+## Licence / privacy
+
+Private repository. Photos, proposals, caches and logs are excluded from git on purpose — do not commit them.
+
+---
+
+## Reference: commands, passes and panel features
 
 Proposes Capture One keywords and one-line draft captions for a shoot folder, fully on-device.
 **Read-only on originals**: CR3s are only opened for reading (SHA-256 + embedded preview).
 Previews are cached in `~/localai/cache/<sha256-prefix>.jpg`; nothing is written next to the originals.
 Capture One is written to only through the additive apply path (see below): keywords from the Trip Keywords library are added, and IPTC Description is set only if it is empty. Nothing is ever removed, and ratings and colour tags are never touched.
 
-## Run
+### Run
 ```
 ~/localai/tag "/Volumes/Photos/Camera Imports/2026/<folder>" --profile motorsport|gig|kyoto \
     [--sample 40] [--limit N] [--no-caption] [--context "Britcar Into The Night, Brands Hatch"] [--tag dryrun]
@@ -19,34 +296,19 @@ Output: `~/localai/out/<folder>/<profile>-proposals[-tag].json` and `.csv`
 (rel_path, filename, sha256, proposed_keywords, tentative_keywords, needs_review + reasons,
 car_colour, race_number + source, OCR candidates, label scores, caption, timings).
 
-## Profiles and keywords
+### Profiles and keywords
 - motorsport: `Motorsport/Car Number/<n>`, `Motorsport/Car Colour/<Colour>`, `Motorsport/Night`.
   Number is proposed only when Apple Vision OCR and the VLM agree; a VLM-only, OCR-only or disagreeing
   read goes to `tentative_keywords` and needs_review.
 - gig: `Gig/Crowd`, `Gig/Stage`, `Gig/Portrait`.
 - kyoto: `Kyoto/Temple`, `Kyoto/Street`, `Kyoto/Nature`, `Kyoto/People`, `Kyoto/Landscape`, `Kyoto/Transit`, plus `Kyoto/Shrine Gate`, `Kyoto/Night`, `Kyoto/Rain`.
 
-## Models (all local)
+### Models (all local)
 - SigLIP ViT-B-16-SigLIP-256 (open_clip, PyTorch MPS): zero-shot scene/shot/place and car colour.
 - Apple Vision `VNRecognizeTextRequest` (pyobjc): race-number OCR on the full-res preview and 6 overlapping tiles.
 - Ollama `qwen2.5vl:3b`: caption, race-number read, colour, torii/night/rain flags.
 
-## Config
-`~/localai/config.json`: model names and thresholds (label_min, colour_min, is_car_min, ocr_min,
-ocr_min_height, binary_tag_min), preview sizes.
-
-## Layout
-`venv/` Python 3.12 venv · `python/` uv-managed Python · `bin/uv` · `ollama/` Ollama binary ·
-`models/` Ollama + Hugging Face weights · `cache/` previews · `out/` proposals · `logs/`.
-Stop Ollama: `kill $(cat ~/localai/logs/ollama.pid)`. Remove everything: `rm -rf ~/localai`.
-
-## Keyword library
-`~/localai/keywords/trip-keyword-library.txt` (tab-indented, 1,236 keywords) and `.csv`; rebuild with
-`venv/bin/python keywords/build_library.py`. Loaded into Capture One as the keyword library "Trip Keywords"
-(Keyword Library tool), file `~/Library/Application Support/Capture One/Keywords/Trip Keywords.cokeywordsdb`.
-Tagger keyword paths (e.g. Motorsport/Car Colour/Grey) match the library's hierarchy 1:1.
-
-## Applying to Capture One (--apply)
+### Applying to Capture One (--apply)
 After tagging, the tagger always writes a Capture One plan (dry run): `/tmp/trip-localai-apply-<time>-{before,plan,result}.json`.
 With `--apply` it ADDS the confident keywords via AppleScript (`apply_c1.py` + `apply_c1.js`):
 - only images with needs_review = false, only `proposed_keywords` (never tentative/VLM-only numbers);
@@ -57,7 +319,10 @@ With `--apply` it ADDS the confident keywords via AppleScript (`apply_c1.py` + `
 SHA-256 values are cached in `index/catalog.sqlite` (path_cache), keyed by path, size and mtime. A changed size or mtime forces a full re-hash (`shacache.py`).
 Re-apply an existing proposals file: `venv/bin/python apply_c1.py out/<folder>/<profile>-proposals.json [--apply]`.
 
-## Feature commands (`~/localai/tag <cmd> …` → features.py)
+### Folder-scoped apply (since 2026-11-09)
+Every apply, undo and star/colour snapshot first switches Capture One to a smart album **"<shoot> · Apply scope"** (group *Trips Local AI*, rule: folder path contains the shoot name, the same mechanism as the cull albums), keeps only frames whose file is directly in the job's folder, checks that the frames in the plan and the folder's image count match, and **refuses to write anything** if they don't (the job reports "refused" with the reason). Frames are addressed by variant id, and Capture One is switched back to whatever it was showing afterwards. Before this, applies went to whatever collection Capture One happened to be showing.
+
+### Feature commands (`~/localai/tag <cmd> …` → features.py)
 Selection for most commands: a folder, `--files a.CR3 b.CR3`, `--sample N`, or `--start NAME --count N`.
 | command | what it does | model | install | speed (M5) |
 |---|---|---|---|---|
@@ -78,7 +343,7 @@ Feature proposals are written to `out/<folder>/{sharpness,bursts,rank,ocr,schedu
 
 Face grouping is anonymous and local. Nobody is identified, and no lookups or cloud calls are made. Delete `index/faces*` and the faces tables to forget the groups.
 
-## Capture One Scripts menu: Scripts ▸ Trips Local AI
+### Capture One Scripts menu: Scripts ▸ Trips Local AI
 These are in `~/Library/Scripts/Capture One Scripts/Trips Local AI/`, with sources in `scripts/src/`. Each one acts on the **selected variants**. It runs `scripts_run.py` in the background at `nice 10`, posts a notification when done, and logs to `logs/scripts/<time>-<action>.log`. To test from Terminal, pass variant names: `osascript ".../Rank Selection.scpt" _A3A5540 _A3A5600`.
 - **Tag with Local AI**: runs the tagger (profile picked from the folder name: motorsport for BrandsHatch/Britcar/Silverstone…, otherwise gig; context from config `script_context`) and adds confident keywords.
 - **Find Bursts in Selection**: adds `General/Burst Best` to the suggested frame of each burst. Ratings are untouched.
@@ -88,22 +353,12 @@ These are in `~/Library/Scripts/Capture One Scripts/Trips Local AI/`, with sourc
 - **Tag by Schedule**: adds `Gig/Event`, `Venue`, `Act`, `Cheki`, `Meet & Greet` and `Changeover` from `schedules/*.json`.
 - **Draft Captions (Exports)**: writes a sidecar JSON for Salamander from exported files only. It never writes into Capture One.
 
-## Schedule tagging
-`schedules/example.json` (JST, CONFIRMED shows only) lists events (name, venue, date, window, `attend_until`, `buffer_min`), slots (act, start, end) and acts with unknown slots in `acts_tba`. It also covers no-photo acts, cheki and meet windows, and `only_inside_slots` events.
-The camera offset comes from EXIF OffsetTimeOriginal, else config `camera_utc_offset`. Use `--camera-offset force:+09:00` to override a wrong camera clock zone.
-Frames in a no-photo act's slot, or in overlapping events with no slot match, are marked needs_review and not applied. Acts with an unknown slot get only the event and venue.
-**When TBA slots are published:**
-1. Move the act from `acts_tba` into `slots` with its start and end times. Fix `window_end` if it was estimated.
-2. Run `venv/bin/python tests_schedule.py`.
-3. If the act or venue name is new, add it to `keywords/delta-<date>.txt` and import it into Capture One through the Trip Keywords library import, as done for delta-2026-11-09.
-4. Re-run "Tag by Schedule" or `tag schedule <folder>` and then `apply_c1.py … --apply`. Applying is additive and safe to repeat.
-
-## Full-folder run (resumable)
+### Full-folder run (resumable)
 `nohup nice -n 10 venv/bin/python fullrun.py "<folder>" --profile motorsport --context "…" > logs/fullrun/<name>.log &`
 The steps are: rating and colour snapshot → tagger (`--resume`) → index → sharpness → bursts → rank → OCR (`--resume`) → merge of all proposals → apply in chunks of 200 → after snapshot and diff.
 Progress is kept in `out/<folder>/fullrun-state.json`. Re-running the same command resumes from the first unfinished step or chunk. Draft captions are never part of it.
 
-## Limitations
+### Limitations
 - Sharpness is relative to the folder (percentiles), so an all-soft folder still gets some "Sharp" frames. Pans with intentional blur are flagged Motion Blur.
 - The aesthetic score is a generic LAION model and is not tuned to motorsport or gig taste.
 - Bursts need capture times within 2 s and very similar framing.
@@ -112,40 +367,40 @@ Progress is kept in `out/<folder>/fullrun-state.json`. Re-running the same comma
 - Faces at stage distance, in profile or in heavy make-up often stay unclustered.
 
 
-## Control panel
+### Control panel
 
 Web UI: http://127.0.0.1:8765/ or http://127.0.0.1:8765/ (LaunchAgent `com.trips.localai.gui`).
 Dock app: **Trips Local AI** (opens already signed in on this Mac). Token file: `~/localai/gui/auth.token`.
 
 
-## Rank, cull albums and race-number review (added 2026-11-09)
+### Rank, cull albums and race-number review (added 2026-11-09)
 - **Rank** (`tag rank`, in fullrun and the panel by default): tiers are relative to the shoot. Weights live in `features.py` `RANK_DEFAULTS` and can be overridden in `config.json` under `"rank"`. Calibrated on Brands Hatch against your 3★+ frames: AUC 0.80 (the old aesthetic-only score was 0.62), and 16 of your 35 3★+ frames land in Best (top 10%).
 - **Cull smart albums** (`venv/bin/python cull_album.py <folder>`, fullrun step `cull_albums`, panel pass "Cull smart albums"): in the collection group **Trips Local AI**, three keyword smart albums per shoot: `<shoot> · Cull: Sharp + Burst Best`, `<shoot> · Cull: Rank Best` and `<shoot> · Cull: Shortlist` (either of those). All exclude Motion Blur and Soft Focus and are limited to that shoot's folder. Re-running refreshes them, and only collections change.
 - **Race-number review**: open the panel and click **Review race numbers**, or go to `http://<M5>:8765/review`. Keys: Enter/Y confirms, typing digits then Enter fixes, X/R rejects, S skips, ←/→ move, U undoes. **Apply reviewed numbers** adds only confirmed or fixed `Motorsport/Car Number/<n>` keywords, in chunks of 200. A star/colour snapshot is taken before and checked after. Decisions are saved in `out/<shoot>/review-decisions.json`, applied ones in `review-applied.json`, and undo data in `review-apply-*-c*-before.json`.
 - `apply_chunked.py <proposals.json> --tag NAME [--prefix-keyword General/Rank/] --apply` is a generic additive apply with before/after snapshots.
 
 
-### People pass (faces)
+#### People pass (faces)
 Optional local face recognition: Apple Vision detect + ArcFace (`models/faces/w600k_mbf.onnx`) embed,
 cluster per shoot, match `~/localai/people/library.json`. Produces `out/<shoot>/people-proposals.json`
 with additive `People/<Name>` keywords (apply only when you run with apply). Name clusters in the
 People tab (`/people`). Off by default in the Run pass list.
 
 
-## AF focus check (afpoints.py)
+### AF focus check (afpoints.py)
 Canon bodies record the AF area they used in the CR3 maker notes. `afpoints.py` reads it with the bundled ExifTool (read-only), maps the box onto the oriented preview and compares sharpness **inside the AF box** with the sharpest region elsewhere in the frame. It runs at the end of `tag sharpness` (skip with `LOCALAI_AFPOINTS=0` or `"features": {"af_points": false}`), or on its own: `venv/bin/python afpoints.py "<shoot>" [--annotate 8]`.
 - `General/Focus/On Target`: AF box sharp and the sharpest part of the frame. Applied with the Sharpness pass (panel) and by `fullrun.py`.
 - `General/Focus/Missed`: AF box soft while something else is clearly sharp (front/back focus or AF on the wrong thing). **Never auto-applied**: written as needs-review and shown under **Review missed focus** (`/review?kind=focus`). Confirm adds the keyword, Reject adds nothing, and nothing is written until you press Apply (snapshot before, stars/colours checked after).
 - Panel: Run tab → *AF focus check* tick box (on by default; off sets `LOCALAI_AFPOINTS=0` for the Sharpness pass) and *Annotated AF previews* (N previews with the AF box drawn, saved to `~/localai/out/afcheck/`).
 - Outputs in `out/<shoot>/`: `afpoints-exif.json` (cache), `afpoints.csv`, `afpoints-proposals.json`; review decisions in `review-focus-decisions.json` / `review-focus-applied.json`. Thresholds: `config.json` → `"features": {"afpoints": {...}}` (calibrated on 2,332 Brands Hatch R6 frames).
 
-## Keyword preview before apply (panel)
+### Keyword preview before apply (panel)
 Tick **Preview keywords before applying** on the Run tab (or press **Preview keywords now** to use results already on disk). The passes run without writing anything; the job then waits in the queue as *awaiting approval*. **Preview & approve** shows, per frame, the keywords that would be added next to the ones already there, filterable by keyword/filename and pass; untick keywords or frames you don't want, optionally **Check against Capture One** (read-only dry run), then **Approve & apply**. Only the approved plan is written (additive, folder-scoped, with undo data). **Discard** closes it with nothing written.
 
-## Auto-queue new shoots (Settings, off by default)
+### Auto-queue new shoots (Settings, off by default)
 When switched on, the panel looks every ~30 minutes (in step with Capture One referencing new imports) in `[03] Photos/Camera Imports/<year>/` for new `YYYY-MM-DD…` folders and queues each one with the chosen default profile once Capture One has it (read-only check, only while no job is using the catalog) or once the folder has stopped changing (same image count/size on two looks in a row, nothing written for 20 minutes). Folders that already existed when you switched it on, and folders that already have a job, are never queued. MP4/MOV files are ignored as usual. Settings live in `gui/autoqueue.json`, progress in `gui/autoqueue-state.json`.
 
-## Telegram alerts (job finished / failed / preview waiting)
+### Telegram alerts (job finished / failed / preview waiting)
 1. In Telegram, message **@BotFather**, send `/newbot`, and copy the token it gives you.
 2. Send your new bot any message (e.g. `/start`), then open `https://api.telegram.org/bot<token>/getUpdates` in a browser and copy `"chat":{"id": …}`.
 3. Put both in `~/localai/gui/notify.json` (copy `notify.example.json`; the file is untracked and must never be committed), and `chmod 600` it:

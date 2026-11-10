@@ -32,6 +32,58 @@ function scopeToFolder(C1, d, folder){
   return NAME;
 }
 function folderOf(p){ return String(p).replace(/\/[^\/]*$/,''); }
+// Folder-scoped fast path: bulk reads (ids, paths, keywords, ratings, colours) and one applyKeyword call per
+// keyword for all its frames, addressed by variant id. Before/after per frame as in the per-item path.
+function bulkApply(argv, plan, dry, C1, d, scope, libKw){
+  const vs=d.variants; const ids=vs.id(), paths=vs.parentImage.path();
+  const byPath={}; paths.forEach((p,i)=>{ (byPath[p]=byPath[p]||[]).push(i); });
+  const readKw=()=>{ const kn=vs.keywords.name(), kp=vs.keywords.parent();
+    return i=>(kn[i]||[]).map((n,j)=>{ const pa=(kp[i]||[])[j]; return (pa? String(pa).split('|').join('/')+'/' : '')+n; }); };
+  const kwAt=readKw(), rt=vs.rating(), ct=vs.colorTag();
+  const res={dry:dry, collection:scope.collection, scope:scope, mode:'bulk', before:[], applied:[], skipped:[], failures:[], after:[]};
+  const groups={};
+  for(const it of plan.items){
+    const ix=byPath[it.path]||[];
+    if(ix.length!==1){ res.failures.push({filename:it.filename, reason: ix.length? 'multiple variants':'not in Capture One under '+scope.folder}); continue; }
+    const i=ix[0];
+    const b={id:ids[i], filename:it.filename, keywords:kwAt(i), rating:rt[i], color:ct[i]};
+    res.before.push(b);
+    for(const p of it.keywords){
+      if(b.keywords.indexOf(p)>=0){ res.skipped.push({filename:it.filename, keyword:p, reason:'already applied'}); continue; }
+      const k=libKw(p);
+      if(!k){ res.skipped.push({filename:it.filename, keyword:p, reason:'not in keyword library'}); continue; }
+      (groups[p]=groups[p]||{k:k, t:[]}).t.push(b);
+    }
+  }
+  for(const p of Object.keys(groups)){
+    const g=groups[p];
+    if(dry){ g.t.forEach(b=>res.applied.push({filename:b.filename, id:b.id, keyword:p, dry:true})); continue; }
+    try{ C1.applyKeyword(g.k,{to:g.t.map(b=>d.variants.byId(b.id))}); g.t.forEach(b=>res.applied.push({filename:b.filename, id:b.id, keyword:p})); }
+    catch(e){
+      for(const b of g.t){   // fall back to one frame at a time
+        try{ C1.applyKeyword(g.k,{to:[d.variants.byId(b.id)]}); res.applied.push({filename:b.filename, id:b.id, keyword:p}); }
+        catch(e2){ res.failures.push({filename:b.filename, keyword:p, reason:String(e2)}); }
+      }
+    }
+  }
+  if(dry){ res.after=res.before.map(b=>Object.assign({}, b, {lost:[], flags_changed:false})); }
+  else {
+    const ids2=vs.id(), kw2=readKw(), rt2=vs.rating(), ct2=vs.colorTag(); const pos={}; ids2.forEach((x,i)=>{ pos[x]=i; });
+    for(const b of res.before){
+      const i=pos[b.id];
+      if(i===undefined){ res.failures.push({filename:b.filename, reason:'post-check: variant not readable'}); continue; }
+      const a={id:b.id, filename:b.filename, keywords:kw2(i), rating:rt2[i], color:ct2[i]};
+      a.lost=b.keywords.filter(x=>a.keywords.indexOf(x)<0);
+      a.flags_changed=(a.rating!==b.rating||a.color!==b.color);
+      if(a.lost.length||a.flags_changed) res.failures.push({filename:b.filename, reason:'post-check: lost='+a.lost+' flags_changed='+a.flags_changed});
+      res.after.push(a);
+    }
+  }
+  res.catalog_keywords=d.keywords().map(k=>({name:k.name(), parent:k.parent()}));
+  writeJSON(argv[1],res);
+  return JSON.stringify({applied:res.applied.length, skipped:res.skipped.length, failures:res.failures.length});
+}
+
 function run(argv){
   const plan=readJSON(argv[0]); const dry=argv[2]==='dry';
   const C1=Application('Capture One'); const d=C1.currentDocument();
@@ -70,6 +122,7 @@ function runScoped(argv, plan, dry, C1, d){
       return JSON.stringify({refused:why});
     }
   }
+  if(scope && !plan.items.some(it=>it.description)) return bulkApply(argv, plan, dry, C1, d, scope, libKw);
   // variants of current collection, indexed by name (base name without extension)
   const cur=d.currentCollection().name();
   const vs=d.variants; const names=vs.name(); const idx={};

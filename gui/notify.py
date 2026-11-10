@@ -5,7 +5,7 @@ Telegram: needs a Bot API token + chat_id (the inbound Telegram bridge cannot se
 Email: optional local sendmail/postfix fallback when enabled.
 """
 from __future__ import annotations
-import json, subprocess, urllib.request, urllib.parse
+import json, subprocess, urllib.error, urllib.request, urllib.parse
 from pathlib import Path
 
 GUI = Path.home() / "localai" / "gui"
@@ -43,6 +43,34 @@ def _send_telegram(token: str, chat_id: str, text: str):
     with urllib.request.urlopen(req, timeout=15) as r:
         return json.loads(r.read().decode())
 
+def _redact(msg: str, token: str) -> str:
+    return str(msg).replace(token, "<token>") if token else str(msg)
+
+
+def send_test() -> dict:
+    """Settings 'Send test message': Telegram only, works even while job alerts are switched off."""
+    c = load_cfg()
+    tg = c.get("telegram") or {}
+    token, chat = (tg.get("bot_token") or "").strip(), str(tg.get("chat_id") or "").strip()
+    if not token or not chat:
+        return {"ok": False, "error": f"Telegram is not set up: put bot_token and chat_id in {CFG} (see notify.example.json)"}
+    text = ("Trips Local AI: test message from the control panel. "
+            f"Job alerts are {'on' if c.get('enabled') and tg.get('enabled') else 'off'} (Settings > Notifications).")
+    try:
+        r = _send_telegram(token, chat, text)
+    except urllib.error.HTTPError as e:
+        try:
+            desc = json.loads(e.read().decode()).get("description") or ""
+        except Exception:
+            desc = ""
+        hint = {401: "the bot_token is wrong", 400: "the chat_id is wrong, or you have not sent the bot a message yet",
+                403: "the bot can't message this chat (send it /start first)"}.get(e.code, "")
+        return {"ok": False, "error": _redact(f"Telegram said {e.code} {desc}".strip() + (f": {hint}" if hint else ""), token)}
+    except Exception as e:
+        return {"ok": False, "error": _redact(f"could not reach Telegram: {e}", token)}
+    return {"ok": bool(r.get("ok")), "error": None if r.get("ok") else _redact(r.get("description") or "unknown", token)}
+
+
 def _send_email(to: str, subject: str, body: str, frm: str):
     msg = f"From: {frm}\nTo: {to}\nSubject: {subject}\nContent-Type: text/plain; charset=utf-8\n\n{body}\n"
     p = subprocess.run(["/usr/sbin/sendmail", "-t", "-i"], input=msg.encode(), capture_output=True)
@@ -71,8 +99,19 @@ def notify_job(job: dict):
         bits = []
         for k, v in pr.items():
             a = (v or {}).get("apply") or {}
-            bits.append(f"{k}:{a.get('applied_keywords', a.get('skipped', 'ok'))}")
+            if "sharpness" in a and isinstance(a.get("sharpness"), dict):   # sharpness + AF focus check
+                a = a["sharpness"]
+            txt = f"{k}:{a.get('applied_keywords', a.get('skipped', 'ok'))}"
+            if a.get("failures"):
+                txt += f" ({a['failures']} failed)"
+            bits.append(txt)
         lines.append("Results: " + "; ".join(bits)[:500])
+    if status == "awaiting_approval":
+        ps = job.get("preview_summary") or {}
+        lines.append(f"Keyword preview ready: {ps.get('keywords_new', '?')} new keywords on {ps.get('frames_with_new', '?')} frames. "
+                     "Nothing written until you approve it in the panel.")
+    if job.get("auto_queued"):
+        lines.append("(queued automatically: new shoot)")
     if err:
         lines.append(f"Error: {err[:400]}")
     text = "\n".join(lines)
@@ -82,7 +121,7 @@ def notify_job(job: dict):
         try:
             out["telegram"] = _send_telegram(tg["bot_token"], str(tg["chat_id"]), text)
         except Exception as e:
-            out["telegram_error"] = str(e)
+            out["telegram_error"] = _redact(e, tg.get("bot_token") or "")
     em = c.get("email") or {}
     if em.get("enabled") and em.get("to"):
         try:

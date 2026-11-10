@@ -223,13 +223,14 @@
     <div id="tab-settings" class="panel-section">
       <section class="card">
         <h2>Notifications</h2>
-        <p class="note">Telegram needs a BotFather token + chat id in <code>~/localai/gui/notify.json</code> (untracked). The Telegram inbound bridge cannot send alerts. Email uses local sendmail when enabled.</p>
+        <p class="note">Alerts when a job finishes, fails or has a keyword preview waiting. Telegram needs a BotFather token + chat id in <code>~/localai/gui/notify.json</code> (untracked, never committed; see the README). The Telegram inbound bridge cannot send alerts. Email uses local sendmail when enabled.</p>
         <div id="notifyStatus" class="note"></div>
         <div class="row">
           <label class="inline"><input type="checkbox" id="notifyEnabled" /> Enable notifications</label>
           <label class="inline"><input type="checkbox" id="notifyTg" /> Telegram channel on</label>
           <label class="inline"><input type="checkbox" id="notifyEmail" /> Email channel on</label>
           <button id="notifySave">Save toggles</button>
+          <button class="secondary" id="notifyTest" title="Sends one message to your Telegram chat using notify.json">Send Telegram test</button>
         </div>
       </section>
       <section class="card">

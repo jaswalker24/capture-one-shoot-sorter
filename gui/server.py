@@ -933,6 +933,10 @@ class Handler(BaseHTTPRequestHandler):
                              daemon=True).start()
             return _json(self, 200, {"ok": True})
 
+        if path == "/api/notify/test":
+            # sends one Telegram test message using notify.json (token never passes through the API)
+            return _json(self, 200, NF.send_test())
+
         if path == "/api/notify/set":
             # Only toggles / non-secret fields via API; tokens must be edited in notify.json on disk
             cur = NF.load_cfg()

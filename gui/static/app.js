@@ -618,6 +618,15 @@ $("notifySave").onclick = async () => {
   alert("Saved toggles. Put bot_token/chat_id in notify.json for Telegram.");
 };
 
+if ($("notifyTest")) $("notifyTest").onclick = async () => {
+  $("notifyTest").disabled = true;
+  try {
+    const r = await api("/api/notify/test", { method: "POST", body: "{}" });
+    alert(r.ok ? "Test message sent. Check Telegram." : "Not sent: " + r.error);
+  } catch (e) { alert("Not sent: " + e.message); }
+  finally { $("notifyTest").disabled = false; }
+};
+
 /* ---- auto-queue new shoots ---- */
 async function loadAutoqueue() {
   if (!$("aqEnabled")) return;

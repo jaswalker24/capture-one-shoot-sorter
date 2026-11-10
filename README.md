@@ -144,3 +144,10 @@ Tick **Preview keywords before applying** on the Run tab (or press **Preview key
 
 ## Auto-queue new shoots (Settings, off by default)
 When switched on, the panel looks every ~30 minutes (in step with Capture One referencing new imports) in `[03] Photos/Camera Imports/<year>/` for new `YYYY-MM-DD…` folders and queues each one with the chosen default profile once Capture One has it (read-only check, only while no job is using the catalog) or once the folder has stopped changing (same image count/size on two looks in a row, nothing written for 20 minutes). Folders that already existed when you switched it on, and folders that already have a job, are never queued. MP4/MOV files are ignored as usual. Settings live in `gui/autoqueue.json`, progress in `gui/autoqueue-state.json`.
+
+## Telegram alerts (job finished / failed / preview waiting)
+1. In Telegram, message **@BotFather**, send `/newbot`, and copy the token it gives you.
+2. Send your new bot any message (e.g. `/start`), then open `https://api.telegram.org/bot<token>/getUpdates` in a browser and copy `"chat":{"id": …}`.
+3. Put both in `~/localai/gui/notify.json` (copy `notify.example.json`; the file is untracked and must never be committed), and `chmod 600` it:
+   `"enabled": true, "telegram": {"enabled": true, "bot_token": "<token>", "chat_id": "<id>"}`
+4. Settings ▸ Notifications ▸ **Send Telegram test**. The token is only read from that file; the panel never accepts it over the API.

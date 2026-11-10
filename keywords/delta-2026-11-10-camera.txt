@@ -1,0 +1,49 @@
+General
+	Quality
+		Clipped Highlights
+		Crushed Shadows
+	Camera
+		Lens
+			Canon 50mm f1.2
+			Canon 85mm f1.4
+			Canon 35mm f2
+			Canon 135mm f2
+			Sigma 150-600
+			Canon 70-200 f4
+		Focal
+			Wide
+			Normal
+			Tele
+			Super Tele
+		High ISO
+		Very High ISO
+		Wide Open
+		Slow Shutter
+		Exposure Comp
+			Plus
+			Minus
+		Drive
+			High Speed
+		Shutter
+			Electronic
+		AF
+			Servo
+			One-Shot
+			Manual
+		AF Area
+			Face + Tracking
+			Spot
+			1-Point
+			Expand
+			Zone
+			Large Zone
+			Flexible Zone
+		Subject
+			People
+			Animals
+			Vehicles
+		Eye Detection
+		IS
+			On
+			Off
+		Flash Fired

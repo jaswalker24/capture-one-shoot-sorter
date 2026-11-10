@@ -45,6 +45,7 @@ def main():
     step("snapshot_before", lambda: snap(out / "fullrun-flags-before.json", folder))
     step("tagger", lambda: run([TAG, str(folder), "--profile", a.profile, "--tag", "full", "--resume", "--no-caption"] + (["--context", a.context] if a.context else []),
                                env={"LOCALAI_NO_APPLY_STEP": "1"}))
+    step("camera", lambda: run([TAG, "camera", str(folder)]))
     step("scene", lambda: run([TAG, "scene", str(folder), "--resume"]))
     step("index", lambda: run([TAG, "index", str(folder)]))
     for f in ("sharpness", "bursts", "rank"):
@@ -52,7 +53,7 @@ def main():
     step("ocr", lambda: run([TAG, "ocr", str(folder), "--resume"]))
     if not a.no_apply:
         from apply_c1 import apply_proposals
-        srcs = {"tagger": f"{a.profile}-proposals-full", "scene": "scene-proposals", "sharpness": "sharpness-proposals", "bursts": "bursts-proposals",
+        srcs = {"tagger": f"{a.profile}-proposals-full", "camera": "camera-proposals", "scene": "scene-proposals", "sharpness": "sharpness-proposals", "bursts": "bursts-proposals",
                 "rank": "rank-proposals", "ocr": "ocr-proposals"}
         srcs = {k: v for k, v in srcs.items() if (out / f"{v}.json").exists()}
         # AF-point focus check (afpoints.py, written by the sharpness step). On Target applies; Missed is

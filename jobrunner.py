@@ -30,6 +30,8 @@ PASSES = [
     {"id": "ocr", "label": "Read Text in Frame", "needs_index": False},
     {"id": "people", "label": "People (faces)", "needs_index": False,
      "note": "Local face clusters + People/<Name> keywords. Off by default; name clusters in the People tab first."},
+    {"id": "camera", "label": "Camera info", "needs_index": False,
+     "note": "EXIF / Canon MakerNotes + a cheap preview clip check: lens, focal band, High ISO, Wide Open, Slow Shutter, drive, electronic shutter, AF, IS, orientation, Flash Fired, clipped highlights. Fast."},
     {"id": "scene", "label": "Scene (general keywords)", "needs_index": False,
      "note": "General/Scene/* multi-label tags (architecture, street, concert, motorsport, temple, food, …). Local SigLIP, conservative thresholds."},
     {"id": "schedule", "label": "Tag by Schedule", "needs_index": False},
@@ -37,7 +39,7 @@ PASSES = [
      "note": "Smart albums in group 'Trips Local AI': Sharp + Burst Best, Rank Best, Shortlist (no blur). Collections only."},
 ]
 PASS_BY_ID = {p["id"]: p for p in PASSES}
-DEFAULT_ORDER = ["tagger", "scene", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"]
+DEFAULT_ORDER = ["tagger", "camera", "scene", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"]
 
 
 def log(state, *a):
@@ -109,6 +111,7 @@ def _proposal_file(folder: Path, pass_id: str, profile: str) -> Path | None:
         "ocr": fo / "ocr-proposals.json",
         "people": fo / "people-proposals.json",
         "scene": fo / "scene-proposals.json",
+        "camera": fo / "camera-proposals.json",
         "schedule": fo / "schedule-proposals.json",
         "afpoints": fo / "afpoints-proposals.json",
     }
@@ -388,6 +391,12 @@ def run_job(state_path: Path):
 
             elif pid == "people":
                 cmd = [TAG, "faces", str(folder)]
+                if sample:
+                    cmd += ["--sample", str(sample)]
+                _run_streaming(state, cmd, pass_id=pid)
+
+            elif pid == "camera":
+                cmd = [TAG, "camera", str(folder)]
                 if sample:
                     cmd += ["--sample", str(sample)]
                 _run_streaming(state, cmd, pass_id=pid)

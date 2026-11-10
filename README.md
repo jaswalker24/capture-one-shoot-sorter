@@ -177,7 +177,7 @@ or **Scripts → Trips Local AI → Draft Captions (Exports)** with export files
 ~/localai/
   tag                 wrapper command
   tagger.py           main tagger
-  features.py         bursts, rank, sharpness, OCR, search, faces, scene, captions, …
+  features.py         bursts, rank, sharpness, OCR, search, faces, scene, camera, captions, …
   fullrun.py          whole-shoot pipeline (no captions)
   schedule_tag.py     gig schedule matcher
   apply_c1.py/.js     additive Capture One writer
@@ -213,7 +213,7 @@ Rebuild the tab-indented list and CSV:
 ~/localai/venv/bin/python ~/localai/keywords/build_library.py
 ```
 
-Then re-import `trip-keyword-library.txt` into the **Trip Keywords** library in Capture One. The builder includes motorsport, gig, Kyoto, Japan, aviation, wildlife, static vehicles, film, general quality flags, Focus and Rank, generalised `General/Scene/*` keywords, and the confirmed Japan November 2026 event / venue / act names. New names can also be imported from a tab-indented `keywords/delta-*.txt` without replacing the rest of the library.
+Then re-import `trip-keyword-library.txt` into the **Trip Keywords** library in Capture One. The builder includes motorsport, gig, Kyoto, Japan, aviation, wildlife, static vehicles, film, general quality flags, Focus and Rank, generalised `General/Scene/*` keywords, `General/Camera/*` (lens, focal band, exposure flags, AF, IS) plus clip flags under `General/Quality`, and the confirmed Japan November 2026 event / venue / act names. New names can also be imported from a tab-indented `keywords/delta-*.txt` without replacing the rest of the library.
 
 ---
 
@@ -336,11 +336,12 @@ Selection for most commands: a folder, `--files a.CR3 b.CR3`, `--sample N`, or `
 | `ask "question" [--folder F]` | Answers from the index (search plus proposals and OCR context) and lists supporting frames | qwen3:8b | — | 9–12 s |
 | `faces <folder>` | Groups faces anonymously (Person 001…) into `out/faces/faces.csv` with contact sheets | Apple Vision detect + ArcFace w600k_mbf (buffalo_s) + DBSCAN | 13.6 MB | about 0.3 s/image (12 gig frames in 4 s) |
 | `scene <folder> [--sample N] [--sheets]` | Generalised multi-label scene/subject keywords under `General/Scene/*` (architecture, street, concert, motorsport, temple, food, …). Conservative per-label thresholds, cap of 6 labels per frame. Writes `scene-proposals.json` and optional contact sheets. No caption model. | SigLIP (index embeddings when present) | (shared) | about 0.01 s/image from index; first load a few seconds |
+| `camera <folder> [--sample N] [--no-clip]` | Camera info from CR2/CR3 MakerNotes + a cheap preview clip check. Additive `General/Camera/*` keywords (lens, focal band, High ISO, Wide Open, Slow Shutter, High Speed drive, electronic shutter, AF, IS, orientation, Flash Fired) and `General/Quality/Clipped Highlights` / `Crushed Shadows`. Sub-second time, body serial, white balance, Picture Style and Highlight Tone Priority are stored in the proposals file, not keyworded. Fast; no caption model. | exiftool 13.61 + preview | (bundled) | EXIF about 0.1–0.2 s/image in batches; clip is cheap from the cached preview |
 | `name-person 3 "label"` | Gives an anonymous group a local label (your own; nothing is looked up) | — | — | — |
 | `schedule <folder> [--schedule F] [--camera-offset +09:00]` | Matches capture time to the gig schedule, writing `Gig/Event`, `Venue`, `Act`, `Cheki`, `Meet & Greet` and `Changeover` | exiftool 13.61 | ~10 MB (bin/) | one exiftool call per batch |
 | `captions --files <exports>` | **Export-only.** Writes draft captions to `out/salamander/captions-<time>.json`. It refuses anything not under `Camera Exports/` | qwen2.5vl:3b | 3.2 GB | about 3 s/image |
 
-Feature proposals are written to `out/<folder>/{sharpness,bursts,rank,ocr,schedule,scene,people}-proposals.json`. They are apply_c1-compatible: `venv/bin/python apply_c1.py <file> [--apply]`.
+Feature proposals are written to `out/<folder>/{sharpness,bursts,rank,ocr,schedule,scene,people,camera}-proposals.json`. They are apply_c1-compatible: `venv/bin/python apply_c1.py <file> [--apply]`.
 
 Face grouping is anonymous and local. Nobody is identified, and no lookups or cloud calls are made. Delete `index/faces*` and the faces tables to forget the groups.
 
@@ -356,7 +357,7 @@ These are in `~/Library/Scripts/Capture One Scripts/Trips Local AI/`, with sourc
 
 ### Full-folder run (resumable)
 `nohup nice -n 10 venv/bin/python fullrun.py "<folder>" --profile motorsport --context "…" > logs/fullrun/<name>.log &`
-The steps are: rating and colour snapshot → tagger (`--resume`) → scene → index → sharpness → bursts → rank → OCR (`--resume`) → merge of all proposals → apply in chunks of 200 → after snapshot and diff.
+The steps are: rating and colour snapshot → tagger (`--resume`) → camera → scene → index → sharpness → bursts → rank → OCR (`--resume`) → merge of all proposals → apply in chunks of 200 → after snapshot and diff.
 Progress is kept in `out/<folder>/fullrun-state.json`. Re-running the same command resumes from the first unfinished step or chunk. Draft captions are never part of it.
 
 ### Limitations
@@ -396,6 +397,14 @@ Canon bodies record the AF area they used in the CR3 maker notes. `afpoints.py` 
 - Outputs in `out/<shoot>/`: `afpoints-exif.json` (cache), `afpoints.csv`, `afpoints-proposals.json`; review decisions in `review-focus-decisions.json` / `review-focus-applied.json`. Thresholds: `config.json` → `"features": {"afpoints": {...}}` (calibrated on 2,332 Brands Hatch R6 frames).
 
 ### Keyword preview before apply (panel)
+#### Camera info pass
+
+`camera_info.py` reads Canon MakerNotes (and standard EXIF) from each CR2/CR3 with the bundled ExifTool (read-only) and does a cheap highlight/shadow clip check on the embedded or cached preview. It is a selectable panel pass (`tag camera <folder>`), on by default in the Quick / Standard / Full bundles, and also runs in `fullrun.py`. Thresholds live under `"features": {"camera": {…}}` in `config.json` (High ISO 6400 / Very High ISO 12800, Wide Open within 1/3 stop, Slow Shutter relative to focal length with two extra stops when IS is on, conservative clip fractions).
+- Keywords are additive: `General/Camera/Lens/…`, `Focal/{Wide,Normal,Tele,Super Tele}`, `High ISO` / `Very High ISO`, `Wide Open`, `Slow Shutter`, `Drive/High Speed`, `Shutter/Electronic` (full electronic only; Electronic First Curtain is not flagged), `AF/{Servo,One-Shot,Manual}`, `AF Area/…`, `Subject/{People,Animals,Vehicles}`, `Eye Detection`, `IS/On|Off`, `Flash Fired`, plus existing `General/Orientation/{Portrait,Landscape}` and `General/Quality/Clipped Highlights|Crushed Shadows`.
+- White balance, Picture Style and Highlight Tone Priority are recorded in `camera-proposals.json` / `camera.csv` only, not as keywords. So are the body serial and sub-second capture time (for bursts and schedule matching).
+- GPS is not present on R6 files unless the camera was linked to a phone via Camera Connect; the pass records whether a GPS tag exists but does not invent place keywords.
+- Existing shoots are not auto-applied. New imports pick the pass up from the profile. You can generate proposals for an older folder with `tag camera "<folder>"` and preview them in the panel.
+
 Tick **Preview keywords before applying** on the Run tab (or press **Preview keywords now** to use results already on disk). The passes run without writing anything; the job then waits in the queue as *awaiting approval*. **Preview & approve** shows, per frame, the keywords that would be added next to the ones already there, filterable by keyword/filename and pass; untick keywords or frames you don't want, optionally **Check against Capture One** (read-only dry run), then **Approve & apply**. Only the approved plan is written (additive, folder-scoped, with undo data). **Discard** closes it with nothing written.
 
 ### Auto-queue new shoots (Settings, off by default)

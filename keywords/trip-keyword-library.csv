@@ -1318,3 +1318,48 @@ General|Scene|Festival,General/Scene/Festival,3,General
 General|Scene|Motorsport,General/Scene/Motorsport,3,General
 General|Scene|Abstract,General/Scene/Abstract,3,General
 General|Scene|Detail,General/Scene/Detail,3,General
+General|Camera,General/Camera,2,General
+General|Camera|Lens,General/Camera/Lens,3,General
+General|Camera|Lens|Canon 50mm f1.2,General/Camera/Lens/Canon 50mm f1.2,4,General
+General|Camera|Lens|Canon 85mm f1.4,General/Camera/Lens/Canon 85mm f1.4,4,General
+General|Camera|Lens|Canon 35mm f2,General/Camera/Lens/Canon 35mm f2,4,General
+General|Camera|Lens|Canon 135mm f2,General/Camera/Lens/Canon 135mm f2,4,General
+General|Camera|Lens|Sigma 150-600,General/Camera/Lens/Sigma 150-600,4,General
+General|Camera|Lens|Canon 70-200 f4,General/Camera/Lens/Canon 70-200 f4,4,General
+General|Camera|Focal,General/Camera/Focal,3,General
+General|Camera|Focal|Wide,General/Camera/Focal/Wide,4,General
+General|Camera|Focal|Normal,General/Camera/Focal/Normal,4,General
+General|Camera|Focal|Tele,General/Camera/Focal/Tele,4,General
+General|Camera|Focal|Super Tele,General/Camera/Focal/Super Tele,4,General
+General|Camera|High ISO,General/Camera/High ISO,3,General
+General|Camera|Very High ISO,General/Camera/Very High ISO,3,General
+General|Camera|Wide Open,General/Camera/Wide Open,3,General
+General|Camera|Slow Shutter,General/Camera/Slow Shutter,3,General
+General|Camera|Exposure Comp,General/Camera/Exposure Comp,3,General
+General|Camera|Exposure Comp|Plus,General/Camera/Exposure Comp/Plus,4,General
+General|Camera|Exposure Comp|Minus,General/Camera/Exposure Comp/Minus,4,General
+General|Camera|Drive,General/Camera/Drive,3,General
+General|Camera|Drive|High Speed,General/Camera/Drive/High Speed,4,General
+General|Camera|Shutter,General/Camera/Shutter,3,General
+General|Camera|Shutter|Electronic,General/Camera/Shutter/Electronic,4,General
+General|Camera|AF,General/Camera/AF,3,General
+General|Camera|AF|Servo,General/Camera/AF/Servo,4,General
+General|Camera|AF|One-Shot,General/Camera/AF/One-Shot,4,General
+General|Camera|AF|Manual,General/Camera/AF/Manual,4,General
+General|Camera|AF Area,General/Camera/AF Area,3,General
+General|Camera|AF Area|Face + Tracking,General/Camera/AF Area/Face + Tracking,4,General
+General|Camera|AF Area|Spot,General/Camera/AF Area/Spot,4,General
+General|Camera|AF Area|1-Point,General/Camera/AF Area/1-Point,4,General
+General|Camera|AF Area|Expand,General/Camera/AF Area/Expand,4,General
+General|Camera|AF Area|Zone,General/Camera/AF Area/Zone,4,General
+General|Camera|AF Area|Large Zone,General/Camera/AF Area/Large Zone,4,General
+General|Camera|AF Area|Flexible Zone,General/Camera/AF Area/Flexible Zone,4,General
+General|Camera|Subject,General/Camera/Subject,3,General
+General|Camera|Subject|People,General/Camera/Subject/People,4,General
+General|Camera|Subject|Animals,General/Camera/Subject/Animals,4,General
+General|Camera|Subject|Vehicles,General/Camera/Subject/Vehicles,4,General
+General|Camera|Eye Detection,General/Camera/Eye Detection,3,General
+General|Camera|IS,General/Camera/IS,3,General
+General|Camera|IS|On,General/Camera/IS/On,4,General
+General|Camera|IS|Off,General/Camera/IS/Off,4,General
+General|Camera|Flash Fired,General/Camera/Flash Fired,3,General

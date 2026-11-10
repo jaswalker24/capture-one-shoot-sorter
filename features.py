@@ -13,6 +13,7 @@ Local AI features for this Mac (all on-device, originals read-only).
   faces      People pass: detect + embed + cluster + match ~/localai/people library
   name-person  name a cluster (writes persistent people library; use --shoot)
   scene      General/Scene/* keywords (architecture, street, concert, motorsport, …)
+  camera     EXIF / Canon MakerNotes + preview clip check (General/Camera/*, Quality clip flags)
   captions   draft captions (sidecar JSON for Salamander)
 Index: ~/localai/index/catalog.sqlite (+ index/siglip/*.npy, keyed by SHA-256).
 """
@@ -794,6 +795,19 @@ def cmd_schedule(args):
     print(f"schedule: {len(files)} frames; events {dict(ev)}; needs_review {sum(r['needs_review'] for r in data['images'])}; -> {f}")
     return f
 
+# ------------------------------------------------------------------ camera
+def cmd_camera(args):
+    """EXIF / Canon MakerNotes + preview clip check. Proposals only. CR2/CR3 only."""
+    import camera_info as CI
+    files = resolve_files(args) if (args.folder or args.files) else []
+    files = [p for p in files if p.suffix.lower() in CI.RAW_EXT]
+    if not files and not args.folder:
+        print("camera: no images"); return
+    folder = Path(args.folder).resolve() if args.folder else Path(files[0]).parent
+    CI.run_folder(folder, files=files or None, sample=0,
+                  refresh=bool(getattr(args, "refresh_exif", False)),
+                  no_clip=bool(getattr(args, "no_clip", False)))
+
 # ------------------------------------------------------------------ scene
 def cmd_scene(args):
     """Generalised scene/subject keywords (General/Scene/*). Proposals only."""
@@ -830,6 +844,10 @@ def main():
     p = sp.add_parser("ask"); p.add_argument("question"); p.add_argument("--top", type=int, default=25); p.set_defaults(fn=cmd_ask)
     p = sp.add_parser("faces"); sel(p); p.set_defaults(fn=cmd_faces)
     p = sp.add_parser("name-person"); p.add_argument("person", type=int); p.add_argument("name"); p.add_argument("--shoot", help="shoot folder name under out/ (preferred)"); p.set_defaults(fn=cmd_name_person)
+    p = sp.add_parser("camera"); sel(p)
+    p.add_argument("--refresh-exif", action="store_true")
+    p.add_argument("--no-clip", action="store_true", help="skip the preview highlight/shadow check")
+    p.set_defaults(fn=cmd_camera)
     p = sp.add_parser("scene"); sel(p); p.add_argument("--resume", action="store_true")
     p.add_argument("--tag", default="")
     p.add_argument("--max-labels", type=int, default=None)

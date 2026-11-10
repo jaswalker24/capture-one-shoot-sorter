@@ -7,6 +7,7 @@
   "pass_bundle": "Full",
   "passes": [
     "tagger",
+    "camera",
     "scene",
     "index",
     "sharpness",
@@ -25,7 +26,8 @@
     "schedule": {},
     "rank": {},
     "cull": {},
-    "scene": {}
+    "scene": {},
+    "camera": {}
   },
   "camera_tz": "Europe/London",
   "camera_tz_other": "",

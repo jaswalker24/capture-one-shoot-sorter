@@ -7,6 +7,7 @@
   "pass_bundle": "Standard",
   "passes": [
     "tagger",
+    "camera",
     "scene",
     "index",
     "sharpness",
@@ -23,7 +24,8 @@
     "schedule": {},
     "rank": {},
     "cull": {},
-    "scene": {}
+    "scene": {},
+    "camera": {}
   },
   "camera_tz": "Asia/Tokyo",
   "camera_tz_other": "",

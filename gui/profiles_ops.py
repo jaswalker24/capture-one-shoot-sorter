@@ -17,9 +17,9 @@ SHOOT_TYPES = [
 ]
 
 PASS_BUNDLES = {
-    "Quick": ["tagger", "scene", "sharpness", "bursts"],
-    "Standard": ["tagger", "scene", "index", "sharpness", "bursts", "rank", "schedule", "cull"],
-    "Full": ["tagger", "scene", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"],
+    "Quick": ["tagger", "camera", "scene", "sharpness", "bursts"],
+    "Standard": ["tagger", "camera", "scene", "index", "sharpness", "bursts", "rank", "schedule", "cull"],
+    "Full": ["tagger", "camera", "scene", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"],
     "Schedule tags only": ["schedule"],
     "Exports captions": ["captions"],
     "Custom": [],

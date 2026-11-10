@@ -119,22 +119,53 @@ function run(argv){
     if(!gs.length){ d.collections.push(C1.Collection({kind:'group', name:GROUP})); gs=d.collections.whose({name:GROUP})().filter(c=>c.kind()==='group'); }
     if(!gs.length) throw new Error('could not create group '+GROUP);
     const g=gs[0];
-    const counts={};
-    for(const album of plan.albums){
-      const olds=g.collections.whose({name:album.name})();
-      for(const o of olds){ try{ C1.delete(o); }catch(e){} }
-      g.collections.push(C1.Collection({kind:'album', name:album.name}));
-      const created=g.collections.whose({name:album.name})().filter(c=>c.kind()==='album');
-      if(!created.length) throw new Error('could not create album '+album.name);
-      const a=created[0];
-      const ids=album.ids||[];
-      for(let i=0;i<ids.length;i+=200){
-        const chunk=ids.slice(i,i+200).map(id=>d.variants.byId(id));
-        if(chunk.length) C1.addInside(a, {variants:chunk});
-      }
-      counts[album.name]=a.variants().length;
+    const folderCol=d.currentCollection();
+    function showFolder(){
+      if(folderCol) d.currentCollection=folderCol;
     }
-    const out={group:GROUP, albums:counts};
+    const counts={}; const addFailures={};
+    for(const album of plan.albums){
+      showFolder();
+      const existing=g.collections.whose({name:album.name})();
+      let a=null;
+      for(const o of existing){
+        try{
+          if(o.kind()==='album'){ if(!a) a=o; }
+          else { try{ C1.delete(o); }catch(e){} }
+        }catch(e){}
+      }
+      if(!a){
+        g.collections.push(C1.Collection({kind:'album', name:album.name}));
+        const created=g.collections.whose({name:album.name})().filter(c=>c.kind()==='album');
+        if(!created.length) throw new Error('could not create album '+album.name);
+        a=created[0];
+      }
+      const ids=album.ids||[];
+      const CHUNK=25;
+      const failed=[];
+      for(let i=0;i<ids.length;i+=CHUNK){
+        showFolder();
+        const slice=ids.slice(i,i+CHUNK);
+        const vs=[];
+        for(const id of slice){
+          try{ const v=d.variants.byId(id); v.id(); vs.push(v); }
+          catch(e){ failed.push(String(id)); }
+        }
+        if(!vs.length) continue;
+        try{ C1.addInside(a, {variants:vs}); }
+        catch(e){
+          for(const v of vs){
+            showFolder();
+            try{ C1.addInside(a, {variants:[v]}); }
+            catch(e2){ try{ failed.push(String(v.id())); }catch(e3){ failed.push('unknown'); } }
+          }
+        }
+      }
+      showFolder();
+      counts[album.name]=a.variants().length;
+      if(failed.length) addFailures[album.name]=failed;
+    }
+    const out={group:GROUP, albums:counts, addFailures:addFailures};
     $.NSString.alloc.initWithUTF8String(JSON.stringify(out)).writeToFileAtomicallyEncodingError(argv[1],true,4,null);
     return JSON.stringify(counts);
   } finally { try{ d.currentCollection=prev; }catch(e){} }

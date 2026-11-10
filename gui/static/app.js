@@ -157,6 +157,7 @@ async function addJob() {
     apply_each: $("applyEach").checked, dry_run: $("dryRun").checked,
     ocr_missing_car_number: $("ocrMissing").checked, apply_rank_keywords: $("rankKw").checked,
     afpoints: $("afPoints").checked, afpoints_annotate: Number($("afAnnotate").value || 0),
+    preview_before_apply: $("previewFirst") ? $("previewFirst").checked : false,
     sample: Number($("sample").value || 0),
   };
   if ($("presetSelect").dataset.profileId) body.profile_id = $("presetSelect").dataset.profileId;
@@ -173,7 +174,7 @@ function fmtProgress(j) {
 
 function renderQueue(data) {
   const box = $("queue");
-  const active = (data.jobs || []).filter(j => ["queued", "running"].includes(j.status));
+  const active = (data.jobs || []).filter(j => ["awaiting_approval", "queued", "running"].includes(j.status));
   const recent = (data.jobs || []).filter(j => ["done", "error", "cancelled"].includes(j.status)).slice(-5).reverse();
   const list = [...active, ...recent];
   if (!list.length) {
@@ -189,10 +190,15 @@ function renderQueue(data) {
         <div class="meta">${(j.passes || []).join(" → ")} · ${j.profile}${j.dry_run ? " · dry-run" : ""}</div>
         <div class="meta">${fmtProgress(j)}</div>
       </div>
-      <div>${j.status === "queued" || j.status === "running" ? `<button class="danger" data-cancel="${j.id}">Cancel</button>` : ""}</div></div>
+      <div>${j.status === "queued" || j.status === "running" ? `<button class="danger" data-cancel="${j.id}">Cancel</button>` : ""}
+        ${j.status === "awaiting_approval" ? `<button data-preview="${j.id}" data-shoot="${escapeHtml(j.folder_name || "")}">Preview &amp; approve</button>` : ""}</div></div>
+      ${j.status === "awaiting_approval" && j.preview_summary ? `<div class="meta">Would add ${j.preview_summary.keywords_new} new keywords on ${j.preview_summary.frames_with_new} frames. Nothing written yet.</div>` : ""}
       <div class="bar"><span style="width:${pct}%"></span></div>
       <div class="log">${escapeHtml(log)}</div></div>`;
   }).join("");
+  box.querySelectorAll("[data-preview]").forEach(b => {
+    b.onclick = () => openPreview(b.dataset.shoot, b.dataset.preview, true);
+  });
   box.querySelectorAll("[data-cancel]").forEach(b => {
     b.onclick = async () => { await api("/api/queue/cancel", { method: "POST", body: JSON.stringify({ id: b.dataset.cancel }) }); refresh(); };
   });
@@ -627,6 +633,150 @@ $("runCaptions").onclick = async () => {
     alert("Captions job started: " + r.job.id);
   } catch (e) { alert(e.message); }
 };
+
+// ---------------------------------------------------------------- Keyword preview (approve before apply)
+const pv = { data: null, shoot: "", id: "", fromJob: false, exKw: new Set(), exFiles: new Set(), timer: null };
+
+async function previewNow() {
+  if (!selectedFolder) return alert("Pick a folder");
+  const passes = passState.filter(p => p.checked).map(p => p.id);
+  if (!passes.length) return alert("Tick at least one pass");
+  try {
+    const r = await api("/api/preview/build", { method: "POST", body: JSON.stringify({
+      folder: selectedFolder, passes, profile: $("profile").value,
+      afpoints: $("afPoints").checked, apply_rank_keywords: $("rankKw").checked }) });
+    openPreview(r.shoot, r.id, false);
+  } catch (e) { alert("Preview failed: " + e.message); }
+}
+
+async function openPreview(shoot, id, fromJob) {
+  Object.assign(pv, { shoot, id, fromJob, exKw: new Set(), exFiles: new Set() });
+  try { pv.data = await api(`/api/preview?shoot=${encodeURIComponent(shoot)}&id=${encodeURIComponent(id)}`); }
+  catch (e) { return alert("Could not load preview: " + e.message); }
+  $("pvPass").innerHTML = `<option value="">All passes</option>` +
+    (pv.data.sources || []).map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join("");
+  $("pvFilter").value = ""; $("pvCheckMsg").textContent = "";
+  $("pvDiscard").classList.toggle("hidden", !fromJob);
+  $("pvModal").classList.remove("hidden");
+  renderPreview();
+  if (pv.data.check && pv.data.check.status === "running") pollCheck();
+}
+
+function closePreview() { $("pvModal").classList.add("hidden"); clearTimeout(pv.timer); }
+
+function pvSelectedCount() {
+  let kw = 0; const frames = new Set();
+  for (const fr of pv.data.items || []) {
+    if (pv.exFiles.has(fr.filename)) continue;
+    for (const x of fr.add) {
+      if (pv.exKw.has(x.keyword) || ($("pvPass").value && x.pass !== $("pvPass").value)) continue;
+      kw++; frames.add(fr.filename);
+    }
+  }
+  return { kw, frames: frames.size };
+}
+
+function renderPreview() {
+  const d = pv.data; if (!d) return;
+  $("pvTitle").textContent = `Keyword preview · ${d.shoot}`;
+  const rev = Object.entries(d.needs_review_not_applied || {}).filter(([, n]) => n).map(([k, n]) => `${k} ${n}`).join(", ");
+  $("pvSummary").innerHTML = `${d.keywords_new} new keywords on ${d.frames_with_new} frames (${d.keywords_already} already there). ` +
+    `Passes: ${(d.sources || []).join(", ")}${(d.missing_sources || []).length ? ` · no results yet for ${d.missing_sources.join(", ")}` : ""}.` +
+    `${rev ? ` Not applied, sent to Review: ${escapeHtml(rev)}.` : ""} <br>Compared with: ${escapeHtml(d.compared_with || "")}. ` +
+    `Keywords are only ever added; ratings and colour tags are never changed.`;
+  const passF = $("pvPass").value;
+  const kwCounts = {};
+  for (const fr of d.items || []) for (const x of fr.add) if (!passF || x.pass === passF) kwCounts[x.keyword] = (kwCounts[x.keyword] || 0) + 1;
+  $("pvKeywords").innerHTML = Object.entries(kwCounts).sort((a, b) => b[1] - a[1]).map(([k, n]) =>
+    `<label class="inline pv-chip"><input type="checkbox" data-kw="${escapeHtml(k)}" ${pv.exKw.has(k) ? "" : "checked"} /> ${escapeHtml(k)} <span class="note">${n}</span></label>`
+  ).join("") || `<span class="note">Nothing new to add${passF ? " for this pass" : ""}.</span>`;
+  $("pvKeywords").querySelectorAll("[data-kw]").forEach(c => {
+    c.onchange = () => { c.checked ? pv.exKw.delete(c.dataset.kw) : pv.exKw.add(c.dataset.kw); renderPreview(); };
+  });
+  const q = $("pvFilter").value.trim().toLowerCase(), onlyNew = $("pvOnlyNew").checked;
+  const rows = (d.items || []).filter(fr => {
+    const add = fr.add.filter(x => !passF || x.pass === passF);
+    if (onlyNew && !add.length) return false;
+    if (!q) return true;
+    return fr.filename.toLowerCase().includes(q) || [...fr.add, ...fr.already].some(x => x.keyword.toLowerCase().includes(q));
+  });
+  const shown = rows.slice(0, 400);
+  $("pvRows").innerHTML = shown.map(fr => {
+    const add = fr.add.filter(x => !passF || x.pass === passF).map(x =>
+      `<span class="pv-tag ${pv.exKw.has(x.keyword) ? "off" : "new"}" title="${escapeHtml(x.pass)}">+ ${escapeHtml(x.keyword)}</span>`).join(" ");
+    const al = fr.already.map(x => `<span class="pv-tag old">${escapeHtml(x.keyword)}</span>`).join(" ");
+    return `<tr><td><input type="checkbox" data-file="${escapeHtml(fr.filename)}" ${pv.exFiles.has(fr.filename) ? "" : "checked"} /></td>
+      <td>${escapeHtml(fr.filename)}</td><td>${add || '<span class="note">none</span>'}</td><td>${al}</td></tr>`;
+  }).join("");
+  $("pvRows").querySelectorAll("[data-file]").forEach(c => {
+    c.onchange = () => { c.checked ? pv.exFiles.delete(c.dataset.file) : pv.exFiles.add(c.dataset.file); updatePvCount(rows.length, shown.length); };
+  });
+  updatePvCount(rows.length, shown.length);
+}
+
+function updatePvCount(nRows, nShown) {
+  const s = pvSelectedCount();
+  $("pvCount").textContent = `${nRows} frames match${nShown < nRows ? ` (first ${nShown} shown)` : ""} · selected to apply: ${s.kw} keywords on ${s.frames} frames`;
+  $("pvApprove").disabled = !s.kw;
+  $("pvApprove").textContent = s.kw ? `Approve & apply ${s.kw} keywords` : "Nothing selected";
+}
+
+async function pvRunCheck() {
+  try {
+    await api("/api/preview/check", { method: "POST", body: JSON.stringify({ shoot: pv.shoot, id: pv.id }) });
+    $("pvCheckMsg").textContent = "Checking against Capture One (read only)…";
+    pollCheck();
+  } catch (e) { $("pvCheckMsg").textContent = e.message; }
+}
+
+function pollCheck() {
+  clearTimeout(pv.timer);
+  pv.timer = setTimeout(async () => {
+    try {
+      const c = await api(`/api/preview/check_status?id=${encodeURIComponent(pv.id)}`);
+      if (c.status === "running") { $("pvCheckMsg").textContent = `Checking against Capture One… ${c.done_chunks || 0} chunks done`; return pollCheck(); }
+      if (c.status === "error") { $("pvCheckMsg").textContent = "Check failed: " + c.error; return; }
+      if (c.status === "done") {
+        pv.data = await api(`/api/preview?shoot=${encodeURIComponent(pv.shoot)}&id=${encodeURIComponent(pv.id)}`);
+        $("pvCheckMsg").textContent = `Checked against Capture One at ${c.finished}.`; renderPreview();
+      }
+    } catch (e) { $("pvCheckMsg").textContent = e.message; }
+  }, 3000);
+}
+
+async function pvApprove() {
+  const passF = $("pvPass").value;
+  const s = pvSelectedCount();
+  if (!s.kw) return;
+  if (!confirm(`Add ${s.kw} keywords to ${s.frames} frames in Capture One?\n\nKeywords are only added (nothing removed); ratings and colour tags are not touched. You can undo the job from History.`)) return;
+  const exclude_passes = passF ? (pv.data.sources || []).filter(x => x !== passF) : [];
+  try {
+    const r = await api("/api/preview/approve", { method: "POST", body: JSON.stringify({
+      shoot: pv.shoot, id: pv.id, confirm: true, exclude_keywords: [...pv.exKw], exclude_passes, exclude_files: [...pv.exFiles] }) });
+    closePreview();
+    alert(`Queued: ${r.approved.keywords} keywords on ${r.approved.frames} frames (job ${r.job.id}).`);
+    refresh();
+  } catch (e) { alert("Approve failed: " + e.message); }
+}
+
+async function pvDiscard() {
+  if (!confirm("Discard this preview? Nothing has been written; the job is closed without applying.")) return;
+  try { await api("/api/preview/discard", { method: "POST", body: JSON.stringify({ id: pv.id }) }); closePreview(); refresh(); }
+  catch (e) { alert(e.message); }
+}
+
+function wirePreview() {
+  if (!$("pvModal")) return;
+  if ($("previewNow")) $("previewNow").onclick = previewNow;
+  $("pvClose").onclick = closePreview;
+  $("pvFilter").oninput = renderPreview;
+  $("pvPass").onchange = renderPreview;
+  $("pvOnlyNew").onchange = renderPreview;
+  $("pvCheck").onclick = pvRunCheck;
+  $("pvApprove").onclick = pvApprove;
+  $("pvDiscard").onclick = pvDiscard;
+}
+wirePreview();
 
 async function start() {
   const u = new URL(location.href);

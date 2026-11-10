@@ -32,6 +32,7 @@ import profiles_ops as PR
 sys.path.insert(0, str(GUI))
 import review as RV  # race-number review queue (additive)
 import people_pass as PP  # face clusters / People/<Name>
+import preview_ops as PV  # keyword preview before apply
 
 JOBS.mkdir(parents=True, exist_ok=True)
 HISTORY.mkdir(parents=True, exist_ok=True)
@@ -438,6 +439,17 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 200, json.load(open(pf)) if pf.exists() else {"presets": []})
             if path == "/api/notify/status":
                 return _json(self, 200, NF.status())
+            if path == "/api/preview":
+                qs = parse_qs(u.query)
+                try:
+                    pv = PV.load((qs.get("shoot") or [""])[0], (qs.get("id") or [""])[0])
+                except FileNotFoundError:
+                    return _json(self, 404, {"error": "preview not found"})
+                pv["check"] = PV.check_status(pv["id"])
+                return _json(self, 200, pv)
+            if path == "/api/preview/check_status":
+                qs = parse_qs(u.query)
+                return _json(self, 200, PV.check_status((qs.get("id") or [""])[0]))
             if path == "/api/history/detail":
                 qs = parse_qs(u.query)
                 jid = (qs.get("id") or [""])[0]
@@ -629,6 +641,8 @@ class Handler(BaseHTTPRequestHandler):
                     # AF focus check (Canon AF points) inside the sharpness pass; off -> LOCALAI_AFPOINTS=0
                     "afpoints": bool(data.get("afpoints", True)),
                     "afpoints_annotate": max(0, min(50, int(data.get("afpoints_annotate") or 0))),
+                    # Keyword preview: run passes without writing, then wait for approval (awaiting_approval)
+                    "preview_before_apply": bool(data.get("preview_before_apply", False)),
                     "sample": int(data.get("sample") or 0),
                     "schedule_path": data.get("schedule_path") or "",
                     "camera_offset": data.get("camera_offset") or "",
@@ -642,6 +656,75 @@ class Handler(BaseHTTPRequestHandler):
                 json.dump(job, open(_job_path(jid), "w"), indent=1, ensure_ascii=False)
             ensure_worker()
             return _json(self, 200, {"ok": True, "job": job})
+
+        if path == "/api/preview/build":
+            folder = Path(data.get("folder") or "")
+            if not folder.is_dir():
+                return _json(self, 400, {"error": f"folder not found: {folder}"})
+            passes = [p for p in (data.get("passes") or []) if p in JR.PASS_BY_ID]
+            if not passes:
+                return _json(self, 400, {"error": "no valid passes"})
+            try:
+                pv = PV.build(str(folder), passes, data.get("profile") or "motorsport",
+                              afpoints=bool(data.get("afpoints", True)),
+                              apply_rank_keywords=bool(data.get("apply_rank_keywords", True)))
+            except Exception as e:
+                return _json(self, 500, {"error": str(e)})
+            return _json(self, 200, {"ok": True, "shoot": pv["shoot"], "id": pv["id"],
+                                     "keywords_new": pv["keywords_new"], "frames_with_new": pv["frames_with_new"]})
+
+        if path == "/api/preview/check":
+            try:
+                return _json(self, 200, {"ok": True, "check": PV.start_c1_check(data.get("shoot") or "", data.get("id") or "", RV.catalog_busy)})
+            except FileNotFoundError:
+                return _json(self, 404, {"error": "preview not found"})
+            except RuntimeError as e:
+                return _json(self, 409, {"error": str(e)})
+
+        if path == "/api/preview/approve":
+            shoot, pid = data.get("shoot") or "", data.get("id") or ""
+            if not data.get("confirm"):
+                return _json(self, 400, {"error": "confirm=true required"})
+            try:
+                ap = PV.approve(shoot, pid, data.get("exclude_keywords") or [], data.get("exclude_passes") or [],
+                                data.get("exclude_files") or [])
+            except FileNotFoundError:
+                return _json(self, 404, {"error": "preview not found"})
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
+            jid = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+            folder = Path(ap["folder"])
+            with _QUEUE_LOCK:
+                job = {"id": jid, "folder": str(folder), "folder_name": folder.name, "profile": ap["profile"],
+                       "context": "", "passes": ap["passes"], "apply_each": True, "dry_run": False,
+                       "apply_only": True, "approved_plan": ap["plan_path"], "preview_of": pid,
+                       "ocr_missing_car_number": False, "apply_rank_keywords": True, "sample": 0,
+                       "status": "queued", "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                       "queue_order": _next_queue_order(), "log": [], "pass_results": {}, "added_keywords": {}}
+                json.dump(job, open(_job_path(jid), "w"), indent=1, ensure_ascii=False)
+                src = _job_path(pid)
+                if src.exists():
+                    j = json.load(open(src))
+                    if j.get("status") == "awaiting_approval":
+                        j["status"] = "done"; j["approved_job"] = jid
+                        j["approved"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                        json.dump(j, open(src, "w"), indent=1, ensure_ascii=False)
+                        _archive_if_done(j)
+            ensure_worker()
+            return _json(self, 200, {"ok": True, "job": job, "approved": ap})
+
+        if path == "/api/preview/discard":
+            p = _job_path(data.get("id") or "")
+            if not p.exists():
+                return _json(self, 404, {"error": "not found"})
+            with _QUEUE_LOCK:
+                j = json.load(open(p))
+                if j.get("status") != "awaiting_approval":
+                    return _json(self, 409, {"error": "job is not awaiting approval"})
+                j["status"] = "done"; j["preview_discarded"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+                json.dump(j, open(p, "w"), indent=1, ensure_ascii=False)
+                _archive_if_done(j)
+            return _json(self, 200, {"ok": True})
 
         if path == "/api/queue/reorder":
             order = data.get("order") or []  # list of job ids for queued ones

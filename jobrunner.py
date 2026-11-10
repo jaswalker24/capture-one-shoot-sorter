@@ -140,7 +140,8 @@ def _apply_pass(state, folder: Path, pass_id: str, profile: str, apply: bool):
     if pass_id == "sharpness" and state.get("afpoints", True) and not state.get("sample"):
         prop = _proposal_file(folder, "afpoints", profile)
         if prop and prop.stat().st_mtime >= (state.get("_pass_t0") or 0) - 5:
-            n_missed = sum(1 for r in json.load(open(prop)).get("images", []) if r.get("needs_review"))
+            n_missed = sum(1 for r in json.load(open(prop)).get("images", [])
+                           if r.get("needs_review") or "General/Focus/Missed" in (r.get("proposed_keywords") or []))
             af = _apply_source(state, folder, "afpoints", profile, apply, label="sharpness-afpoints")
             af["missed_to_review"] = n_missed
             log(state, f"AF focus check: {n_missed} Missed frames sent to Review (not applied)")
@@ -167,6 +168,9 @@ def _apply_source(state, folder: Path, pass_id: str, profile: str, apply: bool, 
     # Chunk large sets
     data = json.load(open(prop))
     images = [r for r in data.get("images", []) if r.get("proposed_keywords") and not r.get("needs_review") and not r.get("error")]
+    if pass_id == "afpoints":
+        # AF focus Missed goes to the Review screen, never straight to the catalog (also for older proposals files)
+        images = [r for r in images if "General/Focus/Missed" not in (r.get("proposed_keywords") or [])]
     if pass_id == "rank":
         # calibrated tiers only (legacy General/Score/* buckets are retired)
         images = [r for r in images if any(k.startswith("General/Rank/") for k in r.get("proposed_keywords") or [])]
@@ -190,6 +194,39 @@ def _apply_source(state, folder: Path, pass_id: str, profile: str, apply: bool, 
     out = {"applied_keywords": total_applied, "variants": len(variants), "failures": failures, "dry_run": not apply}
     log(state, f"apply {pass_id}:", out)
     return out
+
+
+def _apply_approved(state, folder: Path, apply: bool):
+    """apply_only job: apply exactly the keyword plan approved in the Keyword preview (nothing else)."""
+    from apply_c1 import apply_proposals
+    plan = json.load(open(state["approved_plan"]))["plan"]
+    stamp = time.strftime("%H%M%S")
+    state.setdefault("undo_result_files", []); state.setdefault("added_keywords", {})
+    for src, images in plan.items():
+        if state.get("cancel_requested"):
+            raise RuntimeError("cancelled")
+        state["current_pass"] = src
+        log(state, f"APPLY approved {src}: {len(images)} frames")
+        tot = fails = 0; variants = set()
+        for i in range(0, len(images), 200):
+            cf = OUT / folder.name / f"gui-approved-{src}-{state['id']}-chunk-{i // 200:03d}.json"
+            json.dump({"folder": str(folder), "images": images[i:i + 200]}, open(cf, "w"))
+            prefix = str(OUT / folder.name / f"gui-apply-{src}-approved-{state['id']}-{stamp}-c{i // 200:03d}")
+            res = apply_proposals(str(cf), apply=apply, prefix=prefix)
+            tot += len(res.get("applied", [])); fails += len(res.get("failures", []))
+            variants.update(a["filename"] for a in res.get("applied", []))
+            if apply:
+                state["undo_result_files"].append(prefix + "-result.json")
+                for a in res.get("applied") or []:
+                    fn, kw = a.get("filename"), a.get("keyword")
+                    if fn and kw and not a.get("dry"):
+                        lst = state["added_keywords"].setdefault(fn, [])
+                        if kw not in lst: lst.append(kw)
+            state["progress"] = {"pass": src, "n": min(i + 200, len(images)), "total": len(images), "line": ""}
+            _save(state)
+        out = {"applied_keywords": tot, "variants": len(variants), "failures": fails, "dry_run": not apply}
+        state["pass_results"][src] = {"apply": out}
+        log(state, f"apply approved {src}:", out)
 
 
 def folder_already_indexed(folder: Path) -> bool:
@@ -236,6 +273,13 @@ def run_job(state_path: Path):
     apply_each = bool(state.get("apply_each", True))
     dry_run = bool(state.get("dry_run", False))
     apply = apply_each and not dry_run
+    # Keyword preview: run the passes without writing, then wait for approval in the panel
+    preview_first = bool(state.get("preview_before_apply")) and not dry_run and not state.get("apply_only")
+    apply_only = bool(state.get("apply_only"))
+    if preview_first:
+        apply_each = False; apply = False
+    if apply_only:
+        apply = not dry_run
     ocr_missing_only = bool(state.get("ocr_missing_car_number", False)) and profile == "motorsport"
     sample = int(state.get("sample") or 0)
     passes = ensure_pass_order([p for p in state.get("passes") or DEFAULT_ORDER if p in PASS_BY_ID], folder)
@@ -253,9 +297,9 @@ def run_job(state_path: Path):
         # Full-catalog snapshot is expensive (and can stall while another C1 job runs).
         # Skip for sample jobs; for full jobs, time out after 90s so the queue does not hang.
         before_path = out / f"gui-flags-before-{state['id']}.json"
-        if sample or dry_run:
-            log(state, "snapshot before skipped (sample/dry-run)")
-            state["snapshot_before_skipped"] = "sample" if sample else "dry_run"
+        if sample or dry_run or preview_first:
+            log(state, "snapshot before skipped (sample/dry-run/preview)")
+            state["snapshot_before_skipped"] = "sample" if sample else ("dry_run" if dry_run else "preview")
         else:
             try:
                 log(state, "snapshot before, this folder only (180s timeout)...")
@@ -274,7 +318,9 @@ def run_job(state_path: Path):
                 log(state, "snapshot before skipped:", e)
                 state["snapshot_before_error"] = str(e)
 
-        for i, pid in enumerate(passes):
+        if apply_only:
+            _apply_approved(state, folder, apply)
+        for i, pid in enumerate([] if apply_only else passes):
             if state.get("cancel_requested"):
                 raise RuntimeError("cancelled")
             state["current_pass"] = pid
@@ -398,9 +444,9 @@ def run_job(state_path: Path):
             log(state, f"PASS done {pid} in {elapsed}s")
 
         # verify stars/colours unchanged (skip for sample jobs)
-        if sample or dry_run:
-            log(state, "verify skipped (sample/dry-run)")
-            state["verify_skipped"] = "sample" if sample else "dry_run"
+        if sample or dry_run or preview_first:
+            log(state, "verify skipped (sample/dry-run/preview)")
+            state["verify_skipped"] = "sample" if sample else ("dry_run" if dry_run else "preview")
         else:
             try:
                 after_path = out / f"gui-flags-after-{state['id']}.json"
@@ -430,6 +476,19 @@ def run_job(state_path: Path):
                 log(state, "verify skipped:", e)
 
         state["status"] = "cancelled" if state.get("cancel_requested") else "done"
+        if preview_first and state["status"] == "done":
+            try:
+                sys.path.insert(0, str(HOME / "gui"))
+                import preview_ops
+                pv = preview_ops.build(str(folder), passes, profile, afpoints=state.get("afpoints", True),
+                                       apply_rank_keywords=state.get("apply_rank_keywords", True), job_id=state["id"])
+                state["preview_id"] = pv["id"]
+                state["preview_summary"] = {k: pv[k] for k in ("frames_with_new", "keywords_new", "keywords_already", "by_pass")}
+                state["status"] = "awaiting_approval"
+                log(state, f"PREVIEW ready: {pv['keywords_new']} new keywords on {pv['frames_with_new']} frames; "
+                           "nothing written until approved in the panel")
+            except Exception as e:
+                state["preview_error"] = str(e); log(state, "preview build failed:", e)
         state["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         state["current_pass"] = None
         log(state, "FINISHED", state["status"])

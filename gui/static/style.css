@@ -101,3 +101,18 @@ table.data th { color:var(--muted); font-weight:600; }
 .health { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:16px; }
 .preset-row { display:flex; gap:8px; align-items:center; justify-content:space-between; padding:8px 10px; border:1px solid var(--border); border-radius:8px; margin-bottom:6px; background:var(--panel2); }
 textarea.code { font-family:ui-monospace, Menlo, monospace; font-size:12px; min-height:120px; width:100%; }
+
+/* keyword preview modal */
+.modal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: flex; align-items: flex-start; justify-content: center; padding: 30px 12px; z-index: 50; overflow: auto; }
+.modal.hidden { display: none; }
+.modal-box { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px 18px; width: min(1100px, 100%); }
+.pv-h { font-size: 13px; margin: 10px 0 6px; color: var(--muted); font-weight: 600; }
+.pv-kw { display: flex; flex-wrap: wrap; gap: 6px 14px; max-height: 180px; overflow: auto; padding: 6px 0; }
+.pv-kw label.inline { font-size: 12px; }
+.pv-table { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+.pv-table td { vertical-align: top; font-size: 12px; }
+.pv-tag { display: inline-block; margin: 1px 6px 1px 0; padding: 1px 6px; border-radius: 6px; background: rgba(61,214,140,.14); }
+.pv-tag.old { background: rgba(127,127,127,.15); color: var(--muted); }
+.pv-tag.off { text-decoration: line-through; opacity: .45; }
+.pv-chip .note { margin-left: 2px; }
+.badge.awaiting_approval { color: var(--warn); border-color: #6b5a2f; }

@@ -21,5 +21,25 @@
     "BrandsHatch|Britcar|Silverstone|Donington|Snetterton|Oulton|Thruxton|Goodwood|Fuji Speedway|Suzuka|Motegi": "motorsport",
     "Kyoto|Gion|Arashiyama|Fushimi": "kyoto"
   },
-  "camera_utc_offset": null
+  "camera_utc_offset": null,
+  "rank": {
+    "weights": {
+      "sharp": 0.5,
+      "aes": 0.15,
+      "burst_best": 0.3,
+      "burst_other": 0.1,
+      "blur": 0.3
+    },
+    "previous_weights": {
+      "sharp": 0.5,
+      "aes": 0.15,
+      "burst_best": 0.3,
+      "burst_other": 0.1,
+      "blur": 0.3
+    },
+    "best_pct": 0.1,
+    "good_pct": 0.2,
+    "min_rated_for_calibration": 10,
+    "source": "brandshatch-stars-2026-11-09"
+  }
 }

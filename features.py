@@ -476,7 +476,7 @@ def score_bucket_percentile(rank_index, n):
     score = int(round(10 - 9 * pct_from_top))
     return str(max(1, min(10, score)))
 
-RANK_DEFAULTS = {  # calibrated 2026-11-09 on Brands Hatch against star ratings in that catalog (override in config.json "rank")
+RANK_DEFAULTS = {  # calibrated 2026-11-09 on Brands Hatch against 3★+ ratings in that catalog (AUC 0.80). Export-informed retraining on 2026-11-10 did not beat this on held-out shoots, so these stay the default. Override or roll back via config.json "rank" (weights / previous_weights).
     "weights": {"sharp": 0.5, "aes": 0.15, "burst_best": 0.3, "burst_other": 0.1, "blur": 0.3},
     "best_pct": 0.10,   # top 10% of the shoot -> General/Rank/Best
     "good_pct": 0.20,   # next 20%             -> General/Rank/Good

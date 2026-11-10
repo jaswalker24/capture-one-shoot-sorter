@@ -15,6 +15,7 @@ bin/uvx
 bin/exiftool
 tools/*
 !tools/reapply_folder.py
+!tools/train_rank_exports.py
 
 # Working data (never commit)
 cache/

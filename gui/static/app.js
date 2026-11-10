@@ -636,17 +636,34 @@ async function loadAutoqueue() {
   $("aqPreview").checked = !!s.preview_before_apply;
   $("aqProfile").innerHTML = (s.profiles || []).map(p =>
     `<option value="${escapeHtml(p.id)}" ${p.id === s.profile_id ? "selected" : ""}>${escapeHtml(p.name || p.id)}</option>`).join("");
+  if ($("aqCutoff") && s.cutoff) $("aqCutoff").value = String(s.cutoff).slice(0, 16);
   const waiting = Object.entries(s.waiting || {}).map(([k, v]) => `${escapeHtml(k)}: ${escapeHtml(v.why_waiting || "waiting")} (${v.sig ? v.sig.n : 0} images)`);
   const queued = Object.entries(s.queued || {}).slice(-5).map(([k, v]) => `${escapeHtml(k)} → ${escapeHtml(v)}`);
   $("aqStatus").innerHTML = `${s.enabled ? "On" : "Off"}${s.nas_mounted ? "" : " · NAS not mounted"}` +
+    `${s.cutoff ? ` · last-run cutoff ${escapeHtml(s.cutoff)} ${escapeHtml(s.cutoff_tz || "Europe/London")}` : ""}` +
     `${s.last_poll ? ` · last look ${escapeHtml(s.last_poll)}` : ""}${s.next_poll ? ` · next ~${escapeHtml(s.next_poll)}` : ""}` +
     `${waiting.length ? `<br>Waiting: ${waiting.join("; ")}` : ""}${queued.length ? `<br>Queued: ${queued.join("; ")}` : ""}` +
     `${(s.events || []).length ? `<br><span class="note">${s.events.slice(-4).map(escapeHtml).join("<br>")}</span>` : ""}`;
+  const prev = s.preview || [];
+  if ($("aqPreviewList")) {
+    $("aqPreviewList").innerHTML = prev.length
+      ? `<strong>Would be picked up next</strong> (${prev.length}):<br>` + prev.map(f =>
+          `${escapeHtml(f.folder)} · ${f.images} images · ${escapeHtml(f.why)}${f.waiting ? ` · ${escapeHtml(f.waiting)}` : ""}`
+        ).join("<br>")
+      : `<span class="note">Nothing newer than the cutoff would be picked up right now.</span>`;
+  }
 }
+if ($("aqCutoffNow")) $("aqCutoffNow").onclick = () => {
+  const d = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  // datetime-local is timezone-naive; the M5 / this browser should already be Europe/London.
+  $("aqCutoff").value = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 if ($("aqSave")) $("aqSave").onclick = async () => {
   try {
     await api("/api/autoqueue/set", { method: "POST", body: JSON.stringify({
-      enabled: $("aqEnabled").checked, profile_id: $("aqProfile").value, preview_before_apply: $("aqPreview").checked }) });
+      enabled: $("aqEnabled").checked, profile_id: $("aqProfile").value,
+      preview_before_apply: $("aqPreview").checked, cutoff: $("aqCutoff") && $("aqCutoff").value }) });
     await loadAutoqueue();
   } catch (e) { alert(e.message); }
 };

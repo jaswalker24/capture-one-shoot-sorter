@@ -245,6 +245,10 @@ def _archive_if_done(job):
         if src.exists():
             dest.write_text(src.read_text())
             # keep a stub in jobs? leave the file; UI filters. Optionally remove from active list via status.
+        try:
+            AQ.note_job(job)
+        except Exception:
+            pass
 
 
 def _worker_loop():
@@ -520,6 +524,7 @@ class Handler(BaseHTTPRequestHandler):
                 st = AQ.status()
                 st["profiles"] = [{"id": p.get("id"), "name": p.get("name")} for p in PR.list_profiles()
                                   if p.get("kind", "catalog") != "exports"]
+                st["preview"] = AQ.preview(_folders_with_jobs)
                 return _json(self, 200, st)
             if path == "/api/notify/status":
                 return _json(self, 200, NF.status())
@@ -922,7 +927,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/autoqueue/set":
             if data.get("profile_id") and not PR.get_profile(data["profile_id"]):
                 return _json(self, 400, {"error": "unknown profile"})
-            return _json(self, 200, {"ok": True, "status": AQ.enable(data)})
+            try:
+                return _json(self, 200, {"ok": True, "status": AQ.enable(data)})
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
 
         if path == "/api/autoqueue/poll_now":
             if not AQ.load_cfg()["enabled"]:

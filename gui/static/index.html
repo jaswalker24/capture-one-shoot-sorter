@@ -235,15 +235,20 @@
       </section>
       <section class="card">
         <h2>Auto-queue new shoots</h2>
-        <p class="note">Every ~30 minutes, in step with Capture One referencing new imports, looks in <code>[03] Photos/Camera Imports/&lt;year&gt;/</code> for new <code>YYYY-MM-DD…</code> folders. A new folder is queued with the profile below once Capture One has it, or once it has stopped changing (same images on two looks in a row). Folders that exist when you switch this on, and folders that already have a job, are left alone. Off by default.</p>
+        <p class="note">When this is on, every ~30 minutes (in step with Capture One referencing new imports) the panel looks in <code>[03] Photos/Camera Imports/&lt;year&gt;/</code> for <code>YYYY-MM-DD…</code> folders newer than the last-run cutoff below. A folder is newer if its date is after the cutoff day, or it is a same-day folder created after the cutoff time. It is only queued once Capture One has referenced it <em>and</em> the folder has stopped changing. Already-run folders and folders that already have a job are left alone. Off by default. Times are Europe/London.</p>
         <div class="row">
           <label class="inline"><input type="checkbox" id="aqEnabled" /> Auto-queue new shoots</label>
           <label>Profile <select id="aqProfile"></select></label>
           <label class="inline"><input type="checkbox" id="aqPreview" /> Preview keywords before applying</label>
+        </div>
+        <div class="row">
+          <label>Last-run cutoff <input type="datetime-local" id="aqCutoff" step="60" /></label>
+          <button type="button" class="secondary" id="aqCutoffNow">Set to now</button>
           <button id="aqSave">Save</button>
           <button class="secondary" id="aqPoll">Check now</button>
         </div>
         <div id="aqStatus" class="note"></div>
+        <div id="aqPreviewList" class="note"></div>
       </section>
     </div>
 

@@ -177,7 +177,7 @@ or **Scripts → Trips Local AI → Draft Captions (Exports)** with export files
 ~/localai/
   tag                 wrapper command
   tagger.py           main tagger
-  features.py         bursts, rank, sharpness, OCR, search, faces, captions, …
+  features.py         bursts, rank, sharpness, OCR, search, faces, scene, captions, …
   fullrun.py          whole-shoot pipeline (no captions)
   schedule_tag.py     gig schedule matcher
   apply_c1.py/.js     additive Capture One writer
@@ -213,7 +213,7 @@ Rebuild the tab-indented list and CSV:
 ~/localai/venv/bin/python ~/localai/keywords/build_library.py
 ```
 
-Then re-import `trip-keyword-library.txt` into the **Trip Keywords** library in Capture One. The builder includes motorsport, gig, Kyoto, Japan, aviation, wildlife, static vehicles, film, general quality flags, and the confirmed Japan November 2026 event / venue / act names.
+Then re-import `trip-keyword-library.txt` into the **Trip Keywords** library in Capture One. The builder includes motorsport, gig, Kyoto, Japan, aviation, wildlife, static vehicles, film, general quality flags, Focus and Rank, generalised `General/Scene/*` keywords, and the confirmed Japan November 2026 event / venue / act names. New names can also be imported from a tab-indented `keywords/delta-*.txt` without replacing the rest of the library.
 
 ---
 
@@ -335,11 +335,12 @@ Selection for most commands: a folder, `--files a.CR3 b.CR3`, `--sample N`, or `
 | `journal <folder>` | Writes a markdown day summary to `out/<folder>/journal.md` | qwen3:8b (think off) | 5.2 GB | about 20 s |
 | `ask "question" [--folder F]` | Answers from the index (search plus proposals and OCR context) and lists supporting frames | qwen3:8b | — | 9–12 s |
 | `faces <folder>` | Groups faces anonymously (Person 001…) into `out/faces/faces.csv` with contact sheets | Apple Vision detect + ArcFace w600k_mbf (buffalo_s) + DBSCAN | 13.6 MB | about 0.3 s/image (12 gig frames in 4 s) |
+| `scene <folder> [--sample N] [--sheets]` | Generalised multi-label scene/subject keywords under `General/Scene/*` (architecture, street, concert, motorsport, temple, food, …). Conservative per-label thresholds, cap of 6 labels per frame. Writes `scene-proposals.json` and optional contact sheets. No caption model. | SigLIP (index embeddings when present) | (shared) | about 0.01 s/image from index; first load a few seconds |
 | `name-person 3 "label"` | Gives an anonymous group a local label (your own; nothing is looked up) | — | — | — |
 | `schedule <folder> [--schedule F] [--camera-offset +09:00]` | Matches capture time to the gig schedule, writing `Gig/Event`, `Venue`, `Act`, `Cheki`, `Meet & Greet` and `Changeover` | exiftool 13.61 | ~10 MB (bin/) | one exiftool call per batch |
 | `captions --files <exports>` | **Export-only.** Writes draft captions to `out/salamander/captions-<time>.json`. It refuses anything not under `Camera Exports/` | qwen2.5vl:3b | 3.2 GB | about 3 s/image |
 
-Feature proposals are written to `out/<folder>/{sharpness,bursts,rank,ocr,schedule}-proposals.json`. They are apply_c1-compatible: `venv/bin/python apply_c1.py <file> [--apply]`.
+Feature proposals are written to `out/<folder>/{sharpness,bursts,rank,ocr,schedule,scene,people}-proposals.json`. They are apply_c1-compatible: `venv/bin/python apply_c1.py <file> [--apply]`.
 
 Face grouping is anonymous and local. Nobody is identified, and no lookups or cloud calls are made. Delete `index/faces*` and the faces tables to forget the groups.
 
@@ -355,7 +356,7 @@ These are in `~/Library/Scripts/Capture One Scripts/Trips Local AI/`, with sourc
 
 ### Full-folder run (resumable)
 `nohup nice -n 10 venv/bin/python fullrun.py "<folder>" --profile motorsport --context "…" > logs/fullrun/<name>.log &`
-The steps are: rating and colour snapshot → tagger (`--resume`) → index → sharpness → bursts → rank → OCR (`--resume`) → merge of all proposals → apply in chunks of 200 → after snapshot and diff.
+The steps are: rating and colour snapshot → tagger (`--resume`) → scene → index → sharpness → bursts → rank → OCR (`--resume`) → merge of all proposals → apply in chunks of 200 → after snapshot and diff.
 Progress is kept in `out/<folder>/fullrun-state.json`. Re-running the same command resumes from the first unfinished step or chunk. Draft captions are never part of it.
 
 ### Limitations

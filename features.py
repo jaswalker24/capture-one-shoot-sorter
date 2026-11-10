@@ -12,6 +12,7 @@ Local AI features for this Mac (all on-device, originals read-only).
   ask        question answering over the local index (local LLM, simple RAG)
   faces      People pass: detect + embed + cluster + match ~/localai/people library
   name-person  name a cluster (writes persistent people library; use --shoot)
+  scene      General/Scene/* keywords (architecture, street, concert, motorsport, …)
   captions   draft captions (sidecar JSON for Salamander)
 Index: ~/localai/index/catalog.sqlite (+ index/siglip/*.npy, keyed by SHA-256).
 """
@@ -793,6 +794,20 @@ def cmd_schedule(args):
     print(f"schedule: {len(files)} frames; events {dict(ev)}; needs_review {sum(r['needs_review'] for r in data['images'])}; -> {f}")
     return f
 
+# ------------------------------------------------------------------ scene
+def cmd_scene(args):
+    """Generalised scene/subject keywords (General/Scene/*). Proposals only."""
+    import scene_pass as SP
+    files = resolve_files(args) if (args.folder or args.files) else []
+    if not files and not args.folder:
+        print("scene: no images"); return
+    folder = Path(args.folder).resolve() if args.folder else Path(files[0]).parent
+    tag = getattr(args, "tag", "") or ""
+    SP.run_scene_pass(folder, files=files or None, sample=0,
+                      resume=bool(getattr(args, "resume", False)),
+                      tag=tag, max_labels=getattr(args, "max_labels", None),
+                      sheets=bool(getattr(args, "sheets", False)))
+
 # ------------------------------------------------------------------ main
 def main():
     ap = argparse.ArgumentParser(prog="tag", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -815,6 +830,11 @@ def main():
     p = sp.add_parser("ask"); p.add_argument("question"); p.add_argument("--top", type=int, default=25); p.set_defaults(fn=cmd_ask)
     p = sp.add_parser("faces"); sel(p); p.set_defaults(fn=cmd_faces)
     p = sp.add_parser("name-person"); p.add_argument("person", type=int); p.add_argument("name"); p.add_argument("--shoot", help="shoot folder name under out/ (preferred)"); p.set_defaults(fn=cmd_name_person)
+    p = sp.add_parser("scene"); sel(p); p.add_argument("--resume", action="store_true")
+    p.add_argument("--tag", default="")
+    p.add_argument("--max-labels", type=int, default=None)
+    p.add_argument("--sheets", action="store_true", help="write per-label contact sheets under out/<folder>/scene/")
+    p.set_defaults(fn=cmd_scene)
     a = ap.parse_args(); a.fn(a)
 
 if __name__ == "__main__":

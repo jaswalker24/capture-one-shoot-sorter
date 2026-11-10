@@ -30,12 +30,14 @@ PASSES = [
     {"id": "ocr", "label": "Read Text in Frame", "needs_index": False},
     {"id": "people", "label": "People (faces)", "needs_index": False,
      "note": "Local face clusters + People/<Name> keywords. Off by default; name clusters in the People tab first."},
+    {"id": "scene", "label": "Scene (general keywords)", "needs_index": False,
+     "note": "General/Scene/* multi-label tags (architecture, street, concert, motorsport, temple, food, …). Local SigLIP, conservative thresholds."},
     {"id": "schedule", "label": "Tag by Schedule", "needs_index": False},
     {"id": "cull", "label": "Cull smart albums", "needs_index": False,
      "note": "Smart albums in group 'Trips Local AI': Sharp + Burst Best, Rank Best, Shortlist (no blur). Collections only."},
 ]
 PASS_BY_ID = {p["id"]: p for p in PASSES}
-DEFAULT_ORDER = ["tagger", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"]
+DEFAULT_ORDER = ["tagger", "scene", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"]
 
 
 def log(state, *a):
@@ -106,6 +108,7 @@ def _proposal_file(folder: Path, pass_id: str, profile: str) -> Path | None:
         "rank": fo / "rank-proposals.json",
         "ocr": fo / "ocr-proposals.json",
         "people": fo / "people-proposals.json",
+        "scene": fo / "scene-proposals.json",
         "schedule": fo / "schedule-proposals.json",
         "afpoints": fo / "afpoints-proposals.json",
     }
@@ -385,6 +388,12 @@ def run_job(state_path: Path):
 
             elif pid == "people":
                 cmd = [TAG, "faces", str(folder)]
+                if sample:
+                    cmd += ["--sample", str(sample)]
+                _run_streaming(state, cmd, pass_id=pid)
+
+            elif pid == "scene":
+                cmd = [TAG, "scene", str(folder)]
                 if sample:
                     cmd += ["--sample", str(sample)]
                 _run_streaming(state, cmd, pass_id=pid)

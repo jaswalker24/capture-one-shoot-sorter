@@ -17,9 +17,9 @@ SHOOT_TYPES = [
 ]
 
 PASS_BUNDLES = {
-    "Quick": ["tagger", "sharpness", "bursts"],
-    "Standard": ["tagger", "index", "sharpness", "bursts", "rank", "schedule", "cull"],
-    "Full": ["tagger", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"],
+    "Quick": ["tagger", "scene", "sharpness", "bursts"],
+    "Standard": ["tagger", "scene", "index", "sharpness", "bursts", "rank", "schedule", "cull"],
+    "Full": ["tagger", "scene", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"],
     "Schedule tags only": ["schedule"],
     "Exports captions": ["captions"],
     "Custom": [],
@@ -39,7 +39,7 @@ KEYWORD_SETS = {
     "Wildlife": ["Wildlife/Wild"],
     "Aviation": ["Aviation/Airshow"],
     "Temple/travel": ["Japan/Temple", "Kyoto/Landscape"],
-    "Street": ["General/Street"],
+    "Street": ["General/Scene/Street"],
     "Exports only": [],
 }
 

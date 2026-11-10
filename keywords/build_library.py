@@ -43,7 +43,7 @@ tree = {
  "General": {
   "Light": L("Golden Hour","Blue Hour","Night","Backlit"),
   "Weather": L("Rain","Fog","Snow","Sun"),
-  "Quality": L("Sharp","Motion Blur","Soft Focus","Noise"),
+  "Quality": L("Sharp","Motion Blur","Soft Focus","Noise","Clipped Highlights","Crushed Shadows"),
   "Use": L("Portfolio","Social","Client","Archive","Reject Candidate"),
   "Orientation": L("Portrait","Landscape","Square"),
  },
@@ -55,6 +55,13 @@ _extra = {
   "Burst Best": [],
   "Score": ["Below 5", "5", "6", "7", "8+"],
   "Rank": ["Best", "Good"],
+  "Focus": ["On Target", "Missed"],
+  "Scene": [
+    "Architecture","Street","Alley","Cityscape","Landscape","Nature","Sky","Water","River",
+    "Mountain","Garden","Bridge","Interior","Shop","Market","Station","Night","Sunset","Rain",
+    "Temple","Shrine","Food","Signage","Neon","Transport","Vehicle","Motorbike","Train",
+    "People","Portrait","Crowd","Animal","Stage","Concert","Festival","Motorsport","Abstract","Detail",
+  ],
  },
  "Gig": {
   "Cheki": [],
@@ -103,6 +110,10 @@ def _merge_extra(dst, extra):
                 elif isinstance(cv, list) and isinstance(node[ck], dict):
                     for x in cv:
                         node[ck].setdefault(x, [])
+                elif isinstance(cv, list) and isinstance(node[ck], list):
+                    for x in cv:
+                        if x not in node[ck]:
+                            node[ck].append(x)
                 elif isinstance(cv, dict) and isinstance(node[ck], dict):
                     _merge_extra({ck: node[ck]}, {ck: cv})
                     node[ck] = node[ck]

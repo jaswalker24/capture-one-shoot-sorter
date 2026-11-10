@@ -1254,6 +1254,8 @@ General|Quality|Sharp,General/Quality/Sharp,3,General
 General|Quality|Motion Blur,General/Quality/Motion Blur,3,General
 General|Quality|Soft Focus,General/Quality/Soft Focus,3,General
 General|Quality|Noise,General/Quality/Noise,3,General
+General|Quality|Clipped Highlights,General/Quality/Clipped Highlights,3,General
+General|Quality|Crushed Shadows,General/Quality/Crushed Shadows,3,General
 General|Use,General/Use,2,General
 General|Use|Portfolio,General/Use/Portfolio,3,General
 General|Use|Social,General/Use/Social,3,General
@@ -1271,3 +1273,48 @@ General|Score|5,General/Score/5,3,General
 General|Score|6,General/Score/6,3,General
 General|Score|7,General/Score/7,3,General
 General|Score|8+,General/Score/8+,3,General
+General|Rank,General/Rank,2,General
+General|Rank|Best,General/Rank/Best,3,General
+General|Rank|Good,General/Rank/Good,3,General
+General|Focus,General/Focus,2,General
+General|Focus|On Target,General/Focus/On Target,3,General
+General|Focus|Missed,General/Focus/Missed,3,General
+General|Scene,General/Scene,2,General
+General|Scene|Architecture,General/Scene/Architecture,3,General
+General|Scene|Street,General/Scene/Street,3,General
+General|Scene|Alley,General/Scene/Alley,3,General
+General|Scene|Cityscape,General/Scene/Cityscape,3,General
+General|Scene|Landscape,General/Scene/Landscape,3,General
+General|Scene|Nature,General/Scene/Nature,3,General
+General|Scene|Sky,General/Scene/Sky,3,General
+General|Scene|Water,General/Scene/Water,3,General
+General|Scene|River,General/Scene/River,3,General
+General|Scene|Mountain,General/Scene/Mountain,3,General
+General|Scene|Garden,General/Scene/Garden,3,General
+General|Scene|Bridge,General/Scene/Bridge,3,General
+General|Scene|Interior,General/Scene/Interior,3,General
+General|Scene|Shop,General/Scene/Shop,3,General
+General|Scene|Market,General/Scene/Market,3,General
+General|Scene|Station,General/Scene/Station,3,General
+General|Scene|Night,General/Scene/Night,3,General
+General|Scene|Sunset,General/Scene/Sunset,3,General
+General|Scene|Rain,General/Scene/Rain,3,General
+General|Scene|Temple,General/Scene/Temple,3,General
+General|Scene|Shrine,General/Scene/Shrine,3,General
+General|Scene|Food,General/Scene/Food,3,General
+General|Scene|Signage,General/Scene/Signage,3,General
+General|Scene|Neon,General/Scene/Neon,3,General
+General|Scene|Transport,General/Scene/Transport,3,General
+General|Scene|Vehicle,General/Scene/Vehicle,3,General
+General|Scene|Motorbike,General/Scene/Motorbike,3,General
+General|Scene|Train,General/Scene/Train,3,General
+General|Scene|People,General/Scene/People,3,General
+General|Scene|Portrait,General/Scene/Portrait,3,General
+General|Scene|Crowd,General/Scene/Crowd,3,General
+General|Scene|Animal,General/Scene/Animal,3,General
+General|Scene|Stage,General/Scene/Stage,3,General
+General|Scene|Concert,General/Scene/Concert,3,General
+General|Scene|Festival,General/Scene/Festival,3,General
+General|Scene|Motorsport,General/Scene/Motorsport,3,General
+General|Scene|Abstract,General/Scene/Abstract,3,General
+General|Scene|Detail,General/Scene/Detail,3,General

@@ -22,10 +22,42 @@ class StemTests(unittest.TestCase):
         self.assertEqual(R.canonical_stem("_A3A1913-Edit.jpg"), "_A3A1913")
         self.assertEqual(R.canonical_stem("_A3A1913-Enhanced-NR.jpg"), "_A3A1913")
         self.assertEqual(R.canonical_stem("AA7O9866-Enhanced-NR.jpg"), "AA7O9866")
+        self.assertEqual(R.canonical_stem("AA7O1171 (1).jpg"), "AA7O1171")
+        self.assertEqual(R.canonical_stem("AA7O0146-1.jpg"), "AA7O0146")
+        self.assertEqual(R.canonical_stem("AA7O0078-2.jpg"), "AA7O0078")
+        self.assertEqual(R.canonical_stem("029A4324-2.JPG"), "029A4324")
+        self.assertEqual(R.canonical_stem("AA7O9827-Enhanced-NR.jpg"), "AA7O9827")
 
     def test_renamed_kept(self):
         self.assertEqual(R.canonical_stem("Mk1 Escort.jpg"), "Mk1 Escort")
         self.assertEqual(R.canonical_stem("Britcar Porsche.jpg"), "Britcar Porsche")
+
+
+class DiscoverEventTests(unittest.TestCase):
+    def test_year_exports_event_and_loose(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            bucket = root / "2025 Exports"
+            (bucket / "2025-CSF2025-Andy").mkdir(parents=True)
+            (bucket / "2025-Hakone").mkdir()
+            (bucket / "Archive").mkdir()
+            (bucket / "2025-CSF2025-Andy" / "AA7O1336.jpg").write_bytes(b"x")
+            (bucket / "AA7O9790.jpg").write_bytes(b"x")
+            # dated child still counted as dated
+            (bucket / "2025-07-26").mkdir()
+            found = R.discover_export_folders(root)
+            kinds = {(f["name"], f.get("kind")) for f in found}
+            self.assertIn(("2025-CSF2025-Andy", "event"), kinds)
+            self.assertIn(("2025-Hakone", "event"), kinds)
+            self.assertIn(("2025 Exports (root files)", "event-root"), kinds)
+            self.assertIn(("2025-07-26", "dated"), kinds)
+            self.assertFalse(any(f["name"] == "Archive" for f in found))
+
+    def test_parse_rejects_event_names(self):
+        self.assertIsNone(R.parse_export_folder_date("2025-CSF2025-Andy"))
+        self.assertIsNone(R.parse_export_folder_date("2025-Hakone"))
+        self.assertIsNone(R.parse_export_folder_date("2025-1"))
 
 
 class DateTests(unittest.TestCase):
@@ -123,3 +155,55 @@ class AdoptTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LogisticTests(unittest.TestCase):
+    def _recs(self, n_pos=20, n_neg=40):
+        recs = []
+        # positives: sharp, aesthetic, often burst-best; negatives: blur / burst-other
+        for i in range(n_pos):
+            recs.append({
+                "sharp_pct": 0.8 + 0.2 * (i / max(1, n_pos - 1)),
+                "aes_pct": 0.7 + 0.2 * (i / max(1, n_pos - 1)),
+                "burst_best": 1.0 if i % 2 == 0 else 0.0,
+                "burst_other": 0.0,
+                "blur": 0.0,
+                "y": True, "y_export": i < n_pos - 2, "y_star": i >= 2,
+                "filename": f"P{i:03d}.CR3",
+            })
+        for i in range(n_neg):
+            recs.append({
+                "sharp_pct": 0.3 * (i / max(1, n_neg - 1)),
+                "aes_pct": 0.2 * (i / max(1, n_neg - 1)),
+                "burst_best": 0.0,
+                "burst_other": 1.0 if i % 3 == 0 else 0.0,
+                "blur": 1.0 if i % 2 == 0 else 0.0,
+                "y": False, "y_export": False, "y_star": False,
+                "filename": f"N{i:03d}.CR3",
+            })
+        return recs
+
+    def test_logistic_fits_and_scores(self):
+        recs = self._recs()
+        labels = {"s1": recs[:30], "s2": recs[30:]}
+        # both shoots need pos and neg
+        labels = {"s1": self._recs(12, 18), "s2": self._recs(10, 20)}
+        model = R.fit_logistic(labels, ["s1", "s2"])
+        self.assertIsNotNone(model)
+        self.assertEqual(model["type"], "logistic")
+        self.assertEqual(len(model["coef"]), 5)
+        ev = R.eval_model(labels, model)
+        self.assertGreater(ev["overall"]["auc_combined_macro"], 0.9)
+
+    def test_loso_may_prefer_logistic(self):
+        labels = {"s1": self._recs(15, 25), "s2": self._recs(12, 20), "s3": self._recs(10, 22)}
+        # a weak baseline so a fitted model can improve
+        weak = {"sharp": 0.15, "aes": 0.05, "burst_best": 0.0, "burst_other": 0.0, "blur": 0.0}
+        result = R.leave_one_shoot_out(labels, weak)
+        self.assertIn("after_loso_macro_logistic", result)
+        self.assertIn("candidate_model", result)
+        # baseline should already be decent on this separable data, logistic should be high
+        self.assertGreaterEqual(result["after_loso_macro_logistic"]["auc_combined_macro"], 0.9)
+        adopted, reason = R.should_adopt(result)
+        self.assertTrue(adopted, reason)
+        self.assertIn(result["candidate_model"]["type"], ("logistic", "weighted"))

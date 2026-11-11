@@ -8,7 +8,7 @@ Never writes to Capture One - it only produces keyword PROPOSALS (json + csv).
 
 Profiles: motorsport | gig | kyoto
 """
-import argparse, base64, csv, hashlib, io, json, os, re, sys, time
+import argparse, base64, csv, hashlib, io, json, os, re, subprocess, sys, time
 from pathlib import Path
 
 HOME = Path.home() / "localai"
@@ -95,6 +95,26 @@ def sha256_file(p, bs=4 * 1024 * 1024):
             h.update(b)
     return h.hexdigest()
 
+def _exiftool_preview(path: Path):
+    """Read-only: pull PreviewImage / JpgFromRaw / ThumbnailImage via bundled exiftool."""
+    et = HOME / "bin/exiftool"
+    if not et.exists():
+        return None
+    for tag in ("-PreviewImage", "-JpgFromRaw", "-ThumbnailImage"):
+        try:
+            r = subprocess.run([str(et), "-b", tag, str(path)],
+                               capture_output=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        data = r.stdout or b""
+        if r.returncode == 0 and data[:3] == b"\xff\xd8\xff":
+            try:
+                return Image.open(io.BytesIO(data)).convert("RGB")
+            except Exception:
+                continue
+    return None
+
+
 def load_preview(path: Path, digest: str, max_px: int, want_full=False):
     """Embedded preview -> cached JPEG in ~/localai/cache (never next to originals).
     Returns (resized_preview, full_res_preview_or_None)."""
@@ -104,18 +124,31 @@ def load_preview(path: Path, digest: str, max_px: int, want_full=False):
     ext = path.suffix.lower()
     if ext in RAW_EXT:
         import rawpy
-        with rawpy.imread(str(path)) as raw:
-            flip = raw.sizes.flip
-            try:
-                th = raw.extract_thumb()
-                if th.format == rawpy.ThumbFormat.JPEG:
-                    im = Image.open(io.BytesIO(th.data)).convert("RGB")
-                else:
-                    im = Image.fromarray(th.data).convert("RGB")
-            except (rawpy.LibRawNoThumbnailError, rawpy.LibRawUnsupportedThumbnailError):
-                # no embedded preview: quick half-size demosaic (already oriented)
-                im = Image.fromarray(raw.postprocess(half_size=True, use_camera_wb=True, output_bps=8))
-                flip = 0
+        im = None
+        flip = 0
+        try:
+            with rawpy.imread(str(path)) as raw:
+                flip = raw.sizes.flip
+                try:
+                    th = raw.extract_thumb()
+                    if th.format == rawpy.ThumbFormat.JPEG:
+                        im = Image.open(io.BytesIO(th.data)).convert("RGB")
+                    else:
+                        im = Image.fromarray(th.data).convert("RGB")
+                except (rawpy.LibRawNoThumbnailError, rawpy.LibRawUnsupportedThumbnailError):
+                    # no embedded preview: quick half-size demosaic (already oriented)
+                    try:
+                        im = Image.fromarray(raw.postprocess(half_size=True, use_camera_wb=True, output_bps=8))
+                        flip = 0
+                    except rawpy.LibRawError:
+                        im = None
+        except rawpy.LibRawError:
+            im = None
+        if im is None:
+            im = _exiftool_preview(path)
+            flip = 0
+        if im is None:
+            raise RuntimeError(f"no preview could be read from {path}")
         # embedded previews are stored unrotated; apply raw orientation
         if flip == 3:
             im = im.rotate(180, expand=True)

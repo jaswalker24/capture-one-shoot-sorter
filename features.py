@@ -224,34 +224,42 @@ def cmd_index(args):
             continue
         todo.append((p, sha))
     ex = exif_batch([p for p, _ in todo])
+    n_fail = 0
     for i, (p, sha) in enumerate(todo, 1):
         t1 = time.time()
-        im, _ = T.load_preview(p, sha, CFG["preview_max_px"])
-        cache = HOME / "cache" / f"{sha[:24]}.jpg"
-        f = siglip().image(im)[0].detach().float().cpu().numpy()
-        np.save(EMB / f"{sha[:24]}.npy", f.astype(np.float16))
-        aes = aesthetic().score(im)
-        box = subject_box(cache)
-        full, lap, ten, coh, box = sharpness_metrics(im, box)
-        e = ex.get(str(p), {})
-        c.execute("""INSERT INTO images(sha256,path,rel_path,filename,folder,width,height,aesthetic,sharp_full,sharp_subject,
-                     tenengrad_subject,coherence,subject_box,capture_time,camera,lens,focal,exposure,fnumber,iso,indexed_at)
-                     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                     ON CONFLICT(sha256) DO UPDATE SET path=excluded.path, rel_path=excluded.rel_path, filename=excluded.filename,
-                     folder=excluded.folder, width=excluded.width, height=excluded.height, aesthetic=excluded.aesthetic,
-                     sharp_full=excluded.sharp_full, sharp_subject=excluded.sharp_subject, tenengrad_subject=excluded.tenengrad_subject,
-                     coherence=excluded.coherence, subject_box=excluded.subject_box, capture_time=excluded.capture_time,
-                     camera=excluded.camera, lens=excluded.lens, focal=excluded.focal, exposure=excluded.exposure,
-                     fnumber=excluded.fnumber, iso=excluded.iso, indexed_at=excluded.indexed_at""",
-                  (sha, str(p), str(p.relative_to(p.parent.parent)), p.name, folder_of(p), im.width, im.height, aes, full, lap,
-                   ten, coh, json.dumps([round(x, 4) for x in box]), e.get("capture_time"), e.get("camera"), e.get("lens"),
-                   e.get("focal"), e.get("exposure"), e.get("fnumber"), e.get("iso"), time.time()))
-        c.commit(); n_new += 1
-        print(f"[{i}/{len(todo)}] {p.name} aes={aes:.2f} sharp_subj={lap:.0f} coh={coh:.2f} {time.time()-t1:.2f}s", flush=True)
+        try:
+            im, _ = T.load_preview(p, sha, CFG["preview_max_px"])
+            cache = HOME / "cache" / f"{sha[:24]}.jpg"
+            f = siglip().image(im)[0].detach().float().cpu().numpy()
+            np.save(EMB / f"{sha[:24]}.npy", f.astype(np.float16))
+            aes = aesthetic().score(im)
+            box = subject_box(cache)
+            full, lap, ten, coh, box = sharpness_metrics(im, box)
+            e = ex.get(str(p), {})
+            c.execute("""INSERT INTO images(sha256,path,rel_path,filename,folder,width,height,aesthetic,sharp_full,sharp_subject,
+                         tenengrad_subject,coherence,subject_box,capture_time,camera,lens,focal,exposure,fnumber,iso,indexed_at)
+                         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                         ON CONFLICT(sha256) DO UPDATE SET path=excluded.path, rel_path=excluded.rel_path, filename=excluded.filename,
+                         folder=excluded.folder, width=excluded.width, height=excluded.height, aesthetic=excluded.aesthetic,
+                         sharp_full=excluded.sharp_full, sharp_subject=excluded.sharp_subject, tenengrad_subject=excluded.tenengrad_subject,
+                         coherence=excluded.coherence, subject_box=excluded.subject_box, capture_time=excluded.capture_time,
+                         camera=excluded.camera, lens=excluded.lens, focal=excluded.focal, exposure=excluded.exposure,
+                         fnumber=excluded.fnumber, iso=excluded.iso, indexed_at=excluded.indexed_at""",
+                      (sha, str(p), str(p.relative_to(p.parent.parent)), p.name, folder_of(p), im.width, im.height, aes, full, lap,
+                       ten, coh, json.dumps([round(x, 4) for x in box]), e.get("capture_time"), e.get("camera"), e.get("lens"),
+                       e.get("focal"), e.get("exposure"), e.get("fnumber"), e.get("iso"), time.time()))
+            c.commit(); n_new += 1
+            print(f"[{i}/{len(todo)}] {p.name} aes={aes:.2f} sharp_subj={lap:.0f} coh={coh:.2f} {time.time()-t1:.2f}s", flush=True)
+        except Exception as err:
+            n_fail += 1
+            print(f"[{i}/{len(todo)}] {p.name} FAILED ({time.time()-t1:.2f}s): {err}", flush=True)
+            continue
     for fn in {folder_of(p) for p in files}: import_proposals(c, fn)
     el = time.time() - t0
     print(f"index: {n_new} new/updated of {len(files)} files in {el:.0f}s"
-          + (f" ({el/max(1,n_new):.2f}s/new image)" if n_new else "") + f"; total indexed {c.execute('SELECT count(*) FROM images').fetchone()[0]}")
+          + (f" ({el/max(1,n_new):.2f}s/new image)" if n_new else "")
+          + (f"; {n_fail} failed (skipped)" if n_fail else "")
+          + f"; total indexed {c.execute('SELECT count(*) FROM images').fetchone()[0]}")
 
 # ------------------------------------------------------------------ search
 def cmd_search(args):
@@ -508,6 +516,19 @@ def rank_score(r, w):
     return (w["sharp"] * r["sharp_pct"] + w["aes"] * r["aes_pct"] + w["burst_best"] * r["burst_best"]
             - w["burst_other"] * r["burst_other"] - w["blur"] * r["blur"])
 
+def rank_model_score(r, rc):
+    """Score one frame with the configured model (weighted sum, or logistic)."""
+    if (rc or {}).get("model") == "logistic" and isinstance(rc.get("logistic"), dict):
+        lg = rc["logistic"]
+        feats = lg.get("features") or ["sharp_pct", "aes_pct", "burst_best", "burst_other", "blur"]
+        coef = lg.get("coef") or []
+        if len(coef) == len(feats):
+            s = float(lg.get("intercept") or 0)
+            for k, c in zip(feats, coef):
+                s += float(c) * float(r.get(k) or 0)
+            return s
+    return rank_score(r, rc["weights"])
+
 def user_ratings(fo):
     """Star ratings for this shoot from the latest read-only catalog snapshot (never written)."""
     d = OUT / fo; snaps = sorted([p for p in d.glob("*flags-*.json")], key=lambda p: p.stat().st_mtime)
@@ -536,11 +557,16 @@ def cmd_rank(args):
         rows = rank_features(fo, quality_rows(c, fo))   # tiers are always relative to the whole shoot
         if not rows: print(fo, "no indexed frames"); continue
         w = dict(rc["weights"]); ratings, snapname = user_ratings(fo); cal = None
+        use_model = rc
         if getattr(args, "calibrate", False):
             cal = calibrate_weights(rows, ratings, rc)
-            if cal: w = cal[1]; print(f"calibrated on {snapname}: weights={w} metric={cal[0]:.3f}")
-            else: print("not enough rated frames to calibrate; using stored weights")
-        for r in rows: r["rank_score"] = round(rank_score(r, w), 4)
+            if cal:
+                w = cal[1]
+                use_model = {**rc, "model": "weighted", "weights": w}
+                print(f"calibrated on {snapname}: weights={w} metric={cal[0]:.3f}")
+            else:
+                print("not enough rated frames to calibrate; using stored weights")
+        for r in rows: r["rank_score"] = round(rank_model_score(r, use_model), 4)
         rows.sort(key=lambda r: (-r["rank_score"], r["filename"]))
         n = len(rows); nb = int(round(rc["best_pct"] * n)); ng = int(round((rc["best_pct"] + rc["good_pct"]) * n))
         for i, r in enumerate(rows): r["tier"] = "Best" if i < nb else ("Good" if i < ng else "")
@@ -559,7 +585,10 @@ def cmd_rank(args):
                 if not shas or r["sha256"] in shas]   # a selection only gets its own rows, ranked shoot-wide
         pf = write_proposals(folder_path_for(c, fo), "rank", recs)
         lab = [ratings.get(r["filename"].rsplit(".", 1)[0], 0) for r in rows]
-        stats = {"frames": n, "Best": nb, "Good": ng - nb, "untiered": n - ng, "weights": w}
+        stats = {"frames": n, "Best": nb, "Good": ng - nb, "untiered": n - ng, "weights": w,
+                 "model": (use_model.get("model") if isinstance(use_model, dict) else None) or "weighted"}
+        if use_model.get("model") == "logistic":
+            stats["logistic"] = use_model.get("logistic")
         if any(x >= 3 for x in lab):
             stats["user_3plus_in_best"] = sum(1 for r, x in zip(rows, lab) if x >= 3 and r["tier"] == "Best")
             stats["user_3plus_in_best_or_good"] = sum(1 for r, x in zip(rows, lab) if x >= 3 and r["tier"])

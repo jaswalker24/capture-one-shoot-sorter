@@ -26,28 +26,42 @@ def write_config(candidate, reason, result, adopted: bool):
     bak = HOME / f"config.json.bak-rank-exports-{STAMP}"
     cfg = json.loads(cfg_path.read_text())
     prev = cfg.get("rank") or {}
-    # Always keep a rollback snapshot of the weights that were in force.
+    # Always keep a rollback snapshot of the weights / model that were in force.
     previous_weights = (prev.get("weights") if isinstance(prev.get("weights"), dict) else None) or dict(R.DEFAULT_WEIGHTS)
+    previous_model = prev.get("model") or "weighted"
+    previous_logistic = prev.get("logistic")
     shutil.copy2(cfg_path, bak)
     rank = dict(prev)
     rank["previous_weights"] = previous_weights
+    rank["previous_model"] = previous_model
+    if previous_logistic is not None:
+        rank["previous_logistic"] = previous_logistic
     rank["best_pct"] = rank.get("best_pct", 0.10)
     rank["good_pct"] = rank.get("good_pct", 0.20)
     rank["min_rated_for_calibration"] = rank.get("min_rated_for_calibration", 10)
+    cand_model = (result or {}).get("candidate_model") or {"type": "weighted", "weights": candidate}
     if adopted:
-        rank["weights"] = candidate
-        rank["source"] = "exports+stars-loso"
+        rank["weights"] = candidate or previous_weights
+        if cand_model.get("type") == "logistic":
+            rank["model"] = "logistic"
+            rank["logistic"] = {k: cand_model[k] for k in ("coef", "intercept", "features") if k in cand_model}
+            rank["source"] = "exports+stars-loso-logistic"
+        else:
+            rank["model"] = "weighted"
+            rank["source"] = "exports+stars-loso"
         rank["trained"] = STAMP
         rank["adopted"] = True
         rank["adopt_reason"] = reason
         rank["report"] = str(REPORT)
     else:
-        # leave current weights in place (defaults if unset)
+        # leave current weights / model in place (defaults if unset)
         rank.setdefault("weights", dict(R.DEFAULT_WEIGHTS))
+        rank.setdefault("model", previous_model)
         rank["adopted"] = False
         rank["adopt_reason"] = reason
         rank["last_export_training"] = STAMP
         rank["candidate_weights"] = candidate
+        rank["candidate_model"] = cand_model
         rank["report"] = str(REPORT)
     cfg["rank"] = rank
     tmp = cfg_path.with_suffix(".tmp")
@@ -78,7 +92,10 @@ def main():
     stats = R.folder_match_stats(matches)
     for s in stats:
         rate = "n/a" if s["match_rate"] is None else f"{100*s['match_rate']:.0f}%"
-        print(f"  {s['export_folder']}: {s['matched']}/{s['unique_stems']} stems -> {s['mapped_import'] or '(no import folder)'} ({rate})", flush=True)
+        dests = s.get("mapped_imports") or {}
+        dest = ", ".join(f"{k}:{v}" for k,v in dests.items()) if dests else (s.get("mapped_import") or "(no import folder)")
+        kind = s.get("kind") or "dated"
+        print(f"  [{kind}] {s['export_folder']}: {s['matched']}/{s['unique_stems']} stems -> {dest} ({rate})", flush=True)
 
     positives = R.positives_by_shoot(matches)
     labels, labsum = R.build_labels(index_by_folder, positives, min_indexed=args.min_indexed)
@@ -99,13 +116,23 @@ def main():
         adopted, reason = R.should_adopt(train)
         train["adopt"] = adopted
         train["adopt_reason"] = reason
-        print("BEFORE overall:", train["before"]["overall"], flush=True)
-        print("AFTER  LOSO macro:", train["after_loso_macro"], flush=True)
+        print("BEFORE overall (expanded set, current weights):", train["before"]["overall"], flush=True)
+        print("AFTER  LOSO macro (chosen):", train["after_loso_macro"], flush=True)
+        print("  grid   :", train.get("after_loso_macro_grid"), flush=True)
+        print("  logistic:", train.get("after_loso_macro_logistic"), flush=True)
+        print("weighted-sum LOSO (per shoot):", flush=True)
         for row in train["loso"]:
             print(f"  hold out {row['held_out']}: combined {row['before']['auc_combined']} -> {row['after']['auc_combined']}; "
                   f"export {row['before']['auc_export']} -> {row['after']['auc_export']}; "
                   f"star {row['before']['auc_star']} -> {row['after']['auc_star']}", flush=True)
+        if train.get("loso_logistic"):
+            print("logistic LOSO (per shoot):", flush=True)
+            for row in train["loso_logistic"]:
+                print(f"  hold out {row['held_out']}: combined {row['before']['auc_combined']} -> {row['after']['auc_combined']}; "
+                      f"export {row['before']['auc_export']} -> {row['after']['auc_export']}; "
+                      f"star {row['before']['auc_star']} -> {row['after']['auc_star']}", flush=True)
         print("candidate weights:", train["candidate_weights"], flush=True)
+        print("candidate model:", train.get("candidate_model"), flush=True)
         print("adopt?", adopted, reason, flush=True)
     else:
         adopted, reason = False, "no labelled indexed shoots with exports"
@@ -128,9 +155,14 @@ def main():
         "train": {
             "before": train.get("before"),
             "loso": train.get("loso"),
+            "loso_logistic": train.get("loso_logistic"),
             "after_loso_macro": train.get("after_loso_macro"),
+            "after_loso_macro_grid": train.get("after_loso_macro_grid"),
+            "after_loso_macro_logistic": train.get("after_loso_macro_logistic"),
             "candidate_weights": train.get("candidate_weights"),
+            "candidate_model": train.get("candidate_model"),
             "candidate_in_sample": train.get("candidate_in_sample"),
+            "candidate_in_sample_logistic": train.get("candidate_in_sample_logistic"),
             "adopt": train.get("adopt"),
             "adopt_reason": train.get("adopt_reason") or reason,
         },

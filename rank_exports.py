@@ -1,8 +1,9 @@
 """Match Camera Exports back to Camera Imports and (re)calibrate the rank model.
 
-Read-only on the NAS: never modify, move or delete anything there. Only dated
-export folders that can be mapped to a shoot are listed; Archive and other
-undated buckets are not walked. MP4/MOV are ignored.
+Read-only on the NAS: never modify, move or delete anything there. Dated
+export folders and event-named folders under "<Year> Exports" are listed;
+Archive, C1 High Res and Untitled Export are skipped unless they clearly
+map. MP4/MOV are ignored.
 
 Exports are positives; unexported frames in the same indexed shoot are
 negatives. Star ratings of 3+ are also treated as positives when a snapshot
@@ -29,8 +30,18 @@ IMAGE_EXT = {".jpg", ".jpeg", ".tif", ".tiff", ".png", ".webp", ".heic", ".jxl",
 SKIP_SUBDIR = {"untitled export", "archive", "archiveimages", "@eadir",
                ".appledouble", "tmp", "temp"}
 
-CAMERA_STEM = re.compile(r"^_?[A-Za-z]{1,8}\d[A-Za-z0-9_]{0,8}\d{2,}$|^_?[A-Za-z]{2,8}_?\d{3,6}$|^IMG[L_]?\d+$", re.I)
-SUFFIX = re.compile(r"([\s._-](?:\d+|edit\d*|enhanced-?nr|copy\d*|output|export|edited|crop|web|full))$", re.I)
+CAMERA_STEM = re.compile(
+    r"^_?[A-Za-z]{1,8}\d[A-Za-z0-9_]{0,8}\d{2,}$"
+    r"|^_?[A-Za-z]{2,8}_?\d{3,6}$"
+    r"|^IMG[L_]?\d+$"
+    r"|^\d{2,4}[A-Za-z]\d{3,5}$",  # e.g. 029A4324
+    re.I,
+)
+SUFFIX = re.compile(
+    r"([\s._-](?:\d+|edit\d*|enhanced-?nr|copy\d*|output|export|edited|crop|web|full)"
+    r"|\s*\(\d+(?:\s+of\s+\d+)?\))$",
+    re.I,
+)
 # 2026-11-07BritCar..., 2026-6-23C1, 2026-06-231, 2026-7-12 CSF26, 20190706
 DATE_COMPACT = re.compile(r"^(\d{4})(\d{2})(\d{2})$")
 DATE_LOOSE = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})(.*)$")
@@ -116,13 +127,26 @@ def time_second(t: str | None) -> str | None:
 
 
 def _auc(scores, labels) -> float:
+    """Mann–Whitney AUC, including 0.5 for ties. O(n log n), fully vectorised."""
     import numpy as np
-    s = np.asarray(scores, float)
-    lab = np.asarray(labels, bool)
-    pos, neg = s[lab], s[~lab]
-    if not len(pos) or not len(neg):
+    s = np.asarray(scores, float).ravel()
+    lab = np.asarray(labels, bool).ravel()
+    n_pos = int(lab.sum()); n_neg = int((~lab).sum())
+    if not n_pos or not n_neg:
         return float("nan")
-    return float((pos[:, None] > neg[None, :]).mean() + 0.5 * (pos[:, None] == neg[None, :]).mean())
+    order = np.argsort(s, kind="mergesort")
+    s_sorted = s[order]
+    y_sorted = lab[order]
+    # mid-ranks of tied scores: start + (count-1)/2, 1-based
+    starts = np.empty(s_sorted.size, dtype=bool)
+    starts[0] = True
+    starts[1:] = s_sorted[1:] != s_sorted[:-1]
+    start_idx = np.flatnonzero(starts)
+    counts = np.diff(np.append(start_idx, s_sorted.size))
+    mid = start_idx + (counts - 1) / 2.0 + 1.0
+    ranks = np.repeat(mid, counts)
+    u = ranks[y_sorted].sum() - n_pos * (n_pos + 1) / 2.0
+    return float(u / (n_pos * n_neg))
 
 
 def rank_score(r, w):
@@ -176,15 +200,30 @@ def discover_export_folders(root: Path = EXPORTS_ROOT) -> list[dict]:
         if not parsed:
             return
         date, suffix = parsed
-        found.append({"path": str(path), "name": path.name, "date": date, "suffix": suffix, "source": source})
+        found.append({"path": str(path), "name": path.name, "date": date, "suffix": suffix, "source": source, "kind": "dated"})
 
     for p in sorted(root.iterdir(), key=lambda x: x.name):
         if not p.is_dir() or p.name.startswith(".") or p.name.lower() in SKIP_SUBDIR:
             continue
         if YEAR_BUCKET.match(p.name):
+            loose = False
             for c in sorted(p.iterdir(), key=lambda x: x.name):
-                if c.is_dir() and not c.name.startswith("."):
-                    consider(c, p.name)
+                if c.name.startswith(".") or c.name.startswith("._"):
+                    continue
+                if c.is_dir() and c.name.lower() not in SKIP_SUBDIR:
+                    parsed = parse_export_folder_date(c.name)
+                    if parsed:
+                        consider(c, p.name)
+                    else:
+                        found.append({"path": str(c), "name": c.name, "date": None,
+                                      "suffix": "", "source": p.name, "kind": "event"})
+                elif c.is_file():
+                    ext = c.suffix.lower()
+                    if ext in IMAGE_EXT and ext not in SKIP_VIDEO:
+                        loose = True
+            if loose:
+                found.append({"path": str(p), "name": p.name + " (root files)", "date": None,
+                              "suffix": "", "source": p.name, "kind": "event-root"})
             continue
         if p.name.lower() in ("archive", "archiveimages", "botrequested", "c1 high res", "untitled export"):
             continue
@@ -434,154 +473,281 @@ def resolve_stem_across_year(stem: str, year: str, year_imports: dict[str, list[
         return hits[0]
     return None
 
+
+def lookup_exif(info_by_src: dict, path: Path) -> dict:
+    info = info_by_src.get(str(path)) or info_by_src.get(path.name) or {}
+    if info:
+        return info
+    for k, v in info_by_src.items():
+        if k.endswith(str(path)) or Path(k) == path:
+            return v
+    return {}
+
+
+def capture_date_of(exif_time: str | None) -> str | None:
+    if not exif_time:
+        return None
+    return exif_time.split(" ")[0] if " " in exif_time else exif_time[:10]
+
+
+def serial_key(v) -> str | None:
+    if v is None or v == "":
+        return None
+    return str(v).strip()
+
+
+def list_import_raws(import_dir: Path) -> list[Path]:
+    """Raws in one import folder (that folder only)."""
+    out = []
+    if not import_dir.is_dir():
+        return out
+    try:
+        entries = os.scandir(import_dir)
+    except OSError:
+        return out
+    with entries:
+        for ent in entries:
+            if not ent.is_file():
+                continue
+            name = ent.name
+            if name.startswith(".") or name.startswith("._"):
+                continue
+            ext = Path(name).suffix.lower()
+            if ext in SKIP_VIDEO or ext not in {e.lower() for e in RAW_EXTS}:
+                continue
+            out.append(Path(ent.path))
+    return out
+
+
+def import_exif_index(import_dir: Path, year: str | None = None) -> list[dict]:
+    """Read-only EXIF (time + serial) for raws in one import folder, cached locally."""
+    cache_dir = HOME / "cache" / "import-exif"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    key = f"{year or import_dir.parent.name}-{import_dir.name}.json"
+    cache = cache_dir / key
+    if cache.exists():
+        try:
+            return json.loads(cache.read_text())
+        except json.JSONDecodeError:
+            pass
+    rows = []
+    files = list_import_raws(import_dir)
+    exif = exif_for(files)
+    for p in files:
+        info = lookup_exif(exif, p)
+        rows.append({
+            "filename": p.name,
+            "stem": Path(p.name).stem,
+            "time": info.get("time"),
+            "serial": serial_key(info.get("serial")),
+            "folder": import_dir.name,
+            "path": str(p),
+        })
+    cache.write_text(json.dumps(rows))
+    return rows
+
 def match_exports(export_folders, year_imports, index_by_folder, import_stem_cache=None):
-    """Match each export image to a raw. Prefer the mapped import shoot, then the local index."""
+    """Match each export image to a raw.
+
+    Prefer EXIF capture date (plus sub-second and body serial) to pick the import
+    folder, then filename stem. Falls back to the export folder's date name, the
+    local index, and exists() in the same year. For event-named folders the EXIF
+    date is the only folder mapping.
+    """
     import_stem_cache = import_stem_cache if import_stem_cache is not None else {}
-    # invert index: stem -> list of (folder, row); time+folder -> rows
     stem_index = defaultdict(list)
-    time_index = defaultdict(list)          # (folder, exact time incl. subsec)
-    time_second_index = defaultdict(list)   # (folder, YYYY-MM-DD HH:MM:SS)
+    time_index = defaultdict(list)
+    time_second_index = defaultdict(list)
+    serial_time_index = defaultdict(list)
     for fo, rows in index_by_folder.items():
         for r in rows:
             stem_index[r["stem"]].append((fo, r))
             if r["time"]:
                 time_index[(fo, r["time"])].append(r)
                 time_second_index[(fo, time_second(r["time"]))].append(r)
+            if r["time"] and r.get("serial"):
+                serial_time_index[(fo, r["time"], serial_key(r["serial"]))].append(r)
 
-    results = []  # per export folder
-    unmatched_for_exif = []
-
+    # EXIF every export image we are about to consider (needed for event-folder mapping).
+    all_images = []
     for ef in export_folders:
-        date, suffix = ef["date"], ef["suffix"]
-        mapped = map_date_to_import(date, suffix, year_imports)
-        year = date[:4]
-        import_dir = (IMPORTS_ROOT / year / mapped) if mapped else None
-        if mapped and mapped not in import_stem_cache:
-            # Prefer the local index (no NAS listing) when this shoot is indexed.
-            if mapped in index_by_folder:
-                import_stem_cache[mapped] = {r["stem"]: r["filename"] for r in index_by_folder[mapped]}
-            elif import_dir and import_dir.is_dir():
-                import_stem_cache[mapped] = list_import_stems(import_dir)
-            else:
-                import_stem_cache[mapped] = {}
-        stems = import_stem_cache.get(mapped or "", {})
-        images = list(iter_export_images(Path(ef["path"])))
+        imgs = list(iter_export_images(Path(ef["path"])))
+        all_images.append((ef, imgs))
+    flat = [img for _, imgs in all_images for img in imgs]
+    print(f"  reading EXIF for {len(flat)} export files (read-only)…", flush=True)
+    exif_all = exif_for(flat)
+
+    results = []
+    for ef, images in all_images:
+        date, suffix = ef.get("date"), ef.get("suffix") or ""
+        mapped_by_name = map_date_to_import(date, suffix, year_imports) if date else None
         recs = []
-        seen_pos = set()
         for img in images:
             stem = canonical_stem(img.name)
-            how = None
-            target_folder = None
-            raw_name = None
-            if CAMERA_STEM.match(stem) and mapped and stem in stems:
-                how, target_folder, raw_name = "stem", mapped, stems[stem]
-            elif CAMERA_STEM.match(stem) and stem in stem_index:
-                hits = stem_index[stem]
-                # prefer the mapped folder if present
-                pref = [h for h in hits if h[0] == mapped] or hits
-                if len({h[0] for h in pref}) == 1:
-                    how, target_folder, raw_name = "stem-index", pref[0][0], pref[0][1]["filename"]
-                elif mapped and any(h[0] == mapped for h in hits):
-                    h = next(h for h in hits if h[0] == mapped)
-                    how, target_folder, raw_name = "stem", h[0], h[1]["filename"]
+            info = lookup_exif(exif_all, img)
+            et, es = info.get("time"), serial_key(info.get("serial"))
+            edate = capture_date_of(et)
+            mapped = map_date_to_import(edate, "", year_imports) if edate else None
+            if not mapped:
+                mapped = mapped_by_name
+            year = (edate or date or "")[:4] or None
+            if not year and ef.get("source") and YEAR_BUCKET.match(str(ef.get("source"))):
+                year = YEAR_BUCKET.match(str(ef["source"])).group(1)
             rec = {
                 "export_path": str(img), "export_name": img.name, "stem": stem,
-                "how": how, "import_folder": target_folder, "raw_name": raw_name,
-                "mapped_import": mapped,
+                "how": None, "import_folder": None, "raw_name": None,
+                "mapped_import": mapped, "exif_time": et, "exif_serial": es,
+                "exif_date": edate, "year": year,
             }
+            # 1. stem in the EXIF/date-mapped folder (index or exists)
+            if CAMERA_STEM.match(stem) and mapped and year:
+                if mapped in index_by_folder:
+                    hits = [r for r in index_by_folder[mapped] if r["stem"] == stem]
+                    if len(hits) == 1:
+                        rec.update(how="stem", import_folder=mapped, raw_name=hits[0]["filename"])
+                if not rec["how"]:
+                    raw = find_raw_by_stem(stem, IMPORTS_ROOT / year / mapped)
+                    if raw:
+                        rec.update(how="stem", import_folder=mapped, raw_name=raw)
             recs.append(rec)
-            if not how:
-                unmatched_for_exif.append((ef, rec, img))
-        results.append({"export": ef, "mapped_import": mapped, "images": recs, "n_images": len(images)})
+        results.append({"export": ef, "mapped_import": mapped_by_name, "images": recs, "n_images": len(images)})
 
-    # EXIF fallback for still-unmatched (renamed exports, etc.)
-    need = [img for _, rec, img in unmatched_for_exif if rec["how"] is None]
-    exif = exif_for(need) if need else {}
-    by_src = exif
-    for ef, rec, img in unmatched_for_exif:
-        if rec["how"]:
-            continue
-        info = by_src.get(str(img)) or by_src.get(img.name) or {}
-        # exiftool json SourceFile is the full path
-        if not info:
-            # try any key ending with the path
-            for k, v in by_src.items():
-                if k.endswith(str(img)) or Path(k) == img:
-                    info = v
-                    break
-        rec["exif_time"] = info.get("time")
-        rec["exif_serial"] = info.get("serial")
-        t = info.get("time")
-        if not t:
-            continue
-        mapped = rec.get("mapped_import")
-
-        def hits_for(folder, key, index):
-            return list(index.get((folder, key), []))
-
-        def unique_in(index, key):
-            hits = []
-            for fo in list(index_by_folder):
-                hits.extend((fo, r) for r in index.get((fo, key), []))
-            return hits
-
-        candidates = []
-        how = "exif-time"
-        if mapped:
-            candidates = hits_for(mapped, t, time_index)
-        if not candidates:
-            hits = unique_in(time_index, t)
-            if len(hits) == 1:
-                candidates, mapped = [hits[0][1]], hits[0][0]
-        # same whole second, unique or uniquely closest in subseconds
-        if not candidates:
-            sec = time_second(t)
-            pool = hits_for(mapped, sec, time_second_index) if mapped else []
-            if not pool:
-                hits = unique_in(time_second_index, sec)
-                if hits and len({h[0] for h in hits}) == 1:
-                    pool = [h[1] for h in hits]
-                    mapped = hits[0][0]
-            if len(pool) == 1:
-                candidates = pool
-            elif len(pool) > 1 and "." in t:
-                def subsec(row):
-                    tt = row.get("time") or ""
-                    return int((tt.split(".")[1] + "00")[:2]) if "." in tt else 0
-                want = int((t.split(".")[1] + "00")[:2])
-                ranked = sorted(pool, key=lambda r: abs(subsec(r) - want))
-                if abs(subsec(ranked[0]) - want) < abs(subsec(ranked[1]) - want):
-                    candidates = [ranked[0]]
-                    how = "exif-time-nearest"
-        if len(candidates) == 1:
-            r = candidates[0]
-            rec["how"] = how
-            rec["import_folder"] = r["folder"]
-            rec["raw_name"] = r["filename"]
-        elif len(candidates) > 1:
-            rec["how"] = None
-            rec["ambiguous_time"] = [c["filename"] for c in candidates]
-
-    # Stem exists() fallback for leftovers (misfiled export folder, off-by-one dates).
-    # Only probes import folders in the same year, one exists() per stem — no full listings.
-    still = []
+    # 2. EXIF time (+ serial) against the local index
     for block in results:
-        year = block["export"]["date"][:4]
-        prefer = block["mapped_import"]
-        # nearby date aliases (2026-07-12 -> 2026-07-11, 2026-08-20 -> 2026-08-29)
         for rec in block["images"]:
-            if rec["how"]:
+            if rec["how"] or not rec.get("exif_time"):
                 continue
-            if not CAMERA_STEM.match(rec["stem"]):
+            t, ser, mapped = rec["exif_time"], rec.get("exif_serial"), rec.get("mapped_import")
+            candidates = []
+            how = "exif-time"
+            if ser and mapped:
+                candidates = list(serial_time_index.get((mapped, t, ser), []))
+            if not candidates and mapped:
+                candidates = list(time_index.get((mapped, t), []))
+            if not candidates:
+                hits = []
+                index = serial_time_index if ser else time_index
+                key_fn = (lambda fo: (fo, t, ser)) if ser else (lambda fo: (fo, t))
+                for fo in index_by_folder:
+                    hits.extend((fo, r) for r in index.get(key_fn(fo), []))
+                if len(hits) == 1:
+                    candidates, rec["mapped_import"] = [hits[0][1]], hits[0][0]
+            if not candidates:
+                sec = time_second(t)
+                pool = list(time_second_index.get((mapped, sec), [])) if mapped else []
+                if not pool:
+                    hits = []
+                    for fo in index_by_folder:
+                        hits.extend((fo, r) for r in time_second_index.get((fo, sec), []))
+                    if hits and len({h[0] for h in hits}) == 1:
+                        pool = [h[1] for h in hits]
+                        rec["mapped_import"] = hits[0][0]
+                if len(pool) == 1:
+                    candidates = pool
+                elif len(pool) > 1 and "." in (t or ""):
+                    def subsec(row):
+                        tt = row.get("time") or ""
+                        return int((tt.split(".")[1] + "00")[:2]) if "." in tt else 0
+                    want = int((t.split(".")[1] + "00")[:2])
+                    ranked = sorted(pool, key=lambda r: abs(subsec(r) - want))
+                    # prefer matching serial if present
+                    if ser:
+                        same = [r for r in ranked if serial_key(r.get("serial")) == ser]
+                        if len(same) == 1:
+                            candidates, how = same, "exif-time-serial"
+                    if not candidates and abs(subsec(ranked[0]) - want) < abs(subsec(ranked[1]) - want):
+                        candidates, how = [ranked[0]], "exif-time-nearest"
+            if len(candidates) == 1:
+                r = candidates[0]
+                rec["how"] = how
+                rec["import_folder"] = r["folder"]
+                rec["raw_name"] = r["filename"]
+
+    # 3. Stem exists() in the same year, preferring the EXIF-dated import folder
+    for block in results:
+        for rec in block["images"]:
+            if rec["how"] or not CAMERA_STEM.match(rec["stem"]):
                 continue
-            found = resolve_stem_across_year(rec["stem"], year, year_imports, prefer=prefer,
-                                                around=block["export"]["date"])
+            year = rec.get("year")
+            if not year:
+                continue
+            found = resolve_stem_across_year(
+                rec["stem"], year, year_imports,
+                prefer=rec.get("mapped_import"),
+                around=rec.get("exif_date") or block["export"].get("date"),
+            )
             if found:
                 rec["how"] = "stem-exists"
                 rec["import_folder"], rec["raw_name"] = found
-            else:
-                still.append(rec)
+
+    # 4. For leftovers, read EXIF of the candidate import folder(s) only and match time+serial
+    need_folders = set()
+    for block in results:
+        for rec in block["images"]:
+            if rec["how"] or not rec.get("exif_time"):
+                continue
+            year = rec.get("year")
+            mapped = rec.get("mapped_import")
+            if year and mapped:
+                need_folders.add((year, mapped))
+            elif year and rec.get("exif_date"):
+                # exact date folder if it exists but wasn't set as mapped
+                if rec["exif_date"] in year_imports.get(year, []):
+                    need_folders.add((year, rec["exif_date"]))
+    raw_time = defaultdict(list)       # (folder, time)
+    raw_serial_time = defaultdict(list)
+    if need_folders:
+        print(f"  reading EXIF for {len(need_folders)} import folder(s) with unmatched exports…", flush=True)
+    for year, name in sorted(need_folders):
+        rows = import_exif_index(IMPORTS_ROOT / year / name, year=year)
+        for r in rows:
+            if r.get("time"):
+                raw_time[(name, r["time"])].append(r)
+                raw_time[(name, time_second(r["time"]))].append(r)
+            if r.get("time") and r.get("serial"):
+                raw_serial_time[(name, r["time"], r["serial"])].append(r)
+    for block in results:
+        for rec in block["images"]:
+            if rec["how"] or not rec.get("exif_time"):
+                continue
+            t, ser, mapped = rec["exif_time"], rec.get("exif_serial"), rec.get("mapped_import")
+            candidates = []
+            how = "exif-time-import"
+            if ser and mapped:
+                candidates = list(raw_serial_time.get((mapped, t, ser), []))
+            if not candidates and mapped:
+                candidates = [r for r in raw_time.get((mapped, t), []) if "." in (t or "") or True]
+                # exact time first
+                exact = [r for r in raw_time.get((mapped, t), [])]
+                candidates = exact
+            if len(candidates) > 1 and ser:
+                same = [r for r in candidates if r.get("serial") == ser]
+                if len(same) == 1:
+                    candidates, how = same, "exif-time-serial"
+            if not candidates and mapped and "." in (t or ""):
+                sec = time_second(t)
+                pool = [r for r in raw_time.get((mapped, sec), [])]
+                if len(pool) == 1:
+                    candidates = pool
+                elif len(pool) > 1:
+                    def subsec(row):
+                        tt = row.get("time") or ""
+                        return int((tt.split(".")[1] + "00")[:2]) if "." in tt else 0
+                    want = int((t.split(".")[1] + "00")[:2])
+                    if ser:
+                        same = [r for r in pool if r.get("serial") == ser]
+                        if same:
+                            pool = same
+                    ranked = sorted(pool, key=lambda r: abs(subsec(r) - want))
+                    if len(ranked) == 1 or (len(ranked) > 1 and abs(subsec(ranked[0]) - want) < abs(subsec(ranked[1]) - want)):
+                        candidates, how = [ranked[0]], "exif-time-nearest"
+            if len(candidates) == 1:
+                r = candidates[0]
+                rec["how"] = how
+                rec["import_folder"] = r["folder"]
+                rec["raw_name"] = r["filename"]
     return results, import_stem_cache
+
 
 
 def folder_match_stats(match_results) -> list[dict]:
@@ -600,11 +766,22 @@ def folder_match_stats(match_results) -> list[dict]:
             h = next((r["how"] for r in recs if r["how"]), None)
             if h:
                 hows[h] += 1
+        mapped_hits = defaultdict(int)
+        exif_dates = defaultdict(int)
+        for recs in by_stem.values():
+            rec = next((r for r in recs if r["how"]), recs[0])
+            if rec.get("import_folder"):
+                mapped_hits[rec["import_folder"]] += 1
+            if rec.get("exif_date"):
+                exif_dates[rec["exif_date"]] += 1
         per_export.append({
             "export_folder": ef["name"],
             "export_path": ef["path"],
-            "date": ef["date"],
-            "mapped_import": block["mapped_import"],
+            "date": ef.get("date"),
+            "kind": ef.get("kind") or "dated",
+            "mapped_import": block.get("mapped_import"),
+            "mapped_imports": dict(mapped_hits),
+            "exif_dates": dict(exif_dates),
             "unique_stems": n,
             "matched": matched,
             "unmatched": n - matched,
@@ -623,6 +800,70 @@ def positives_by_shoot(match_results) -> dict[str, set[str]]:
             if rec["how"] and rec["import_folder"] and rec["raw_name"]:
                 pos[rec["import_folder"]].add(Path(rec["raw_name"]).stem)
     return dict(pos)
+
+
+
+FEATURE_KEYS = ("sharp_pct", "aes_pct", "burst_best", "burst_other", "blur")
+
+
+def _folder_pack(recs):
+    """Numeric feature matrix plus combined / export / star labels for one shoot."""
+    import numpy as np
+    X = np.asarray([[float(r[k]) for k in FEATURE_KEYS] for r in recs], dtype=float)
+    y = np.asarray([bool(r["y"]) for r in recs])
+    ye = np.asarray([bool(r["y_export"]) for r in recs])
+    ys = np.asarray([bool(r["y_star"]) for r in recs])
+    return X, y, ye, ys
+
+
+def _weighted_scores(X, w):
+    import numpy as np
+    wv = np.asarray([w["sharp"], w["aes"], w["burst_best"], -w["burst_other"], -w["blur"]], dtype=float)
+    return X @ wv
+
+
+def _logistic_scores(X, model):
+    import numpy as np
+    coef = np.asarray(model["coef"], dtype=float)
+    feats = list(model.get("features") or FEATURE_KEYS)
+    if feats != list(FEATURE_KEYS):
+        # reorder columns if a stored model used a different feature order
+        idx = [FEATURE_KEYS.index(k) for k in feats]
+        X = X[:, idx]
+    return X @ coef + float(model.get("intercept") or 0.0)
+
+
+def model_scores(X, model):
+    """Scores for a packed feature matrix. model is weighted weights or a logistic dict."""
+    if isinstance(model, dict) and model.get("type") == "logistic":
+        return _logistic_scores(X, model)
+    w = model["weights"] if isinstance(model, dict) and "weights" in model else model
+    return _weighted_scores(X, w)
+
+
+def fit_logistic(labels_by_folder, folders, packs=None):
+    """Logistic regression on the existing rank features, combined labels, class-balanced."""
+    import numpy as np
+    from sklearn.linear_model import LogisticRegression
+    packs = packs or {fo: _folder_pack(labels_by_folder[fo]) for fo in folders}
+    Xs, ys = [], []
+    for fo in folders:
+        X, y, _, _ = packs[fo]
+        Xs.append(X); ys.append(y)
+    if not Xs:
+        return None
+    X = np.concatenate(Xs, axis=0)
+    y = np.concatenate(ys, axis=0)
+    if int(y.sum()) == 0 or int((~y).sum()) == 0:
+        return None
+    clf = LogisticRegression(max_iter=2000, class_weight="balanced", solver="lbfgs")
+    clf.fit(X, y.astype(int))
+    return {
+        "type": "logistic",
+        "coef": [round(float(x), 6) for x in clf.coef_[0]],
+        "intercept": round(float(clf.intercept_[0]), 6),
+        "features": list(FEATURE_KEYS),
+    }
 
 
 def build_labels(index_by_folder, positives, min_indexed=50, star_threshold=3):
@@ -667,37 +908,55 @@ def build_labels(index_by_folder, positives, min_indexed=50, star_threshold=3):
     return labels, summaries
 
 
-def eval_weights(labels_by_folder, w, folders=None):
-    """Per-shoot and overall AUCs for combined / export / star labels."""
+def eval_weights(labels_by_folder, w, folders=None, packs=None):
+    """Per-shoot and overall AUCs for combined / export / star labels (weighted sum)."""
+    model = {"type": "weighted", "weights": w}
+    return eval_model(labels_by_folder, model, folders=folders, packs=packs)
+
+
+def eval_model(labels_by_folder, model, folders=None, packs=None):
+    """Per-shoot and overall AUCs for a weighted-sum or logistic model."""
     folders = folders or list(labels_by_folder)
-    per, all_s, all_y, all_ye, all_ys = {}, [], [], [], []
+    packs = packs or {fo: _folder_pack(labels_by_folder[fo]) for fo in folders}
+    per = {}
+    all_s, all_y, all_ye, all_ys = [], [], [], []
+    import numpy as np
     for fo in folders:
-        recs = labels_by_folder[fo]
-        s = [rank_score(r, w) for r in recs]
-        y = [r["y"] for r in recs]
-        ye = [r["y_export"] for r in recs]
-        ys = [r["y_star"] for r in recs]
+        X, y, ye, ys = packs[fo]
+        s = model_scores(X, model)
         per[fo] = {
-            "n": len(recs),
+            "n": int(len(s)),
             "auc_combined": _round_auc(_auc(s, y)),
             "auc_export": _round_auc(_auc(s, ye)),
             "auc_star": _round_auc(_auc(s, ys)),
-            "positives_combined": int(sum(y)),
-            "positives_export": int(sum(ye)),
-            "positives_star": int(sum(ys)),
+            "positives_combined": int(y.sum()),
+            "positives_export": int(ye.sum()),
+            "positives_star": int(ys.sum()),
         }
-        all_s += s; all_y += y; all_ye += ye; all_ys += ys
+        all_s.append(s); all_y.append(y); all_ye.append(ye); all_ys.append(ys)
+    if all_s:
+        all_s = np.concatenate(all_s); all_y = np.concatenate(all_y)
+        all_ye = np.concatenate(all_ye); all_ys = np.concatenate(all_ys)
+    else:
+        all_s = all_y = all_ye = all_ys = np.asarray([])
     overall = {
-        "auc_combined_pooled": _round_auc(_auc(all_s, all_y)),
-        "auc_export_pooled": _round_auc(_auc(all_s, all_ye)),
-        "auc_star_pooled": _round_auc(_auc(all_s, all_ys)),
+        "auc_combined_pooled": _round_auc(_auc(all_s, all_y)) if len(all_s) else None,
+        "auc_export_pooled": _round_auc(_auc(all_s, all_ye)) if len(all_s) else None,
+        "auc_star_pooled": _round_auc(_auc(all_s, all_ys)) if len(all_s) else None,
         "auc_combined_macro": _macro([per[fo]["auc_combined"] for fo in folders]),
         "auc_export_macro": _macro([per[fo]["auc_export"] for fo in folders]),
         "auc_star_macro": _macro([per[fo]["auc_star"] for fo in folders]),
-        "n_frames": len(all_s),
+        "n_frames": int(len(all_s)),
         "n_shoots": len(folders),
     }
-    return {"per_shoot": per, "overall": overall, "weights": w}
+    out = {"per_shoot": per, "overall": overall}
+    if isinstance(model, dict) and model.get("type") == "logistic":
+        out["model"] = model
+    else:
+        w = model["weights"] if isinstance(model, dict) and "weights" in model else model
+        out["weights"] = w
+        out["model"] = {"type": "weighted", "weights": w}
+    return out
 
 
 def _round_auc(x):
@@ -709,49 +968,77 @@ def _macro(xs):
     return None if not vals else round(sum(vals) / len(vals), 3)
 
 
-def fit_grid(labels_by_folder, folders, metric="auc_combined"):
-    """Grid-search weights maximising the mean per-shoot AUC on `folders`."""
-    best = None
+def fit_grid(labels_by_folder, folders, metric="auc_combined", packs=None):
+    """Grid-search weights maximising the mean per-shoot combined AUC on `folders`.
+
+    Only combined AUC is scored during the search (export/star are evaluated
+    for the winning weights afterwards).
+    """
+    import numpy as np
+    packs = packs or {fo: _folder_pack(labels_by_folder[fo]) for fo in folders}
     keys = ("sharp", "aes", "burst_best", "burst_other", "blur")
+    Xs, ys = [], []
+    for fo in folders:
+        X, y, _, _ = packs[fo]
+        Xs.append(X); ys.append(y)
+    best = None
     for vals in itertools.product(*[GRID[k] for k in keys]):
         w = dict(zip(keys, vals))
-        ev = eval_weights(labels_by_folder, w, folders)
-        # primary: macro combined AUC; tie-break export macro then pooled
-        m = ev["overall"]["auc_combined_macro"]
-        m2 = ev["overall"]["auc_export_macro"] or 0
-        m3 = ev["overall"]["auc_combined_pooled"] or 0
-        if m is None:
+        wv = np.asarray([w["sharp"], w["aes"], w["burst_best"], -w["burst_other"], -w["blur"]], dtype=float)
+        aucs, all_s, all_y = [], [], []
+        for X, y in zip(Xs, ys):
+            s = X @ wv
+            a = _auc(s, y)
+            if a == a:
+                aucs.append(a)
+            all_s.append(s); all_y.append(y)
+        if not aucs:
             continue
-        score = (m, m2, m3)
+        m = sum(aucs) / len(aucs)
+        m3 = _auc(np.concatenate(all_s), np.concatenate(all_y))
+        m3 = 0.0 if m3 != m3 else m3
+        score = (m, m3)
         if best is None or score > best[0]:
-            best = (score, w, ev)
-    return best
+            best = (score, w, None)
+    if best is None:
+        return None
+    w = best[1]
+    ev = eval_weights(labels_by_folder, w, folders, packs=packs)
+    return (best[0], w, ev)
 
 
-def leave_one_shoot_out(labels_by_folder, baseline_w):
-    folders = sorted(labels_by_folder)
-    before = eval_weights(labels_by_folder, baseline_w, folders)
-    loso = []
-    held_scores = []  # new model scores on held-out shoots (for after overall)
-    # For a fair 'after' overall, collect held-out predictions
-    after_per = {}
-    chosen_from_full = None
-    for held in folders:
+def _macro_tuple(overall):
+    """Sort key: combined macro, then export, then star. Missing values sort last."""
+    def v(x):
+        return -1 if x is None else x
+    return (v(overall.get("auc_combined_macro")),
+            v(overall.get("auc_export_macro")),
+            v(overall.get("auc_star_macro")))
+
+
+def _loso_for_fit(labels_by_folder, folders, packs, baseline_w, fit_fn, kind):
+    """Leave-one-shoot-out. fit_fn(train_folders) -> model dict or None."""
+    loso, after_per = [], {}
+    for i, held in enumerate(folders, 1):
+        print(f"    LOSO {kind} {i}/{len(folders)} hold out {held}…", flush=True)
         train = [f for f in folders if f != held]
         if not train:
             continue
-        fit = fit_grid(labels_by_folder, train)
-        if not fit:
+        model = fit_fn(train)
+        if not model:
             continue
-        _, w, _ = fit
-        ev_held = eval_weights(labels_by_folder, w, [held])
-        ev_base = eval_weights(labels_by_folder, baseline_w, [held])
+        ev_held = eval_model(labels_by_folder, model, [held], packs=packs)
+        ev_base = eval_weights(labels_by_folder, baseline_w, [held], packs=packs)
         rec = {
             "held_out": held,
-            "weights": w,
+            "kind": kind,
             "after": ev_held["per_shoot"][held],
             "before": ev_base["per_shoot"][held],
         }
+        if kind == "logistic":
+            rec["model"] = model
+        else:
+            rec["weights"] = model["weights"]
         loso.append(rec)
         after_per[held] = ev_held["per_shoot"][held]
     after_macro = {
@@ -759,17 +1046,57 @@ def leave_one_shoot_out(labels_by_folder, baseline_w):
         "auc_export_macro": _macro([after_per[f]["auc_export"] for f in after_per]),
         "auc_star_macro": _macro([after_per[f]["auc_star"] for f in after_per]),
         "n_shoots": len(after_per),
+        "kind": kind,
     }
-    # Refit on all labelled shoots as the candidate production weights
-    full = fit_grid(labels_by_folder, folders)
+    return loso, after_macro
+
+
+def leave_one_shoot_out(labels_by_folder, baseline_w):
+    folders = sorted(labels_by_folder)
+    packs = {fo: _folder_pack(labels_by_folder[fo]) for fo in folders}
+    before = eval_weights(labels_by_folder, baseline_w, folders, packs=packs)
+
+    def fit_w(train):
+        fit = fit_grid(labels_by_folder, train, packs=packs)
+        if not fit:
+            return None
+        return {"type": "weighted", "weights": fit[1]}
+
+    def fit_l(train):
+        return fit_logistic(labels_by_folder, train, packs=packs)
+
+    loso, after_macro = _loso_for_fit(labels_by_folder, folders, packs, baseline_w, fit_w, "weighted")
+    loso_log, after_log = _loso_for_fit(labels_by_folder, folders, packs, baseline_w, fit_l, "logistic")
+
+    # Refit on all labelled shoots as the candidate production models
+    full = fit_grid(labels_by_folder, folders, packs=packs)
     candidate_w = full[1] if full else baseline_w
-    after_in_sample = eval_weights(labels_by_folder, candidate_w, folders)
+    candidate_weighted = {"type": "weighted", "weights": candidate_w}
+    candidate_log = fit_logistic(labels_by_folder, folders, packs=packs)
+    after_in_sample = eval_weights(labels_by_folder, candidate_w, folders, packs=packs)
+    after_in_sample_log = (eval_model(labels_by_folder, candidate_log, folders, packs=packs)
+                           if candidate_log else None)
+
+    # Prefer logistic only if it beats the weighted-sum LOSO on held-out data
+    use_logistic = bool(candidate_log) and _macro_tuple(after_log) > _macro_tuple(after_macro)
+    if use_logistic:
+        candidate_model = candidate_log
+        after_loso_macro = after_log
+    else:
+        candidate_model = candidate_weighted
+        after_loso_macro = after_macro
+
     return {
         "before": before,
         "loso": loso,
-        "after_loso_macro": after_macro,
+        "loso_logistic": loso_log,
+        "after_loso_macro": after_loso_macro,
+        "after_loso_macro_grid": after_macro,
+        "after_loso_macro_logistic": after_log,
         "candidate_weights": candidate_w,
+        "candidate_model": candidate_model,
         "candidate_in_sample": after_in_sample,
+        "candidate_in_sample_logistic": after_in_sample_log,
     }
 
 
@@ -781,10 +1108,10 @@ def should_adopt(result) -> tuple[bool, str]:
     a = after.get("auc_combined_macro")
     if a is None or b is None:
         return False, "missing combined macro AUC"
+    kind = after.get("kind") or (result.get("candidate_model") or {}).get("type") or "weighted"
     if a > b + 1e-9:
-        # don't adopt a win on combined that clearly hurts export prediction
         be, ae = before.get("auc_export_macro"), after.get("auc_export_macro")
         if be is not None and ae is not None and ae + 0.02 < be:
-            return False, f"combined {b:.3f}->{a:.3f} but export macro dropped {be:.3f}->{ae:.3f}"
-        return True, f"held-out combined macro {b:.3f} -> {a:.3f}"
-    return False, f"held-out combined macro {b:.3f} -> {a:.3f} (not better)"
+            return False, f"{kind} combined {b:.3f}->{a:.3f} but export macro dropped {be:.3f}->{ae:.3f}"
+        return True, f"held-out combined macro {b:.3f} -> {a:.3f} ({kind})"
+    return False, f"held-out combined macro {b:.3f} -> {a:.3f} ({kind}, not better)"

@@ -155,9 +155,10 @@
           <h2>Rank training</h2>
           <p class="note">Retrains the quality ranking from your exports and 3★+ ratings. Leave-one-shoot-out evaluation. Read-only on the NAS. It never writes to Capture One and never changes stars, colour tags or rank keywords. The run is queued like any other job.</p>
           <div class="hr"></div>
-          <h2>Export roots</h2>
+          <h2>Training data</h2>
+          <p class="note">The run uses only folders marked as training data in Settings → Locations. Those folders are read only — training never modifies them.</p>
           <div id="trainRoots" class="train-roots"></div>
-          <p class="note" id="trainRootsNote">Checking available folders…</p>
+          <p class="note" id="trainRootsNote">Checking marked sources…</p>
           <div class="row" style="margin-top:12px">
             <label class="inline"><input type="checkbox" id="trainIndexMissing" checked /> Index missing import folders first</label>
             <label class="inline"><input type="checkbox" id="trainAutoAdopt" checked /> Auto-adopt only if held-out accuracy is better</label>
@@ -261,7 +262,7 @@
     <div id="tab-settings" class="panel-section">
       <section class="card">
         <h2>Locations</h2>
-        <p class="note">Photo-folder roots on the NAS (Camera Imports, Camera Exports, 2025 Exports, and the Photos parent). Browse opens the macOS folder picker on this Mac — use it at the M5 or over screen share. You can also paste a path. Paths are checked that they exist and are readable, and a count of immediate folders/files is shown; the whole library is never scanned. Save writes <code>config.json</code> after a timestamped backup. The panel picks up the new paths immediately, without a restart.</p>
+        <p class="note">Photo-folder roots on the NAS (Camera Imports, Camera Exports, Other Exports, and the Photos parent). Browse opens the macOS folder picker on this Mac — use it at the M5 or over screen share. You can also paste a path. Paths are checked that they exist and are readable, and a count of immediate folders/files is shown; the whole library is never scanned. Save writes <code>config.json</code> after a timestamped backup. The panel picks up the new paths immediately, without a restart. Folders marked <strong>Training data</strong> are read only: they are used to train your personal ranking model and are never modified. Camera Exports and Other Exports supply exported frames; Camera Imports supplies 3★+ star labels.</p>
         <div id="locFields"></div>
         <div class="row">
           <button type="button" id="locSave">Save locations</button>

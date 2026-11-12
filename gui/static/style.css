@@ -162,3 +162,37 @@ textarea.code { font-family:ui-monospace, Menlo, monospace; font-size:12px; min-
   .loc-row { grid-template-columns: 1fr; }
   .loc-preview, .loc-hint { margin-left: 0; }
 }
+
+.badge-train {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 99px;
+  background: #1e3a2f;
+  color: #9fd4b3;
+  border: 1px solid #2e5a45;
+  vertical-align: middle;
+}
+.loc-train {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px 158px;
+}
+.train-source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.train-source:last-child { border-bottom: 0; }
+.train-source.off { opacity: 0.55; }
+@media (max-width: 800px) {
+  .loc-train { margin-left: 0; }
+}

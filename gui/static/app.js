@@ -617,6 +617,11 @@ function renderLocations() {
     const prev = f.preview || {};
     const ok = !!prev.readable;
     const env = f.env_override ? `<div class="loc-hint">Environment ${escapeHtml(f.env_name)} is set and still wins until you unset it.</div>` : "";
+    const train = f.training_source ? `<div class="loc-train">
+      <span class="badge-train">Training data</span>
+      <label class="inline"><input type="checkbox" id="loc-train-${escapeHtml(f.key)}" ${f.training_enabled ? "checked" : ""} /> Use for the personal ranking model</label>
+      <span class="note">${escapeHtml(f.training_role || "")}</span>
+    </div>` : "";
     return `<div class="loc-row" data-key="${escapeHtml(f.key)}">
       <label for="loc-${escapeHtml(f.key)}">${escapeHtml(f.label)}</label>
       <input type="text" id="loc-${escapeHtml(f.key)}" value="${escapeHtml(val)}" placeholder="${f.optional ? "optional — leave blank to derive" : "paste a folder path"}" />
@@ -624,6 +629,7 @@ function renderLocations() {
       <button type="button" class="loc-browse-btn" data-key="${escapeHtml(f.key)}">Browse</button>
     </div>
     <div class="loc-hint">${escapeHtml(f.hint || "")}</div>
+    ${train}
     ${env}
     <div class="loc-preview ${ok ? "ok" : (val ? "bad" : "")}" id="loc-prev-${escapeHtml(f.key)}">${escapeHtml(locPreviewText(prev))}</div>`;
   }).join("");
@@ -712,7 +718,13 @@ if ($("locSave")) $("locSave").onclick = async () => {
   $("locSave").disabled = true;
   if (status) status.textContent = "Saving…";
   try {
-    const r = await api("/api/locations/save", { method: "POST", body: JSON.stringify({ paths }) });
+    const training_sources = {};
+    _locFields.forEach(f => {
+      if (!f.training_source) return;
+      const box = $("loc-train-" + f.key);
+      training_sources[f.key] = !!(box && box.checked);
+    });
+    const r = await api("/api/locations/save", { method: "POST", body: JSON.stringify({ paths, training_sources }) });
     _locFields = r.locations && r.locations.fields ? r.locations.fields : _locFields;
     renderLocations();
     const bak = r.backup ? ` Backup: ${r.backup.split("/").pop()}.` : "";
@@ -982,12 +994,9 @@ function setupTrainingTab() {
   $("trainRollback").onclick = rollbackTraining;
 }
 async function startTraining() {
-  const roots = [...document.querySelectorAll("#trainRoots input:checked:not(:disabled)")].map(i => i.value);
-  if (!roots.length) return alert("Pick at least one available export root");
   $("trainStartNote").textContent = "Queuing…";
   try {
     const r = await api("/api/train/start", { method: "POST", body: JSON.stringify({
-      export_roots: roots,
       index_missing: $("trainIndexMissing").checked,
       auto_adopt: $("trainAutoAdopt").checked,
     })});
@@ -1071,6 +1080,7 @@ function renderTrainReport(s) {
     return;
   }
   const train = report.train || {};
+  const sourcesUsed = report.sources_used || [];
   const before = (train.before && train.before.overall) || {};
   const after = train.after_loso_macro || {};
   const labels = report.label_summaries || [];
@@ -1100,8 +1110,18 @@ function renderTrainReport(s) {
       <td class="${aucClass(b.auc_star, a.auc_star)}">${fmtAuc(b.auc_star)} → ${fmtAuc(a.auc_star)}</td>
     </tr>`;
   }).join("");
+  const srcLines = sourcesUsed.map(s =>
+    `<div class="train-source">
+      <span class="badge-train">Training data</span>
+      <strong>${escapeHtml(s.label || s.key || "Folder")}</strong>
+      <span class="note">${escapeHtml(s.role || "")}</span>
+      <span class="note">${escapeHtml(s.path || "")}</span>
+    </div>`
+  ).join("") || `<p class="note">No source folders were recorded in this report.</p>`;
   box.innerHTML = `
     <p class="note">Report ${escapeHtml(report.stamp || "")}${train.adopt_reason ? " · " + escapeHtml(train.adopt_reason) : ""}. Training is read-only on the NAS and does not write to Capture One.</p>
+    <h3 style="margin:12px 0 4px;font-size:13px">Folders used</h3>
+    ${srcLines}
     <table class="train-table">
       <thead><tr><th>Macro AUC</th><th>Before</th><th>After (held-out)</th></tr></thead>
       <tbody>
@@ -1135,18 +1155,24 @@ async function loadTrainingTab() {
   if (!$("trainRoots")) return;
   const s = await api("/api/train/status");
   const box = $("trainRoots");
-  const existing = new Set([...box.querySelectorAll("input:checked")].map(i => i.value));
-  const first = !box.dataset.ready;
-  box.innerHTML = (s.roots || []).map(r => {
-    const checked = first ? r.available : existing.has(r.path);
-    return `<label class="inline"><input type="checkbox" value="${escapeHtml(r.path)}"
-      ${r.available ? "" : "disabled"} ${checked && r.available ? "checked" : ""} />
-      ${escapeHtml(r.label)}${r.available ? "" : " (not mounted)"}
-      <span class="note">${escapeHtml(r.path)}</span></label>`;
-  }).join("") || `<p class="note">No export roots found. Set imports_root / exports_root in config.json and mount the NAS.</p>`;
-  box.dataset.ready = "1";
-  const avail = (s.roots || []).filter(r => r.available).length;
-  $("trainRootsNote").textContent = avail ? `${avail} available root${avail === 1 ? "" : "s"}.` : "No export folders are mounted.";
+  const items = [];
+  (s.roots || []).forEach(r => items.push(r));
+  if (s.imports) items.push(s.imports);
+  const marked = items.filter(r => r.marked);
+  box.innerHTML = marked.map(r => {
+    return `<div class="train-source ${r.available ? "" : "off"}">
+      <span class="badge-train">Training data</span>
+      <strong>${escapeHtml(r.label)}</strong>
+      <span class="note">${escapeHtml(r.role || "")}${r.available ? "" : " — not mounted"}</span>
+      <span class="note">${escapeHtml(r.path || "")}</span>
+    </div>`;
+  }).join("") || `<p class="note">No folders are marked as training data. Turn the Training data toggle on in Settings → Locations.</p>`;
+  const markedExports = (s.roots || []).filter(r => r.marked);
+  const avail = markedExports.filter(r => r.available).length;
+  const nMark = marked.length;
+  $("trainRootsNote").textContent = nMark
+    ? `${nMark} marked source${nMark === 1 ? "" : "s"} (${avail} export folder${avail === 1 ? "" : "s"} mounted). Change markers in Settings → Locations.`
+    : "No sources are marked.";
   const busy = !!(s.active_job && (s.active_job.status === "queued" || s.active_job.status === "running"));
   $("trainStart").disabled = busy || !avail;
   renderTrainJob(s);

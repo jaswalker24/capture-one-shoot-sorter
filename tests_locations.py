@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Locations (NAS path) preview, save-with-backup, and 2025 Exports root.
+"""Locations (NAS path) preview, save-with-backup, and Other Exports root.
 
 No Capture One, no NAS, no live ~/localai writes.
 """
@@ -76,7 +76,7 @@ class SaveLocations(unittest.TestCase):
             "photos_root": str(photos),
             "imports_root": str(photos / "Camera Imports"),
             "exports_root": str(photos / "Camera Exports"),
-            "exports_2025_root": str(photos / "2025 Exports"),
+            "other_exports_root": str(photos / "2025 Exports"),
         }, home=self.tmp)
         self.assertTrue(out["ok"])
         self.assertTrue(out["changed"])
@@ -89,7 +89,7 @@ class SaveLocations(unittest.TestCase):
         new = json.loads(self.cfg.read_text())
         self.assertEqual(new["imports_root"], str(photos / "Camera Imports"))
         self.assertEqual(new["photos_root"], str(photos))
-        self.assertEqual(new["exports_2025_root"], str(photos / "2025 Exports"))
+        self.assertEqual(new["other_exports_root"], str(photos / "2025 Exports"))
         self.assertEqual(new["keyword_library"], "Trip Keywords")
         self.assertEqual(new["rank"]["weights"]["aes"], 0.15)
         # no second backup when unchanged
@@ -97,7 +97,7 @@ class SaveLocations(unittest.TestCase):
             "photos_root": str(photos),
             "imports_root": str(photos / "Camera Imports"),
             "exports_root": str(photos / "Camera Exports"),
-            "exports_2025_root": str(photos / "2025 Exports"),
+            "other_exports_root": str(photos / "2025 Exports"),
         }, home=self.tmp)
         self.assertFalse(out2["changed"])
         self.assertIsNone(out2["backup"])
@@ -118,12 +118,14 @@ class SaveLocations(unittest.TestCase):
 
     def test_clear_optional(self):
         cfg = json.loads(self.cfg.read_text())
-        cfg["exports_2025_root"] = "/old/2025"
+        cfg["other_exports_root"] = "/old/2025"
+        cfg["exports_2025_root"] = "/legacy/2025"
         self.cfg.write_text(json.dumps(cfg, indent=2))
-        # clearing optional must not require the path to exist
-        out = NP.save_locations({"exports_2025_root": ""}, home=self.tmp, require_readable=True)
+        # clearing optional must not require the path to exist, and drops the legacy key too
+        out = NP.save_locations({"other_exports_root": ""}, home=self.tmp, require_readable=True)
         self.assertTrue(out["changed"])
         new = json.loads(self.cfg.read_text())
+        self.assertNotIn("other_exports_root", new)
         self.assertNotIn("exports_2025_root", new)
 
     def test_trailing_slash_normalized(self):
@@ -146,29 +148,46 @@ class Resolvers(unittest.TestCase):
             "exports_root": str(self.tmp / "Photos" / "Camera Exports"),
         }))
 
-    def test_exports_2025_derived_and_override(self):
+    def test_other_exports_derived_and_override(self):
+        self.assertEqual(NP.other_exports_root(self.tmp), self.tmp / "Photos" / "2025 Exports")
         self.assertEqual(NP.exports_2025_root(self.tmp), self.tmp / "Photos" / "2025 Exports")
-        # explicit config wins even if the folder is a custom location
-        custom = self.tmp / "custom-2025"
+        custom = self.tmp / "custom-other"
+        custom.mkdir()
+        cfg = json.loads((self.tmp / "config.json").read_text())
+        cfg["other_exports_root"] = str(custom)
+        (self.tmp / "config.json").write_text(json.dumps(cfg))
+        self.assertEqual(NP.other_exports_root(self.tmp), custom)
+
+    def test_legacy_exports_2025_root_fallback(self):
+        custom = self.tmp / "legacy-2025"
         custom.mkdir()
         cfg = json.loads((self.tmp / "config.json").read_text())
         cfg["exports_2025_root"] = str(custom)
         (self.tmp / "config.json").write_text(json.dumps(cfg))
-        self.assertEqual(NP.exports_2025_root(self.tmp), custom)
+        self.assertEqual(NP.other_exports_root(self.tmp), custom)
+
+    def test_legacy_env_fallback(self):
+        custom = self.tmp / "legacy-env"
+        custom.mkdir()
+        with mock.patch.dict(os.environ, {"LOCALAI_EXPORTS_2025": str(custom)}):
+            self.assertEqual(NP.other_exports_root(self.tmp), custom)
 
     def test_rank_exports_honours_config(self):
         prev_home = R.HOME
         R.HOME = self.tmp
         self.addCleanup(lambda: setattr(R, "HOME", prev_home))
         with mock.patch.dict(os.environ, {}, clear=False):
-            for k in ("LOCALAI_PHOTOS", "LOCALAI_IMPORTS", "LOCALAI_EXPORTS", "LOCALAI_EXPORTS_2025"):
+            for k in ("LOCALAI_PHOTOS", "LOCALAI_IMPORTS", "LOCALAI_EXPORTS",
+                       "LOCALAI_EXPORTS_2025", "LOCALAI_OTHER_EXPORTS"):
                 os.environ.pop(k, None)
             self.assertEqual(R.imports_root(), self.tmp / "Photos" / "Camera Imports")
-            self.assertEqual(R.exports_2025_root(), self.tmp / "Photos" / "2025 Exports")
+            self.assertEqual(R.other_exports_root(), self.tmp / "Photos" / "2025 Exports")
             roots = R.list_export_roots()
             labels = {r["label"]: r for r in roots}
-            self.assertEqual(Path(labels["2025 Exports"]["path"]), self.tmp / "Photos" / "2025 Exports")
-            self.assertTrue(labels["2025 Exports"]["available"])
+            self.assertIn("Other Exports", labels)
+            self.assertNotIn("2025 Exports", labels)
+            self.assertEqual(Path(labels["Other Exports"]["path"]), self.tmp / "Photos" / "2025 Exports")
+            self.assertTrue(labels["Other Exports"]["available"])
 
 
 class Browse(unittest.TestCase):
@@ -177,6 +196,84 @@ class Browse(unittest.TestCase):
             r = NP.choose_folder("Choose the Camera Imports folder")
         self.assertFalse(r["ok"])
         self.assertIn("Paste the path", r["error"])
+
+
+class TrainingSources(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp(prefix="loctrain-"))
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        (self.tmp / "Photos" / "Camera Imports").mkdir(parents=True)
+        (self.tmp / "Photos" / "Camera Exports").mkdir(parents=True)
+        (self.tmp / "config.json").write_text(json.dumps({
+            "imports_root": str(self.tmp / "Photos" / "Camera Imports"),
+            "exports_root": str(self.tmp / "Photos" / "Camera Exports"),
+        }))
+
+    def test_defaults_export_roots_on(self):
+        src = NP.training_sources(self.tmp)
+        self.assertTrue(src["exports_root"])
+        self.assertTrue(src["other_exports_root"])
+        self.assertTrue(src["imports_root"])
+        locs = NP.current_locations(self.tmp)
+        by = {f["key"]: f for f in locs["fields"]}
+        self.assertTrue(by["exports_root"]["training_source"])
+        self.assertTrue(by["exports_root"]["training_enabled"])
+        self.assertTrue(by["other_exports_root"]["training_enabled"])
+        self.assertTrue(by["imports_root"]["training_enabled"])
+        self.assertFalse(by["photos_root"]["training_source"])
+
+    def test_save_training_sources_backs_up(self):
+        out = NP.save_locations({}, home=self.tmp, training_sources_update={
+            "exports_root": True,
+            "other_exports_root": False,
+            "imports_root": False,
+        })
+        self.assertTrue(out["changed"])
+        self.assertTrue(out["backup"])
+        cfg = json.loads((self.tmp / "config.json").read_text())
+        self.assertEqual(cfg["training"]["sources"]["other_exports_root"], False)
+        self.assertEqual(cfg["training"]["sources"]["imports_root"], False)
+        self.assertEqual(NP.training_sources(self.tmp)["other_exports_root"], False)
+
+    def test_legacy_training_source_key(self):
+        cfg = json.loads((self.tmp / "config.json").read_text())
+        cfg["training"] = {"sources": {"exports_2025_root": False, "exports_root": True}}
+        (self.tmp / "config.json").write_text(json.dumps(cfg))
+        self.assertFalse(NP.training_sources(self.tmp)["other_exports_root"])
+        self.assertTrue(NP.training_sources(self.tmp)["exports_root"])
+
+
+class StarLabels(unittest.TestCase):
+    def test_build_labels_can_ignore_stars(self):
+        # Minimal synthetic rows: one exported, one 3-star only, one negative
+        from unittest.mock import patch
+        index = {"2026-01-02": [
+            {"filename": "IMG_EXP.CR3", "sharp": 0.8, "aes": 0.5},
+            {"filename": "IMG_STAR.CR3", "sharp": 0.7, "aes": 0.4},
+            {"filename": "IMG_NEG.CR3", "sharp": 0.2, "aes": 0.2},
+        ]}
+        positives = {"2026-01-02": {"IMG_EXP"}}
+        feats = [
+            {"filename": "IMG_EXP.CR3", "sharp": 0.8, "aes": 0.5, "burst_best": 0, "burst_other": 0, "blur": 0},
+            {"filename": "IMG_STAR.CR3", "sharp": 0.7, "aes": 0.4, "burst_best": 0, "burst_other": 0, "blur": 0},
+            {"filename": "IMG_NEG.CR3", "sharp": 0.2, "aes": 0.2, "burst_best": 0, "burst_other": 0, "blur": 0},
+        ]
+        ratings = {"IMG_EXP": 0, "IMG_STAR": 5, "IMG_NEG": 0}
+        with patch.object(R, "load_bursts", return_value={}), \
+             patch.object(R, "quality_features", return_value=feats), \
+             patch.object(R, "load_ratings", return_value=(ratings, None)):
+            labels, summary = R.build_labels(index, positives, min_indexed=1, use_star_labels=True)
+            recs = {Path(r["filename"]).stem: r for r in labels["2026-01-02"]}
+            self.assertTrue(recs["IMG_EXP"]["y"])
+            self.assertTrue(recs["IMG_STAR"]["y"])
+            self.assertFalse(recs["IMG_NEG"]["y"])
+            self.assertEqual(summary[0]["positives_star_only"], 1)
+            labels2, summary2 = R.build_labels(index, positives, min_indexed=1, use_star_labels=False)
+            recs2 = {Path(r["filename"]).stem: r for r in labels2["2026-01-02"]}
+            self.assertTrue(recs2["IMG_EXP"]["y"])
+            self.assertFalse(recs2["IMG_STAR"]["y"])
+            self.assertFalse(recs2["IMG_NEG"]["y"])
+            self.assertEqual(summary2[0]["positives_star_only"], 0)
 
 
 if __name__ == "__main__":

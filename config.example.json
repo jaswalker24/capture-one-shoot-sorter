@@ -8,7 +8,14 @@
   "photos_root": "/Volumes/your-nas",
   "imports_root": "/Volumes/your-nas/Camera Imports",
   "exports_root": "/Volumes/your-nas/Camera Exports",
-  "exports_2025_root": "/Volumes/your-nas/2025 Exports",
+  "other_exports_root": "/Volumes/your-nas/2025 Exports",
+  "training": {
+    "sources": {
+      "exports_root": true,
+      "other_exports_root": true,
+      "imports_root": true
+    }
+  },
   "keyword_library": "Trip Keywords",
   "thresholds": {
     "label_min": 0.55,

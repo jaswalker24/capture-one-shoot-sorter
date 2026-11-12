@@ -182,15 +182,30 @@ def main():
                     help="Write config.json if (and only if) the new weights beat the baseline on held-out shoots")
     ap.add_argument("--min-indexed", type=int, default=50)
     ap.add_argument("--export-root", action="append", default=[],
-                    help="Export root to scan (repeatable). Default: Camera Exports.")
+                    help="Export root to scan (repeatable). Default: folders marked as training data.")
     ap.add_argument("--index-missing", action=argparse.BooleanOptionalAction, default=False,
                     help="Index import folders that have export matches but are missing or too small in the local index")
+    ap.add_argument("--use-star-labels", action=argparse.BooleanOptionalAction, default=None,
+                    help="Include 3★+ ratings as positives. Default: on when Camera Imports is marked as training data.")
     args = ap.parse_args()
     OUTDIR.mkdir(parents=True, exist_ok=True)
 
+    import nas_paths as NP
+    NP.HOME = HOME
+    sources = NP.training_sources(HOME)
     roots = [Path(p) for p in (args.export_root or [])]
     if not roots:
-        roots = [R.exports_root()]
+        if sources.get("exports_root"):
+            roots.append(R.exports_root())
+        if sources.get("other_exports_root"):
+            other = R.other_exports_root()
+            if other not in roots:
+                roots.append(other)
+    if not roots:
+        raise SystemExit("no training-data export folders are marked; set them in Settings → Locations")
+    use_star_labels = sources.get("imports_root", True) if args.use_star_labels is None else bool(args.use_star_labels)
+    print("training sources:", {k: bool(sources.get(k)) for k in ("exports_root", "other_exports_root", "imports_root")},
+          "use_star_labels:", use_star_labels, flush=True)
     print("listing dated export folders…", flush=True)
     year_imports = R.list_year_imports()
     folders = R.discover_export_folders_many(roots)
@@ -233,7 +248,8 @@ def main():
             index_by_folder = R.index_rows_by_folder()
             print(f"  indexed shoots: { {k: len(v) for k,v in index_by_folder.items()} }", flush=True)
 
-    labels, labsum = R.build_labels(index_by_folder, positives, min_indexed=args.min_indexed)
+    labels, labsum = R.build_labels(index_by_folder, positives, min_indexed=args.min_indexed,
+                                 use_star_labels=use_star_labels)
     print("labels:", flush=True)
     for s in labsum:
         print(" ", s, flush=True)
@@ -281,9 +297,29 @@ def main():
     elif args.write_config and not labels:
         print("not writing config: no labels", flush=True)
 
+    sources_used = []
+    if sources.get("exports_root") and R.exports_root() in roots:
+        sources_used.append({"key": "exports_root", "label": "Camera Exports", "path": str(R.exports_root()),
+                             "role": "exported frames"})
+    if sources.get("other_exports_root") and R.other_exports_root() in roots:
+        sources_used.append({"key": "other_exports_root", "label": "Other Exports", "path": str(R.other_exports_root()),
+                             "role": "exported frames"})
+    # A root can be passed explicitly; always record the folders actually scanned.
+    for r in roots:
+        if str(r) not in {s["path"] for s in sources_used}:
+            label = "Camera Exports" if Path(r) == R.exports_root() else (
+                "Other Exports" if Path(r) == R.other_exports_root() else Path(r).name)
+            sources_used.append({"key": None, "label": label, "path": str(r), "role": "exported frames"})
+    if use_star_labels:
+        sources_used.append({"key": "imports_root", "label": "Camera Imports", "path": str(R.imports_root()),
+                             "role": "star labels (3★+ ratings)"})
+
     report = {
         "stamp": STAMP,
         "export_roots": [str(r) for r in roots],
+        "training_sources": {k: bool(sources.get(k)) for k in ("exports_root", "other_exports_root", "imports_root")},
+        "use_star_labels": bool(use_star_labels),
+        "sources_used": sources_used,
         "index_missing": bool(args.index_missing),
         "indexed_now": indexed_now,
         "export_folders": [s for s in stats],

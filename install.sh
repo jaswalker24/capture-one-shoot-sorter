@@ -476,7 +476,7 @@ Next steps (one-time):
   1. Set your NAS photo folders in the control panel under
      Settings → Locations (Browse or paste), or edit $DEST/config.json
      (imports_root, exports_root, and optional photos_root /
-     exports_2025_root). Mount the volume before using the health strip.
+     other_exports_root). Mount the volume before using the health strip.
 
   2. Grant permissions in System Settings → Privacy & Security:
        • Automation — allow Terminal, osascript and the control-panel

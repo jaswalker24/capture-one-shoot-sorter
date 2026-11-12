@@ -25,27 +25,34 @@ LOCATION_FIELDS = (
         "prompt": "Choose the Photos root folder (parent of Camera Imports and Camera Exports)",
         "hint": "Parent folder that contains Camera Imports and Camera Exports, for example …/[03] Photos. Optional if Imports and Exports are set.",
         "optional": True,
+        "training_source": False,
     },
     {
         "key": "imports_root",
         "label": "Camera Imports",
         "prompt": "Choose the Camera Imports folder",
-        "hint": "Year folders (2025, 2026, …) live here.",
+        "hint": "Year folders (2025, 2026, …) live here. When marked as training data, 3★+ ratings from these imports are used as star labels.",
         "optional": False,
+        "training_source": True,
+        "training_role": "star labels (3★+ ratings)",
     },
     {
         "key": "exports_root",
         "label": "Camera Exports",
         "prompt": "Choose the Camera Exports folder",
-        "hint": "Dated export folders live here.",
+        "hint": "Dated export folders live here. When marked as training data, exported frames are positives for the ranking model.",
         "optional": False,
+        "training_source": True,
+        "training_role": "exported frames",
     },
     {
-        "key": "exports_2025_root",
-        "label": "2025 Exports",
-        "prompt": "Choose the 2025 Exports folder",
-        "hint": "Optional. Leave blank to use Photos root/2025 Exports, or a 2025 Exports bucket inside Camera Exports.",
+        "key": "other_exports_root",
+        "label": "Other Exports",
+        "prompt": "Choose the Other Exports folder",
+        "hint": "Optional. Leave blank to use the default folder (Photos root/2025 Exports, or a 2025 Exports bucket inside Camera Exports). The NAS folder name is unchanged. When marked as training data, exported frames are positives for the ranking model.",
         "optional": True,
+        "training_source": True,
+        "training_role": "exported frames",
     },
 )
 
@@ -54,7 +61,7 @@ ENV_FOR_KEY = {
     "photos_root": "LOCALAI_PHOTOS",
     "imports_root": "LOCALAI_IMPORTS",
     "exports_root": "LOCALAI_EXPORTS",
-    "exports_2025_root": "LOCALAI_EXPORTS_2025",
+    "other_exports_root": "LOCALAI_OTHER_EXPORTS",
 }
 
 
@@ -112,28 +119,95 @@ def exports_root(home: Path | None = None) -> Path:
     return DEFAULT_EXPORTS
 
 
-def exports_2025_root(home: Path | None = None) -> Path:
-    env = os.environ.get("LOCALAI_EXPORTS_2025")
+# Default on-disk folder name for Other Exports. Do not rename the NAS folder.
+DEFAULT_OTHER_EXPORTS_NAME = "2025 Exports"
+
+
+def other_exports_root(home: Path | None = None) -> Path:
+    env = os.environ.get("LOCALAI_OTHER_EXPORTS") or os.environ.get("LOCALAI_EXPORTS_2025")
     if env:
         return Path(normalize_path(env))
     cfg = _cfg(home)
+    if cfg.get("other_exports_root"):
+        return Path(normalize_path(str(cfg["other_exports_root"])))
     if cfg.get("exports_2025_root"):
         return Path(normalize_path(str(cfg["exports_2025_root"])))
-    sibling = photos_root(home) / "2025 Exports"
+    sibling = photos_root(home) / DEFAULT_OTHER_EXPORTS_NAME
     if sibling.is_dir():
         return sibling
-    inner = exports_root(home) / "2025 Exports"
+    inner = exports_root(home) / DEFAULT_OTHER_EXPORTS_NAME
     if inner.is_dir():
         return inner
     return sibling
+
+
+# Backward-compatible alias
+def exports_2025_root(home: Path | None = None) -> Path:
+    return other_exports_root(home)
 
 
 RESOLVERS = {
     "photos_root": photos_root,
     "imports_root": imports_root,
     "exports_root": exports_root,
-    "exports_2025_root": exports_2025_root,
+    "other_exports_root": other_exports_root,
 }
+
+TRAINING_SOURCE_KEYS = ("exports_root", "other_exports_root", "imports_root")
+DEFAULT_TRAINING_SOURCES = {
+    "exports_root": True,
+    "other_exports_root": True,
+    "imports_root": True,  # keep 3★+ star labels in training unless turned off
+}
+
+
+def training_sources(home: Path | None = None) -> dict:
+    """Which location keys are marked as training data. Export roots default on."""
+    raw = ((_cfg(home).get("training") or {}) if isinstance(_cfg(home).get("training"), dict) else {}).get("sources") or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    out = dict(DEFAULT_TRAINING_SOURCES)
+    if "exports_root" in raw:
+        out["exports_root"] = bool(raw["exports_root"])
+    if "other_exports_root" in raw:
+        out["other_exports_root"] = bool(raw["other_exports_root"])
+    elif "exports_2025_root" in raw:
+        out["other_exports_root"] = bool(raw["exports_2025_root"])
+    if "imports_root" in raw:
+        out["imports_root"] = bool(raw["imports_root"])
+    return out
+
+
+def set_training_sources(sources: dict, cfg: dict) -> tuple[dict, bool]:
+    """Merge training.sources into cfg. Returns (cfg, changed)."""
+    if not isinstance(sources, dict):
+        raise ValueError("training_sources must be an object")
+    unknown = [k for k in sources if k not in TRAINING_SOURCE_KEYS and k != "exports_2025_root"]
+    if unknown:
+        raise ValueError("Unknown training source: " + ", ".join(unknown))
+    current = dict(DEFAULT_TRAINING_SOURCES)
+    existing = ((cfg.get("training") or {}) if isinstance(cfg.get("training"), dict) else {}).get("sources") or {}
+    if isinstance(existing, dict):
+        if "exports_root" in existing:
+            current["exports_root"] = bool(existing["exports_root"])
+        if "other_exports_root" in existing:
+            current["other_exports_root"] = bool(existing["other_exports_root"])
+        elif "exports_2025_root" in existing:
+            current["other_exports_root"] = bool(existing["exports_2025_root"])
+        if "imports_root" in existing:
+            current["imports_root"] = bool(existing["imports_root"])
+    for k, v in sources.items():
+        key = "other_exports_root" if k == "exports_2025_root" else k
+        if key in TRAINING_SOURCE_KEYS:
+            current[key] = bool(v)
+    training = dict(cfg.get("training") or {}) if isinstance(cfg.get("training"), dict) else {}
+    prev = training.get("sources")
+    if prev == current:
+        return cfg, False
+    training["sources"] = current
+    # drop legacy key from stored sources if we now write the new name
+    cfg["training"] = training
+    return cfg, True
 
 
 def preview_path(path: str) -> dict:
@@ -203,12 +277,20 @@ def current_locations(home: Path | None = None) -> dict:
     """Resolved paths, config values, env overrides and a shallow preview each."""
     home = home or HOME
     cfg = _cfg(home)
+    sources = training_sources(home)
     fields = []
     for spec in LOCATION_FIELDS:
         key = spec["key"]
         env_name = ENV_FOR_KEY[key]
         env_val = os.environ.get(env_name) or ""
         configured = normalize_path(str(cfg[key])) if cfg.get(key) else ""
+        # Legacy Other Exports key / env still populate the field
+        if key == "other_exports_root":
+            if not configured and cfg.get("exports_2025_root"):
+                configured = normalize_path(str(cfg["exports_2025_root"]))
+            if not env_val and os.environ.get("LOCALAI_EXPORTS_2025"):
+                env_val = os.environ.get("LOCALAI_EXPORTS_2025") or ""
+                env_name = "LOCALAI_EXPORTS_2025"
         resolved = str(RESOLVERS[key](home))
         preview = preview_path(resolved) if resolved else preview_path("")
         fields.append({
@@ -219,8 +301,9 @@ def current_locations(home: Path | None = None) -> dict:
             "env_value": normalize_path(env_val) if env_val else "",
             "env_override": bool(env_val),
             "preview": preview,
+            "training_enabled": bool(spec.get("training_source")) and bool(sources.get(key)),
         })
-    return {"fields": fields}
+    return {"fields": fields, "training_sources": sources}
 
 
 def _as_literal(s: str) -> str:
@@ -272,8 +355,9 @@ end tell
     return {"ok": True, "cancelled": False, "path": path, "preview": preview}
 
 
-def save_locations(updates: dict, home: Path | None = None, require_readable: bool = True) -> dict:
-    """Write allowed path keys to config.json after a timestamped backup."""
+def save_locations(updates: dict, home: Path | None = None, require_readable: bool = True,
+                   training_sources_update: dict | None = None) -> dict:
+    """Write allowed path keys (and optional training.sources) after a timestamped backup."""
     home = Path(home or HOME)
     if not isinstance(updates, dict):
         raise ValueError("updates must be an object of path keys")
@@ -308,10 +392,17 @@ def save_locations(updates: dict, home: Path | None = None, require_readable: bo
             if key in cfg:
                 cfg.pop(key, None)
                 changed = True
+            if key == "other_exports_root" and "exports_2025_root" in cfg:
+                cfg.pop("exports_2025_root", None)
+                changed = True
             continue
         if cfg.get(key) != path:
             cfg[key] = path
             changed = True
+
+    if training_sources_update is not None:
+        cfg, src_changed = set_training_sources(training_sources_update, cfg)
+        changed = changed or src_changed
 
     backup = None
     if changed:

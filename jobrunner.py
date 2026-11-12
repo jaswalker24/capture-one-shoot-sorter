@@ -302,8 +302,12 @@ def run_rank_train(state):
         cmd.append("--no-index-missing")
     if state.get("auto_adopt"):
         cmd.append("--write-config")
+    if "use_star_labels" in state:
+        cmd.append("--use-star-labels" if state.get("use_star_labels") else "--no-use-star-labels")
     log(state, "roots:", ", ".join(str(r) for r in (state.get("export_roots") or [])) or "(default)")
-    log(state, "index_missing=", bool(state.get("index_missing")), "auto_adopt=", bool(state.get("auto_adopt")))
+    log(state, "index_missing=", bool(state.get("index_missing")),
+        "auto_adopt=", bool(state.get("auto_adopt")),
+        "use_star_labels=", state.get("use_star_labels"))
     _run_streaming(state, cmd, pass_id="train")
     latest = HOME / "out" / "rank-exports" / "train-latest.json"
     if latest.is_file():
@@ -317,6 +321,9 @@ def run_rank_train(state):
                 "adopt_reason": train.get("adopt_reason"),
                 "after_loso_macro": train.get("after_loso_macro"),
                 "before": (train.get("before") or {}).get("overall"),
+                "export_roots": rep.get("export_roots"),
+                "sources_used": rep.get("sources_used"),
+                "use_star_labels": rep.get("use_star_labels"),
             }
         except Exception as e:
             log(state, "could not read report:", e)

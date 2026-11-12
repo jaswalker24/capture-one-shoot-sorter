@@ -34,7 +34,7 @@ class ExportRoots(unittest.TestCase):
             roots = R.list_export_roots(photos=self.tmp)
             labels = {r["label"]: r for r in roots}
             self.assertTrue(labels["Camera Exports"]["available"])
-            self.assertTrue(labels["2025 Exports"]["available"])
+            self.assertTrue(labels["Other Exports"]["available"])
             found = R.discover_export_folders_many([r["path"] for r in roots if r["available"]])
             names = {f["name"] for f in found}
             self.assertIn("2026-01-02", names)

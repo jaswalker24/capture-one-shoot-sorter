@@ -219,28 +219,42 @@ def imports_root() -> Path:
     return _np().imports_root(HOME)
 
 
+def other_exports_root() -> Path:
+    return _np().other_exports_root(HOME)
+
+
 def exports_2025_root() -> Path:
-    return _np().exports_2025_root(HOME)
+    """Backward-compatible alias for other_exports_root()."""
+    return other_exports_root()
+
+
+def _other_exports_overridden() -> bool:
+    cfg = _cfg()
+    return bool(
+        os.environ.get("LOCALAI_OTHER_EXPORTS")
+        or os.environ.get("LOCALAI_EXPORTS_2025")
+        or cfg.get("other_exports_root")
+        or cfg.get("exports_2025_root")
+    )
 
 
 def list_export_roots(photos: Path | None = None) -> list[dict]:
-    """Known export roots the Training tab can offer: Camera Exports and 2025 Exports."""
-    NP = _np()
+    """Known export roots the Training tab can offer: Camera Exports and Other Exports."""
     photos = Path(photos) if photos is not None else photos_root()
     cam = exports_root()
     if not cam.is_dir():
         # still show the conventional path under photos
         cam = photos / "Camera Exports"
-    y2025 = exports_2025_root() if photos is None or photos == photos_root() else (Path(photos) / "2025 Exports")
+    other = other_exports_root() if photos is None or photos == photos_root() else (Path(photos) / "2025 Exports")
     # When the caller passed an explicit photos root, prefer that tree unless config
-    # has an explicit exports_2025_root (or env) that already resolved elsewhere.
-    if photos != photos_root() and not os.environ.get("LOCALAI_EXPORTS_2025") and not _cfg().get("exports_2025_root"):
-        y2025 = Path(photos) / "2025 Exports"
-        if not y2025.is_dir() and (cam / "2025 Exports").is_dir():
-            y2025 = cam / "2025 Exports"
+    # has an explicit other_exports_root (or legacy exports_2025_root / env).
+    if photos != photos_root() and not _other_exports_overridden():
+        other = Path(photos) / "2025 Exports"
+        if not other.is_dir() and (cam / "2025 Exports").is_dir():
+            other = cam / "2025 Exports"
     candidates = [
         ("camera-exports", "Camera Exports", cam),
-        ("2025-exports", "2025 Exports", y2025),
+        ("other-exports", "Other Exports", other),
     ]
     roots, seen = [], set()
     for rid, label, path in candidates:
@@ -990,8 +1004,8 @@ def fit_logistic(labels_by_folder, folders, packs=None):
     }
 
 
-def build_labels(index_by_folder, positives, min_indexed=50, star_threshold=3):
-    """For each indexed shoot that has exports: exported or 3★+ = positive, else negative."""
+def build_labels(index_by_folder, positives, min_indexed=50, star_threshold=3, use_star_labels=True):
+    """For each indexed shoot that has exports: exported (and optionally 3★+) = positive."""
     labels = {}
     summaries = []
     for fo, rows in index_by_folder.items():
@@ -1010,7 +1024,7 @@ def build_labels(index_by_folder, positives, min_indexed=50, star_threshold=3):
             stem = Path(r["filename"]).stem
             exported = stem in pos_stems
             star = int(ratings.get(stem, 0) or 0)
-            starred = star >= star_threshold
+            starred = bool(use_star_labels) and star >= star_threshold
             y = bool(exported or starred)
             if exported and starred:
                 n_both += 1

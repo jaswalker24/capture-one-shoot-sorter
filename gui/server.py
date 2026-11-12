@@ -450,31 +450,64 @@ def _train_mod():
     return TR, R
 
 
-def list_train_roots():
+def _training_context():
+    """Marked training-data sources plus export-root records."""
+    import nas_paths as NP
+    NP.HOME = HOME
     TR, R = _train_mod()
-    return R.list_export_roots()
+    sources = NP.training_sources(HOME)
+    roots = []
+    for r in R.list_export_roots():
+        rec = dict(r)
+        if rec.get("id") == "camera-exports" or rec.get("label") == "Camera Exports":
+            rec["key"] = "exports_root"
+            rec["role"] = "exported frames"
+        elif rec.get("id") in ("other-exports", "2025-exports") or rec.get("label") in ("Other Exports", "2025 Exports"):
+            rec["key"] = "other_exports_root"
+            rec["role"] = "exported frames"
+        else:
+            rec["key"] = None
+            rec["role"] = "exported frames"
+        rec["marked"] = bool(rec.get("key") and sources.get(rec["key"]))
+        roots.append(rec)
+    imports = {
+        "key": "imports_root",
+        "id": "camera-imports",
+        "label": "Camera Imports",
+        "path": str(NP.imports_root(HOME)),
+        "available": NP.imports_root(HOME).is_dir(),
+        "role": "star labels (3★+ ratings)",
+        "marked": bool(sources.get("imports_root")),
+    }
+    return {"training_sources": sources, "roots": roots, "imports": imports}
+
+
+def list_train_roots():
+    return _training_context()["roots"]
 
 
 def _create_train_job(data: dict) -> dict:
     """Queue a rank-training job. Never applies keywords or talks to Capture One."""
     TR, R = _train_mod()
-    known = {r["path"]: r for r in R.list_export_roots() if r.get("available")}
-    # Also accept label / id
-    by_id = {r["id"]: r for r in R.list_export_roots()}
-    by_label = {r["label"]: r for r in R.list_export_roots()}
+    ctx = _training_context()
+    marked = [r for r in ctx["roots"] if r.get("marked") and r.get("available")]
+    known = {r["path"]: r for r in marked}
+    by_id = {r["id"]: r for r in marked if r.get("id")}
+    by_label = {r["label"]: r for r in marked if r.get("label")}
+    requested = list(data.get("export_roots") or [])
     chosen = []
-    for item in data.get("export_roots") or []:
+    items = requested or [r["path"] for r in marked]
+    for item in items:
         rec = None
         if isinstance(item, dict):
             item = item.get("path") or item.get("id") or item.get("label")
         if item in known:
             rec = known[item]
-        elif item in by_id and by_id[item].get("available"):
+        elif item in by_id:
             rec = by_id[item]
-        elif item in by_label and by_label[item].get("available"):
+        elif item in by_label:
             rec = by_label[item]
         else:
-            # resolved path
             try:
                 rp = str(Path(item).expanduser())
             except Exception:
@@ -482,11 +515,16 @@ def _create_train_job(data: dict) -> dict:
             if rp in known:
                 rec = known[rp]
         if not rec:
-            raise ValueError(f"unknown or unavailable export root: {item}")
+            raise ValueError(
+                f"export root is not a marked training-data folder (or is not mounted): {item}"
+            )
         if rec["path"] not in chosen:
             chosen.append(rec["path"])
     if not chosen:
-        raise ValueError("pick at least one available export root")
+        raise ValueError(
+            "no Camera Exports / Other Exports folders are marked as training data in Settings → Locations"
+        )
+    use_star_labels = bool(ctx["training_sources"].get("imports_root"))
     # refuse a second train job while one is queued or running
     with _QUEUE_LOCK:
         for j in _load_queue_unlocked():
@@ -504,6 +542,8 @@ def _create_train_job(data: dict) -> dict:
             "dry_run": True,
             "apply_rank_keywords": False,
             "export_roots": chosen,
+            "use_star_labels": use_star_labels,
+            "training_sources": ctx["training_sources"],
             "index_missing": bool(data.get("index_missing", False)),
             "auto_adopt": bool(data.get("auto_adopt", True)),
             "status": "queued",
@@ -531,7 +571,8 @@ def train_status() -> dict:
         slim = {k: j.get(k) for k in
                 ("id", "status", "created", "started", "finished", "export_roots",
                  "index_missing", "auto_adopt", "current_pass", "progress", "error",
-                 "report_path", "train_summary", "folder_name")}
+                 "report_path", "train_summary", "folder_name",
+                 "use_star_labels", "training_sources")}
         slim["log_tail"] = (j.get("log") or [])[-40:]
         if j.get("status") in ("queued", "running"):
             active = slim
@@ -550,7 +591,8 @@ def train_status() -> dict:
                 continue
             slim = {k: j.get(k) for k in
                     ("id", "status", "created", "started", "finished", "export_roots",
-                     "index_missing", "auto_adopt", "error", "report_path", "train_summary")}
+                     "index_missing", "auto_adopt", "error", "report_path", "train_summary",
+                     "use_star_labels", "training_sources")}
             slim["log_tail"] = (j.get("log") or [])[-40:]
             recent.append(slim)
     # strip huge positives lists from the report copy for the UI
@@ -564,8 +606,11 @@ def train_status() -> dict:
             if len(names) > 20:
                 s["unmatched_names"] = names[:20]
                 s["unmatched_names_truncated"] = len(names) - 20
+    ctx = _training_context()
     return {
-        "roots": R.list_export_roots(),
+        "roots": ctx["roots"],
+        "training_sources": ctx["training_sources"],
+        "imports": ctx["imports"],
         "report": report_out,
         "rank": {
             "weights": rank.get("weights"),
@@ -1157,7 +1202,11 @@ class Handler(BaseHTTPRequestHandler):
             import nas_paths as NP
             NP.HOME = HOME
             try:
-                out = NP.save_locations(body.get("paths") or body, home=HOME)
+                out = NP.save_locations(
+                    body.get("paths") or {k: v for k, v in body.items() if k not in ("paths", "training_sources")},
+                    home=HOME,
+                    training_sources_update=body.get("training_sources"),
+                )
             except ValueError as e:
                 return _json(self, 400, {"ok": False, "error": str(e)})
             apply_roots()

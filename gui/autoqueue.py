@@ -25,13 +25,29 @@ state: gui/autoqueue-state.json. The toggle stays off until you switch it on.
 from __future__ import annotations
 import json, re, subprocess, threading, time
 from datetime import datetime
+import os
 from pathlib import Path
 
 HOME = Path.home() / "localai"
 GUI = HOME / "gui"
 CFG = GUI / "autoqueue.json"
 STATE = GUI / "autoqueue-state.json"
-IMPORTS = Path("/Volumes/Photos/Camera Imports")
+def _imports_root():
+    try:
+        import nas_paths as NP
+        NP.HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+        return NP.imports_root()
+    except Exception:
+        return Path("/Volumes/Photos/Camera Imports")
+
+IMPORTS = _imports_root()
+
+
+def reload_roots():
+    """Pick up a new imports_root from config without restarting the panel."""
+    global IMPORTS
+    IMPORTS = _imports_root()
+
 SHOOT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}")
 IMAGE_EXT = {".cr3", ".cr2", ".dng", ".arw", ".nef", ".raf", ".jpg", ".jpeg", ".heic", ".tif", ".tiff", ".png"}
 DEFAULTS = {"enabled": False, "profile_id": "gig-standard", "poll_min": 30, "stable_min": 20,

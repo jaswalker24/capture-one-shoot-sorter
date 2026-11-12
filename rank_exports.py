@@ -201,44 +201,49 @@ def _cfg() -> dict:
     return {}
 
 
+def _np():
+    import nas_paths as NP
+    NP.HOME = HOME
+    return NP
+
+
 def photos_root() -> Path:
-    env = os.environ.get("LOCALAI_PHOTOS")
-    if env:
-        return Path(env)
-    cfg = _cfg()
-    if cfg.get("photos_root"):
-        return Path(cfg["photos_root"])
-    exp = os.environ.get("LOCALAI_EXPORTS") or cfg.get("exports_root")
-    if exp:
-        return Path(exp).parent
-    return PHOTOS
+    return _np().photos_root(HOME)
 
 
 def exports_root() -> Path:
-    return Path(os.environ.get("LOCALAI_EXPORTS") or _cfg().get("exports_root") or EXPORTS_ROOT)
+    return _np().exports_root(HOME)
 
 
 def imports_root() -> Path:
-    return Path(os.environ.get("LOCALAI_IMPORTS") or _cfg().get("imports_root") or IMPORTS_ROOT)
+    return _np().imports_root(HOME)
+
+
+def exports_2025_root() -> Path:
+    return _np().exports_2025_root(HOME)
 
 
 def list_export_roots(photos: Path | None = None) -> list[dict]:
     """Known export roots the Training tab can offer: Camera Exports and 2025 Exports."""
+    NP = _np()
     photos = Path(photos) if photos is not None else photos_root()
     cam = exports_root()
     if not cam.is_dir():
         # still show the conventional path under photos
         cam = photos / "Camera Exports"
+    y2025 = exports_2025_root() if photos is None or photos == photos_root() else (Path(photos) / "2025 Exports")
+    # When the caller passed an explicit photos root, prefer that tree unless config
+    # has an explicit exports_2025_root (or env) that already resolved elsewhere.
+    if photos != photos_root() and not os.environ.get("LOCALAI_EXPORTS_2025") and not _cfg().get("exports_2025_root"):
+        y2025 = Path(photos) / "2025 Exports"
+        if not y2025.is_dir() and (cam / "2025 Exports").is_dir():
+            y2025 = cam / "2025 Exports"
     candidates = [
         ("camera-exports", "Camera Exports", cam),
-        ("2025-exports", "2025 Exports", photos / "2025 Exports"),
+        ("2025-exports", "2025 Exports", y2025),
     ]
-    # If 2025 Exports is only a bucket inside Camera Exports, offer that path too
-    inner = cam / "2025 Exports"
     roots, seen = [], set()
     for rid, label, path in candidates:
-        if rid == "2025-exports" and not path.is_dir() and inner.is_dir():
-            path = inner
         key = str(path)
         if key in seen:
             continue

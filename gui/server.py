@@ -21,22 +21,30 @@ AUTH_FILE = GUI / "auth.token"
 PORT = int(os.environ.get("LOCALAI_GUI_PORT", "8765"))
 HOST = os.environ.get("LOCALAI_GUI_HOST", "0.0.0.0")
 
+# nas_paths (and the rest of the tree) live in LOCALAI_HOME, or the repo root
+# when this file is run from a checkout (gui/server.py).
+sys.path.insert(0, str(HOME))
+_REPO = Path(__file__).resolve().parent.parent
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+
 def _load_roots():
     """Imports/exports folders: env, then config.json, then the historical default paths."""
-    cfg = {}
-    cfg_path = HOME / "config.json"
-    if cfg_path.is_file():
-        try:
-            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
-        except Exception:
-            cfg = {}
-    default_imports = "/Volumes/Photos/Camera Imports"
-    default_exports = "/Volumes/Photos/Camera Exports"
-    imports = os.environ.get("LOCALAI_IMPORTS") or cfg.get("imports_root") or default_imports
-    exports = os.environ.get("LOCALAI_EXPORTS") or cfg.get("exports_root") or default_exports
-    return Path(imports), Path(exports)
+    import nas_paths as NP
+    NP.HOME = HOME
+    return NP.imports_root(HOME), NP.exports_root(HOME)
 
 IMPORTS, EXPORTS = _load_roots()
+
+
+def apply_roots():
+    """Pick up Locations changes without restarting the control panel."""
+    global IMPORTS, EXPORTS
+    IMPORTS, EXPORTS = _load_roots()
+    try:
+        AQ.reload_roots()
+    except Exception:
+        pass
 
 sys.path.insert(0, str(HOME))
 import jobrunner as JR
@@ -618,6 +626,10 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 401, {"error": "login required"})
             if path == "/api/health":
                 return _json(self, 200, {"ok": True, "port": PORT})
+            if path == "/api/locations":
+                import nas_paths as NP
+                NP.HOME = HOME
+                return _json(self, 200, NP.current_locations(HOME))
             if path.startswith("/api/review/"):
                 return self._review_get(path, parse_qs(u.query))
             if path == "/api/stats":
@@ -1122,6 +1134,34 @@ class Handler(BaseHTTPRequestHandler):
             json.dump({"presets": presets}, open(GUI / "presets.json", "w"), indent=2)
             return _json(self, 200, {"ok": True, "presets": presets})
 
+        if path == "/api/locations/preview":
+            body = _read_json(self)
+            import nas_paths as NP
+            NP.HOME = HOME
+            return _json(self, 200, NP.preview_path(str(body.get("path") or "")))
+        if path == "/api/locations/browse":
+            body = _read_json(self)
+            import nas_paths as NP
+            NP.HOME = HOME
+            key = str(body.get("key") or "")
+            prompt = ""
+            for spec in NP.LOCATION_FIELDS:
+                if spec["key"] == key:
+                    prompt = spec["prompt"]
+                    break
+            if not prompt:
+                prompt = str(body.get("prompt") or "Choose a folder")
+            return _json(self, 200, NP.choose_folder(prompt))
+        if path == "/api/locations/save":
+            body = _read_json(self)
+            import nas_paths as NP
+            NP.HOME = HOME
+            try:
+                out = NP.save_locations(body.get("paths") or body, home=HOME)
+            except ValueError as e:
+                return _json(self, 400, {"ok": False, "error": str(e)})
+            apply_roots()
+            return _json(self, 200, out)
         if path == "/api/autoqueue/set":
             if data.get("profile_id") and not PR.get_profile(data["profile_id"]):
                 return _json(self, 400, {"error": "unknown profile"})

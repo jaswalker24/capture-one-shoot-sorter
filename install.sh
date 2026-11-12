@@ -473,9 +473,10 @@ Installation finished${FINISH_NOTE}.
 
 Next steps (one-time):
 
-  1. Edit $DEST/config.json and set imports_root / exports_root to your
-     Camera Imports and Camera Exports folders (often on a NAS volume).
-     Mount that volume before using the control panel health strip.
+  1. Set your NAS photo folders in the control panel under
+     Settings → Locations (Browse or paste), or edit $DEST/config.json
+     (imports_root, exports_root, and optional photos_root /
+     exports_2025_root). Mount the volume before using the health strip.
 
   2. Grant permissions in System Settings → Privacy & Security:
        • Automation — allow Terminal, osascript and the control-panel
@@ -498,6 +499,8 @@ Next steps (one-time):
   5. Open the control panel: http://127.0.0.1:8765/
      or the "Trips Local AI" Dock shortcut (signs you in locally).
      The login token is stored at $DEST/gui/auth.token (never share it).
+     Settings → Locations sets the NAS paths; the Training tab can queue
+     a rank-training job (NAS read-only, never writes to Capture One).
 
   6. First tagging run also downloads the SigLIP image model into
      $DEST/models/hf (about 1–2 GB). Keep the Mac awake until it finishes.

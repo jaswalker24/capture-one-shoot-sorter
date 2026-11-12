@@ -260,6 +260,15 @@
 
     <div id="tab-settings" class="panel-section">
       <section class="card">
+        <h2>Locations</h2>
+        <p class="note">Photo-folder roots on the NAS (Camera Imports, Camera Exports, 2025 Exports, and the Photos parent). Browse opens the macOS folder picker on this Mac — use it at the M5 or over screen share. You can also paste a path. Paths are checked that they exist and are readable, and a count of immediate folders/files is shown; the whole library is never scanned. Save writes <code>config.json</code> after a timestamped backup. The panel picks up the new paths immediately, without a restart.</p>
+        <div id="locFields"></div>
+        <div class="row">
+          <button type="button" id="locSave">Save locations</button>
+          <span id="locStatus" class="note"></span>
+        </div>
+      </section>
+      <section class="card">
         <h2>Notifications</h2>
         <p class="note">Alerts when a job finishes, fails or has a keyword preview waiting. Telegram needs a BotFather token + chat id in <code>~/localai/gui/notify.json</code> (untracked, never committed; see the README). The Telegram inbound bridge cannot send alerts. Email uses local sendmail when enabled.</p>
         <div id="notifyStatus" class="note"></div>

@@ -72,19 +72,21 @@ The control panel LaunchAgent is a Python process under your account. If a job c
 The control panel’s health strip looks for your Camera Imports and Camera Exports folders.
 
 1. Mount the volume that holds those folders (they stay off this Mac).
-2. Edit `~/localai/config.json` and set `imports_root` / `exports_root`:
+2. In the control panel open **Settings → Locations** and set the Camera Imports / Camera Exports (and optional Photos root and 2025 Exports) folders, or edit `~/localai/config.json`:
 
 
 ```json
+"photos_root": "/Volumes/your-volume",
 "imports_root": "/Volumes/your-volume/Camera Imports",
 "exports_root": "/Volumes/your-volume/Camera Exports",
+"exports_2025_root": "/Volumes/your-volume/2025 Exports",
 "keyword_library": "Trip Keywords"
 ```
 
 The Capture One library name is configurable (`keyword_library`). New installs use **Trip Keywords**. An existing catalog that already has a library named **Trip Keywords** should set `"keyword_library": "Trip Keywords"` instead of renaming the library.
 
 
-Do not commit `config.json`; it is local to the machine. You can also set `LOCALAI_IMPORTS` and `LOCALAI_EXPORTS` in the environment.
+Do not commit `config.json`; it is local to the machine. You can also set these later in **Settings → Locations** (Browse uses the macOS folder picker on this Mac, or paste a path). A timestamped `config.json.bak-locations-*` backup is written on save. Environment variables `LOCALAI_PHOTOS`, `LOCALAI_IMPORTS`, `LOCALAI_EXPORTS` and `LOCALAI_EXPORTS_2025` still override config if set.
 
 ## First run
 

@@ -45,7 +45,7 @@ function setupTabs() {
       if (btn.dataset.tab === "history") renderHistory();
       if (btn.dataset.tab === "training") loadTrainingTab();
       if (btn.dataset.tab === "profiles") renderProfiles();
-      if (btn.dataset.tab === "settings") { loadNotify(); loadAutoqueue(); }
+      if (btn.dataset.tab === "settings") { loadNotify(); loadAutoqueue(); loadLocations(); }
     };
   });
 }
@@ -600,7 +600,132 @@ function wireProfileForm() {
 }
 
 
+/* ---- locations (NAS photo roots) ---- */
+let _locFields = [];
+
+function locPreviewText(prev) {
+  if (!prev) return "";
+  if (prev.error) return prev.error;
+  return prev.summary || `${prev.dirs || 0} folders, ${prev.files || 0} files at this level`;
+}
+
+function renderLocations() {
+  const box = $("locFields");
+  if (!box) return;
+  box.innerHTML = _locFields.map(f => {
+    const val = f.configured || f.resolved || "";
+    const prev = f.preview || {};
+    const ok = !!prev.readable;
+    const env = f.env_override ? `<div class="loc-hint">Environment ${escapeHtml(f.env_name)} is set and still wins until you unset it.</div>` : "";
+    return `<div class="loc-row" data-key="${escapeHtml(f.key)}">
+      <label for="loc-${escapeHtml(f.key)}">${escapeHtml(f.label)}</label>
+      <input type="text" id="loc-${escapeHtml(f.key)}" value="${escapeHtml(val)}" placeholder="${f.optional ? "optional — leave blank to derive" : "paste a folder path"}" />
+      <button type="button" class="secondary loc-preview-btn" data-key="${escapeHtml(f.key)}">Check</button>
+      <button type="button" class="loc-browse-btn" data-key="${escapeHtml(f.key)}">Browse</button>
+    </div>
+    <div class="loc-hint">${escapeHtml(f.hint || "")}</div>
+    ${env}
+    <div class="loc-preview ${ok ? "ok" : (val ? "bad" : "")}" id="loc-prev-${escapeHtml(f.key)}">${escapeHtml(locPreviewText(prev))}</div>`;
+  }).join("");
+  box.querySelectorAll(".loc-browse-btn").forEach(btn => {
+    btn.onclick = () => browseLocation(btn.dataset.key);
+  });
+  box.querySelectorAll(".loc-preview-btn").forEach(btn => {
+    btn.onclick = () => previewLocation(btn.dataset.key);
+  });
+  box.querySelectorAll(".loc-row input").forEach(inp => {
+    inp.addEventListener("change", () => previewLocation(inp.id.replace(/^loc-/, "")));
+  });
+}
+
+async function loadLocations() {
+  const s = $("locStatus");
+  try {
+    const data = await api("/api/locations");
+    _locFields = data.fields || [];
+    renderLocations();
+    if (s) s.textContent = "";
+  } catch (e) {
+    if (s) s.textContent = e.message || "Could not load locations";
+  }
+}
+
+async function previewLocation(key) {
+  const inp = $("loc-" + key);
+  const out = $("loc-prev-" + key);
+  if (!inp || !out) return;
+  const path = inp.value.trim();
+  if (!path) {
+    out.className = "loc-preview";
+    out.textContent = "Leave blank to derive this path automatically.";
+    return;
+  }
+  out.className = "loc-preview";
+  out.textContent = "Checking…";
+  try {
+    const prev = await api("/api/locations/preview", { method: "POST", body: JSON.stringify({ path }) });
+    out.className = "loc-preview " + (prev.readable ? "ok" : "bad");
+    out.textContent = locPreviewText(prev);
+  } catch (e) {
+    out.className = "loc-preview bad";
+    out.textContent = e.message || "Check failed";
+  }
+}
+
+async function browseLocation(key) {
+  const btn = document.querySelector(`.loc-browse-btn[data-key="${key}"]`);
+  const status = $("locStatus");
+  const inp = $("loc-" + key);
+  const out = $("loc-prev-" + key);
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = "A folder picker is on the Mac desktop — choose a folder or press Cancel.";
+  try {
+    const r = await api("/api/locations/browse", { method: "POST", body: JSON.stringify({ key }) });
+    if (r.cancelled) {
+      if (status) status.textContent = "Browse cancelled.";
+      return;
+    }
+    if (!r.ok) {
+      if (status) status.textContent = r.error || "Browse failed. Paste the path instead.";
+      return;
+    }
+    if (inp) inp.value = r.path || "";
+    if (out) {
+      out.className = "loc-preview " + (r.preview && r.preview.readable ? "ok" : "bad");
+      out.textContent = locPreviewText(r.preview);
+    }
+    if (status) status.textContent = "Path filled from the folder picker. Click Save locations to write config.json.";
+  } catch (e) {
+    if (status) status.textContent = e.message || "Browse failed. Paste the path instead.";
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+if ($("locSave")) $("locSave").onclick = async () => {
+  const status = $("locStatus");
+  const paths = {};
+  _locFields.forEach(f => {
+    const inp = $("loc-" + f.key);
+    paths[f.key] = inp ? inp.value.trim() : "";
+  });
+  $("locSave").disabled = true;
+  if (status) status.textContent = "Saving…";
+  try {
+    const r = await api("/api/locations/save", { method: "POST", body: JSON.stringify({ paths }) });
+    _locFields = r.locations && r.locations.fields ? r.locations.fields : _locFields;
+    renderLocations();
+    const bak = r.backup ? ` Backup: ${r.backup.split("/").pop()}.` : "";
+    if (status) status.textContent = (r.changed ? "Saved. The panel is using the new paths now." : "No changes to save.") + bak;
+  } catch (e) {
+    if (status) status.textContent = e.message || "Save failed";
+  } finally {
+    $("locSave").disabled = false;
+  }
+};
+
 /* ---- notify ---- */
+
 async function loadNotify() {
   const s = await api("/api/notify/status");
   $("notifyEnabled").checked = !!s.enabled;

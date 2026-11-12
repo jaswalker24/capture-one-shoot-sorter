@@ -76,7 +76,7 @@ LaunchAgent: `com.trips.localai.gui` (internal label unchanged). Dock app: **Tri
 - **History & undo** — past runs with keyword counts; preview then remove **only** keywords that run added (never stars/colours).
 - **Training** — queue a rank-training job on export folders (optional index-missing, auto-adopt only if held-out accuracy improves). Shows leave-one-shoot-out AUC before/after, per-shoot results and label counts. Adopt and Roll back update `config.json` only, after a confirmation. Never writes to Capture One, stars, colours or rank keywords.
 - **Profiles** — create/edit from dropdowns (shoot type, pass bundle, camera TZ, buffer, keyword set, linked schedule, sharpness strictness, notifications). Shoot type auto-fills the rest. Supersedes the old Presets list. Stored in `~/localai/profiles/`.
-- **Settings** — notification toggles. Telegram needs `bot_token` + `chat_id` in untracked `~/localai/gui/notify.json` (see `notify.example.json`). The inbound Telegram bridge cannot send alerts. Email uses local sendmail when enabled (postfix here is loopback-only unless a relay is configured).
+- **Settings** — **Locations** (Camera Imports, Camera Exports, 2025 Exports and the Photos root; Browse opens a folder picker on this Mac, or paste a path; save writes `config.json` after a timestamped backup, without a restart or a library scan) and notification toggles. Telegram needs `bot_token` + `chat_id` in untracked `~/localai/gui/notify.json` (see `notify.example.json`). The inbound Telegram bridge cannot send alerts. Email uses local sendmail when enabled (postfix here is loopback-only unless a relay is configured).
 - **Exports** — Draft Captions only for Camera Exports folders.
 
 ### Health strip
@@ -159,7 +159,7 @@ Copy `config.example.json` to `config.json` (the installer does this). Useful ke
 - `profile_by_folder` — regex → profile map
 - `script_context` — optional per-folder context strings for the Scripts menu
 - `camera_utc_offset` — set if the camera clock is not in the schedule timezone (for example `"+00:00"` when shooting Japan on London time)
-- `imports_root` / `exports_root` — Camera Imports and Camera Exports folders (often on a NAS). The control panel also honours `LOCALAI_IMPORTS` and `LOCALAI_EXPORTS`.
+- `photos_root` / `imports_root` / `exports_root` / `exports_2025_root` — NAS photo-folder roots. The control panel **Settings → Locations** section can set these (Browse or paste). Environment variables `LOCALAI_PHOTOS`, `LOCALAI_IMPORTS`, `LOCALAI_EXPORTS` and `LOCALAI_EXPORTS_2025` override config if set.
 - `keyword_library` — Capture One keyword library name (default **Trip Keywords**). The apply path reads this from `config.json` so an existing catalog can keep using **Trip Keywords** without renaming the library.
 
 ---

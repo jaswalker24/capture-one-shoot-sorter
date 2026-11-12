@@ -145,3 +145,20 @@ textarea.code { font-family:ui-monospace, Menlo, monospace; font-size:12px; min-
 .train-table th { color:var(--muted); font-weight:600; }
 .train-table .up { color: #6fdf9f; }
 .train-table .down { color: var(--danger); }
+
+.loc-row {
+  display: grid;
+  grid-template-columns: 150px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.loc-row input[type="text"] { width: 100%; }
+.loc-preview { font-size: 12px; color: var(--muted); margin: 2px 0 8px 158px; }
+.loc-preview.ok { color: #8ebd8e; }
+.loc-preview.bad { color: #e09090; }
+.loc-hint { font-size: 11px; color: var(--muted); margin: 0 0 0 158px; }
+@media (max-width: 800px) {
+  .loc-row { grid-template-columns: 1fr; }
+  .loc-preview, .loc-hint { margin-left: 0; }
+}

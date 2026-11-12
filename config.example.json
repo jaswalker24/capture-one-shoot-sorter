@@ -5,8 +5,10 @@
   "vlm_model": "qwen2.5vl:3b",
   "preview_max_px": 2400,
   "vlm_max_px": 1120,
+  "photos_root": "/Volumes/your-nas",
   "imports_root": "/Volumes/your-nas/Camera Imports",
   "exports_root": "/Volumes/your-nas/Camera Exports",
+  "exports_2025_root": "/Volumes/your-nas/2025 Exports",
   "keyword_library": "Trip Keywords",
   "thresholds": {
     "label_min": 0.55,

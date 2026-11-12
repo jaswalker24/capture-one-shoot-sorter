@@ -14,8 +14,16 @@ sys.path.insert(0, str(HOME))
 TAG = str(HOME / "tag")
 SNAP_JS = HOME / "snap.js"
 OUT = HOME / "out"
-IMPORTS_ROOT = Path("/Volumes/Photos/Camera Imports")
-EXPORTS_ROOT = Path("/Volumes/Photos/Camera Exports")
+def _nas_roots():
+    try:
+        import nas_paths as NP
+        NP.HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+        return NP.imports_root(), NP.exports_root()
+    except Exception:
+        photos = Path("/Volumes/Photos")
+        return photos / "Camera Imports", photos / "Camera Exports"
+
+IMPORTS_ROOT, EXPORTS_ROOT = _nas_roots()
 
 # Pass catalogue. Rank is calibrated (features.py cmd_rank) and its General/Rank/{Best,Good}
 # keywords are applied by default (apply_rank_keywords=False turns them off).

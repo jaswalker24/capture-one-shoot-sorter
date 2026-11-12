@@ -4,71 +4,27 @@ On-device photo tagging for Capture One on Apple silicon. Adds keywords only. It
 
 ---
 
-## Simple setup guide
+## Setup
 
-You need:
+See **[INSTALL.md](INSTALL.md)** for the easy install guide: download the release, unzip, run `./install.sh`, then grant permissions and import the keyword library.
 
-- An Apple-silicon Mac (M1 or newer)
-- macOS 14 or newer
-- Capture One 16.8 or newer
-- About 15 GB free disk space the first time (models + cache)
-
-### 1. Get the code
-
-Clone this private repository (or unpack the tarball) somewhere convenient, for example your Desktop.
-
-### 2. Run the installer
-
-Open **Terminal** and run:
+You need an Apple-silicon Mac (M1 or newer), macOS 14 or newer, Capture One 16.8.x, and about 15 GB free the first time. Intel Macs are not supported (the installer will say why and stop).
 
 ```bash
-cd /path/to/this-repo
+cd /path/to/trips-local-ai-1.0.0
 ./install.sh
 ```
 
-That puts everything in `~/localai`, creates a Python 3.12 environment, installs the packages, downloads a local copy of Ollama, pulls the small vision model, and copies the Scripts menu into Capture One.
+### First test on a few frames
 
-The first run can take 10–20 minutes depending on your internet connection.
-
-### 3. Start the local model server (if it is not already running)
-
-```bash
-~/localai/start-ollama.sh
-```
-
-It only listens on your Mac (`127.0.0.1`). Nothing is exposed to the network.
-
-### 4. Import the keyword library in Capture One
-
-1. Open Capture One.
-2. Open the **Keyword Library** tool.
-3. Create a library named exactly **Trip Keywords** (or import into one with that name).
-4. Import `~/localai/keywords/trip-keyword-library.txt` (tab-indented list).
-
-The Scripts menu actions look keywords up in this library, so the name must match.
-
-### 5. Find the Scripts menu
-
-In Capture One: **Scripts → Trips Local AI**. You should see:
-
-- Tag with Local AI
-- Find Bursts
-- Rank Selection
-- Check Sharpness
-- Read Text in Frame
-- Tag by Schedule
-- Draft Captions (Exports) — export folders only
-
-### 6. First test on a few frames
-
-1. Select 3–5 images in Capture One.
-2. Run **Scripts → Trips Local AI → Tag with Local AI**.
-3. Wait for the macOS notification.
+1. Start the local model server if needed: `~/localai/start-ollama.sh` (localhost only).
+2. In Capture One, import `~/localai/keywords/trip-keyword-library.txt` into a library named exactly **Trip Keywords**.
+3. Select 3–5 images and run **Scripts → Trip Local AI → Tag with Local AI**.
 4. Check that keywords appeared and that stars / colour tags did not change.
 
 The first tagging run also downloads the SigLIP image model into `~/localai/models/hf` (about 1–2 GB). Keep the Mac awake until it finishes.
 
-### 7. Run a whole shoot from Terminal
+### Run a whole shoot from Terminal
 
 Dry run first (writes proposals only, does not touch Capture One):
 
@@ -167,7 +123,7 @@ Draft captions are a separate path:
 ~/localai/tag captions --files /path/to/Camera\ Exports/image.jpg
 ```
 
-or **Scripts → Trips Local AI → Draft Captions (Exports)** with export files selected.
+or **Scripts → Trip Local AI → Draft Captions (Exports)** with export files selected.
 
 ---
 
@@ -202,6 +158,7 @@ Copy `config.example.json` to `config.json` (the installer does this). Useful ke
 - `profile_by_folder` — regex → profile map
 - `script_context` — optional per-folder context strings for the Scripts menu
 - `camera_utc_offset` — set if the camera clock is not in the schedule timezone (for example `"+00:00"` when shooting Japan on London time)
+- `imports_root` / `exports_root` — Camera Imports and Camera Exports folders (often on a NAS). The control panel also honours `LOCALAI_IMPORTS` and `LOCALAI_EXPORTS`.
 
 ---
 
@@ -262,9 +219,11 @@ kill "$(cat ~/localai/logs/ollama.pid)"
 
 **Remove everything**
 
+See [INSTALL.md](INSTALL.md#uninstalling) for the full uninstall (LaunchAgent, Dock app, scripts menu, runtime). A short version:
+
 ```bash
 rm -rf ~/localai
-rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trips Local AI"
+rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"
 ```
 
 ---

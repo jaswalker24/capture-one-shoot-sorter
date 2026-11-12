@@ -20,8 +20,23 @@ HISTORY = GUI / "history"
 AUTH_FILE = GUI / "auth.token"
 PORT = int(os.environ.get("LOCALAI_GUI_PORT", "8765"))
 HOST = os.environ.get("LOCALAI_GUI_HOST", "0.0.0.0")
-IMPORTS = Path("/Volumes/Photos/Camera Imports")
-EXPORTS = Path("/Volumes/Photos/Camera Exports")
+
+def _load_roots():
+    """Imports/exports folders: env, then config.json, then the historical default paths."""
+    cfg = {}
+    cfg_path = HOME / "config.json"
+    if cfg_path.is_file():
+        try:
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except Exception:
+            cfg = {}
+    default_imports = "/Volumes/Photos/Camera Imports"
+    default_exports = "/Volumes/Photos/Camera Exports"
+    imports = os.environ.get("LOCALAI_IMPORTS") or cfg.get("imports_root") or default_imports
+    exports = os.environ.get("LOCALAI_EXPORTS") or cfg.get("exports_root") or default_exports
+    return Path(imports), Path(exports)
+
+IMPORTS, EXPORTS = _load_roots()
 
 sys.path.insert(0, str(HOME))
 import jobrunner as JR

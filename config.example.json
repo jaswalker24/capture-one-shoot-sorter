@@ -5,6 +5,8 @@
   "vlm_model": "qwen2.5vl:3b",
   "preview_max_px": 2400,
   "vlm_max_px": 1120,
+  "imports_root": "/Volumes/your-nas/Camera Imports",
+  "exports_root": "/Volumes/your-nas/Camera Exports",
   "thresholds": {
     "label_min": 0.55,
     "colour_min": 0.45,
@@ -24,11 +26,11 @@
   "camera_utc_offset": null,
   "rank": {
     "weights": {
-      "sharp": 0.5,
-      "aes": 0.15,
-      "burst_best": 0.3,
+      "sharp": 0.15,
+      "aes": 0.45,
+      "burst_best": 0.0,
       "burst_other": 0.1,
-      "blur": 0.3
+      "blur": 0.0
     },
     "previous_weights": {
       "sharp": 0.5,
@@ -40,6 +42,7 @@
     "best_pct": 0.1,
     "good_pct": 0.2,
     "min_rated_for_calibration": 10,
-    "source": "brandshatch-stars-2026-11-09"
+    "source": "exports+stars-loso",
+    "model": "weighted"
   }
 }

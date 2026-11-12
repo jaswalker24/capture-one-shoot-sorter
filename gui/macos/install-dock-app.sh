@@ -34,6 +34,11 @@ fi
 SH
   chmod +x "$APP/Contents/MacOS/TripsLocalAI"
 fi
+# Update the Dock tile unless this is a re-run that should not bounce the Dock.
+if [ "${LOCALAI_SKIP_DOCK_RESTART:-0}" = "1" ]; then
+  echo "App installed at $APP (Dock left unchanged)"
+  exit 0
+fi
 defaults export com.apple.dock "$HOME/localai/gui/dock-backup-$(date +%Y%m%d-%H%M%S).plist" 2>/dev/null || true
 python3 - <<'PY'
 import plistlib, subprocess

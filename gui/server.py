@@ -641,6 +641,25 @@ def train_status() -> dict:
     }
 
 
+
+def _static_content_type(path) -> str:
+    """Content-Type for files under gui/static. Icons must be image/png, not text/html."""
+    suffix = Path(path).suffix.lower()
+    return {
+        ".js": "application/javascript; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".ico": "image/x-icon",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".gif": "image/gif",
+        ".webp": "image/webp",
+        ".woff": "font/woff",
+        ".woff2": "font/woff2",
+    }.get(suffix, "text/html; charset=utf-8")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "TripsLocalAIGui/1.0"
 
@@ -657,13 +676,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         data = path.read_bytes()
-        ctype = "text/html; charset=utf-8"
-        if path.suffix == ".js":
-            ctype = "application/javascript; charset=utf-8"
-        elif path.suffix == ".css":
-            ctype = "text/css; charset=utf-8"
-        elif path.suffix == ".svg":
-            ctype = "image/svg+xml"
+        ctype = _static_content_type(path)
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))

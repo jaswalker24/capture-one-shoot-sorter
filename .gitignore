@@ -30,6 +30,10 @@ logs/
 *.JPEG
 *.PNG
 *.MP4
+# Panel logo and favicons extracted from the Dock app icon (not photo data)
+!gui/static/logo.png
+!gui/static/favicon.png
+!gui/static/apple-touch-icon.png
 *.MOV
 
 # Local overrides

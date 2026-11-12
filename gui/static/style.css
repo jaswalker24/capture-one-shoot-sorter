@@ -20,6 +20,26 @@ a { color: var(--accent); }
 header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
 header h1 { font-size: 20px; font-weight: 650; margin: 0; letter-spacing: -0.02em; }
 header .sub { color: var(--muted); font-size: 13px; }
+
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.brand h1 { margin: 0; }
+.app-logo {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  flex: 0 0 auto;
+  display: block;
+  object-fit: contain;
+  background: transparent;
+}
+/* The Dock icon is a blue rounded square with a transparent margin, so it
+   reads clearly on both the default dark panel and a light color scheme. */
+@media (prefers-color-scheme: light) {
+  .app-logo { background: transparent; }
+}
+
+.login .brand { margin-bottom: 10px; }
+.login .brand h1 { margin: 0; font-size: 18px; }
+
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--border); font-size: 12px; color: var(--muted); }
 .pill strong { color: var(--text); font-weight: 600; }
 .pill.ok { border-color: #2f6b4f; color: var(--accent2); }

@@ -43,6 +43,7 @@ function setupTabs() {
       $("tab-" + btn.dataset.tab).classList.add("active");
       if (btn.dataset.tab === "schedule") loadScheduleTab();
       if (btn.dataset.tab === "history") renderHistory();
+      if (btn.dataset.tab === "training") loadTrainingTab();
       if (btn.dataset.tab === "profiles") renderProfiles();
       if (btn.dataset.tab === "settings") { loadNotify(); loadAutoqueue(); }
     };
@@ -74,6 +75,7 @@ async function showApp() {
   $("exportFolder").innerHTML = (ex.folders || []).map(f => `<option value="${f.path}">${f.name}</option>`).join("");
   await loadPresetsIntoSelect();
   wireProfileForm();
+  setupTrainingTab();
   refresh();
   setInterval(refresh, 3000);
 }
@@ -186,8 +188,10 @@ function renderQueue(data) {
     const log = (j.log_tail || []).slice(-12).join("\n");
     return `<div class="job">
       <div class="top"><div>
-        <div class="title">${escapeHtml(j.folder_name || j.folder)} <span class="badge ${j.status}">${j.status}</span></div>
-        <div class="meta">${(j.passes || []).join(" → ")} · ${j.profile}${j.dry_run ? " · dry-run" : ""}</div>
+        <div class="title">${escapeHtml(j.kind === "rank_train" ? "Rank training" : (j.folder_name || j.folder))} <span class="badge ${j.status}">${j.status}</span></div>
+        <div class="meta">${j.kind === "rank_train"
+          ? `exports · ${j.index_missing ? "index missing · " : ""}${j.auto_adopt ? "adopt if better" : "report only"}`
+          : `${(j.passes || []).join(" → ")} · ${j.profile}${j.dry_run ? " · dry-run" : ""}`}</div>
         <div class="meta">${fmtProgress(j)}</div>
       </div>
       <div>${j.status === "queued" || j.status === "running" ? `<button class="danger" data-cancel="${j.id}">Cancel</button>` : ""}
@@ -279,6 +283,7 @@ async function refresh() {
     renderQueue(q);
     await renderStats();
     if ($("tab-history").classList.contains("active")) await renderHistory();
+    if ($("tab-training") && $("tab-training").classList.contains("active")) await loadTrainingTab();
   } catch (e) {
     if (String(e.message).includes("login")) {
       $("appView").classList.add("hidden");
@@ -831,6 +836,198 @@ function wirePreview() {
   $("pvDiscard").onclick = pvDiscard;
 }
 wirePreview();
+
+
+
+/* ---- training ---- */
+function fmtAuc(x) {
+  if (x == null || Number.isNaN(Number(x))) return "—";
+  return Number(x).toFixed(3);
+}
+function aucClass(before, after) {
+  if (before == null || after == null) return "";
+  if (after > before + 1e-9) return "up";
+  if (after < before - 1e-9) return "down";
+  return "";
+}
+function setupTrainingTab() {
+  if (!$("trainStart")) return;
+  $("trainStart").onclick = startTraining;
+  $("trainAdopt").onclick = adoptTraining;
+  $("trainRollback").onclick = rollbackTraining;
+}
+async function startTraining() {
+  const roots = [...document.querySelectorAll("#trainRoots input:checked:not(:disabled)")].map(i => i.value);
+  if (!roots.length) return alert("Pick at least one available export root");
+  $("trainStartNote").textContent = "Queuing…";
+  try {
+    const r = await api("/api/train/start", { method: "POST", body: JSON.stringify({
+      export_roots: roots,
+      index_missing: $("trainIndexMissing").checked,
+      auto_adopt: $("trainAutoAdopt").checked,
+    })});
+    $("trainStartNote").textContent = "Queued " + r.job.id + " — watch Progress below. This never writes to Capture One.";
+    await loadTrainingTab();
+    refresh();
+  } catch (e) {
+    $("trainStartNote").textContent = e.message || "Could not queue training";
+  }
+}
+async function adoptTraining() {
+  if (!confirm("Adopt the candidate ranking weights from the last report?\n\nThis only updates config.json. Capture One, stars, colour tags and rank keywords are not changed. Current weights are saved so you can Roll back.")) return;
+  try {
+    const r = await api("/api/train/adopt", { method: "POST", body: JSON.stringify({ confirm: true })});
+    $("trainStartNote").textContent = r.reason || "Adopted";
+    await loadTrainingTab();
+  } catch (e) {
+    alert(e.message || "Adopt failed");
+  }
+}
+async function rollbackTraining() {
+  if (!confirm("Roll back to the previous ranking weights?\n\nThis only updates config.json. Capture One, stars, colour tags and rank keywords are not changed. The weights you are leaving are saved so you can Adopt them again.")) return;
+  try {
+    const r = await api("/api/train/rollback", { method: "POST", body: JSON.stringify({ confirm: true })});
+    $("trainStartNote").textContent = r.reason || "Rolled back";
+    await loadTrainingTab();
+  } catch (e) {
+    alert(e.message || "Roll back failed");
+  }
+}
+function renderTrainJob(s) {
+  const box = $("trainJob");
+  const j = s.active_job;
+  if (!j) {
+    const last = (s.recent_jobs || [])[0];
+    if (!last) {
+      box.innerHTML = `<p class="note">No training job queued yet.</p>`;
+      return;
+    }
+    const log = (last.log_tail || []).slice(-16).join("\n");
+    box.innerHTML = `<div class="job">
+      <div class="title">Last run <span class="badge ${last.status}">${escapeHtml(last.status)}</span></div>
+      <div class="meta">${escapeHtml(last.id || "")} · finished ${escapeHtml(last.finished || "")}</div>
+      ${last.error ? `<div class="meta" style="color:var(--danger)">${escapeHtml(last.error)}</div>` : ""}
+      <div class="log">${escapeHtml(log)}</div></div>`;
+    return;
+  }
+  const pct = j.progress && j.progress.total ? Math.round(100 * j.progress.n / j.progress.total) : (j.status === "done" ? 100 : 0);
+  const log = (j.log_tail || []).slice(-20).join("\n");
+  box.innerHTML = `<div class="job">
+    <div class="top"><div>
+      <div class="title">Rank training <span class="badge ${j.status}">${escapeHtml(j.status)}</span></div>
+      <div class="meta">${fmtProgress(j)}</div>
+    </div>
+    ${j.status === "queued" || j.status === "running" ? `<button class="danger" id="trainCancel">Cancel</button>` : ""}
+    </div>
+    <div class="bar"><span style="width:${pct}%"></span></div>
+    <div class="log">${escapeHtml(log)}</div></div>`;
+  const btn = $("trainCancel");
+  if (btn) btn.onclick = async () => {
+    await api("/api/queue/cancel", { method: "POST", body: JSON.stringify({ id: j.id })});
+    await loadTrainingTab();
+    refresh();
+  };
+}
+function renderTrainReport(s) {
+  const box = $("trainReport");
+  const report = s.report;
+  const rank = s.rank || {};
+  const state = $("trainRankState");
+  const bits = [];
+  if (rank.model) bits.push(`model ${rank.model}`);
+  if (rank.trained) bits.push(`trained ${rank.trained}`);
+  if (rank.adopted) bits.push("adopted");
+  if (rank.adopt_reason) bits.push(rank.adopt_reason);
+  state.textContent = bits.join(" · ") || "No ranking weights recorded yet.";
+  $("trainAdopt").disabled = !rank.has_candidate;
+  $("trainRollback").disabled = !rank.has_previous;
+  if (!report) {
+    box.innerHTML = `<p class="note">No training report yet. Queue a run to generate one.</p>`;
+    return;
+  }
+  const train = report.train || {};
+  const before = (train.before && train.before.overall) || {};
+  const after = train.after_loso_macro || {};
+  const labels = report.label_summaries || [];
+  const used = labels.filter(r => !r.skipped);
+  const skipped = labels.filter(r => r.skipped);
+  const totals = used.reduce((a, r) => {
+    a.indexed += r.indexed || 0;
+    a.combined += r.positives_combined || 0;
+    a.exp += r.positives_export_only || 0;
+    a.star += r.positives_star_only || 0;
+    a.both += r.positives_both || 0;
+    a.neg += r.negatives || 0;
+    return a;
+  }, { indexed: 0, combined: 0, exp: 0, star: 0, both: 0, neg: 0 });
+  const metric = (key) => {
+    const b = before[key], a = after[key];
+    const cls = aucClass(b, a);
+    return `<span class="${cls}">${fmtAuc(b)} → ${fmtAuc(a)}</span>`;
+  };
+  const loso = train.loso || [];
+  const rows = loso.map(row => {
+    const b = row.before || {}, a = row.after || {};
+    return `<tr>
+      <td>${escapeHtml(row.held_out)}</td>
+      <td class="${aucClass(b.auc_combined, a.auc_combined)}">${fmtAuc(b.auc_combined)} → ${fmtAuc(a.auc_combined)}</td>
+      <td class="${aucClass(b.auc_export, a.auc_export)}">${fmtAuc(b.auc_export)} → ${fmtAuc(a.auc_export)}</td>
+      <td class="${aucClass(b.auc_star, a.auc_star)}">${fmtAuc(b.auc_star)} → ${fmtAuc(a.auc_star)}</td>
+    </tr>`;
+  }).join("");
+  box.innerHTML = `
+    <p class="note">Report ${escapeHtml(report.stamp || "")}${train.adopt_reason ? " · " + escapeHtml(train.adopt_reason) : ""}. Training is read-only on the NAS and does not write to Capture One.</p>
+    <table class="train-table">
+      <thead><tr><th>Macro AUC</th><th>Before</th><th>After (held-out)</th></tr></thead>
+      <tbody>
+        <tr><td>Combined</td><td>${fmtAuc(before.auc_combined_macro)}</td><td>${metric("auc_combined_macro")}</td></tr>
+        <tr><td>Export</td><td>${fmtAuc(before.auc_export_macro)}</td><td>${metric("auc_export_macro")}</td></tr>
+        <tr><td>Star</td><td>${fmtAuc(before.auc_star_macro)}</td><td>${metric("auc_star_macro")}</td></tr>
+      </tbody>
+    </table>
+    <p class="note" style="margin-top:10px">${used.length} shoots used
+      (${totals.indexed} indexed frames, ${totals.combined} combined positives
+      — ${totals.exp} export only, ${totals.star} star only, ${totals.both} both; ${totals.neg} negatives).
+      ${skipped.length ? skipped.length + " shoots skipped (index too small)." : ""}</p>
+    <table class="train-table">
+      <thead><tr><th>Held-out shoot</th><th>Combined</th><th>Export</th><th>Star</th></tr></thead>
+      <tbody>${rows || `<tr><td colspan="4">No per-shoot rows.</td></tr>`}</tbody>
+    </table>
+    <table class="train-table">
+      <thead><tr><th>Shoot</th><th>Indexed</th><th>Export+</th><th>Star+</th><th>Both</th><th>Combined+</th><th>Negatives</th></tr></thead>
+      <tbody>${used.map(r => `<tr>
+        <td>${escapeHtml(r.folder)}</td>
+        <td>${r.indexed ?? "—"}</td>
+        <td>${r.positives_export_only ?? "—"}</td>
+        <td>${r.positives_star_only ?? "—"}</td>
+        <td>${r.positives_both ?? "—"}</td>
+        <td>${r.positives_combined ?? "—"}</td>
+        <td>${r.negatives ?? "—"}</td>
+      </tr>`).join("")}</tbody>
+    </table>`;
+}
+async function loadTrainingTab() {
+  if (!$("trainRoots")) return;
+  const s = await api("/api/train/status");
+  const box = $("trainRoots");
+  const existing = new Set([...box.querySelectorAll("input:checked")].map(i => i.value));
+  const first = !box.dataset.ready;
+  box.innerHTML = (s.roots || []).map(r => {
+    const checked = first ? r.available : existing.has(r.path);
+    return `<label class="inline"><input type="checkbox" value="${escapeHtml(r.path)}"
+      ${r.available ? "" : "disabled"} ${checked && r.available ? "checked" : ""} />
+      ${escapeHtml(r.label)}${r.available ? "" : " (not mounted)"}
+      <span class="note">${escapeHtml(r.path)}</span></label>`;
+  }).join("") || `<p class="note">No export roots found. Set imports_root / exports_root in config.json and mount the NAS.</p>`;
+  box.dataset.ready = "1";
+  const avail = (s.roots || []).filter(r => r.available).length;
+  $("trainRootsNote").textContent = avail ? `${avail} available root${avail === 1 ? "" : "s"}.` : "No export folders are mounted.";
+  const busy = !!(s.active_job && (s.active_job.status === "queued" || s.active_job.status === "running"));
+  $("trainStart").disabled = busy || !avail;
+  renderTrainJob(s);
+  renderTrainReport(s);
+}
+
 
 async function start() {
   const u = new URL(location.href);

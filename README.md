@@ -35,7 +35,7 @@ Dry run first (writes proposals only, does not touch Capture One):
   --no-caption
 ```
 
-Profiles: `motorsport`, `gig`, or `kyoto`.
+Profiles: `motorsport`, `gig`, or `street` (`kyoto` is kept as an alias of `street`).
 
 When you are happy, apply confident keywords:
 
@@ -74,6 +74,7 @@ LaunchAgent: `com.trips.localai.gui` (internal label unchanged). Dock app: **Tri
 - **Run** — pick a **Profile** (or custom passes), folder, queue jobs with live progress. Apply-after-each-pass is default. Caption model is never used for catalog jobs.
 - **Schedule importer** — load/paste JSON or CSV, preview events/slots/TBA/overlaps, dry-run EXIF mapping, queue additive schedule tagging (confirmed only by default).
 - **History & undo** — past runs with keyword counts; preview then remove **only** keywords that run added (never stars/colours).
+- **Training** — queue a rank-training job on export folders (optional index-missing, auto-adopt only if held-out accuracy improves). Shows leave-one-shoot-out AUC before/after, per-shoot results and label counts. Adopt and Roll back update `config.json` only, after a confirmation. Never writes to Capture One, stars, colours or rank keywords.
 - **Profiles** — create/edit from dropdowns (shoot type, pass bundle, camera TZ, buffer, keyword set, linked schedule, sharpness strictness, notifications). Shoot type auto-fills the rest. Supersedes the old Presets list. Stored in `~/localai/profiles/`.
 - **Settings** — notification toggles. Telegram needs `bot_token` + `chat_id` in untracked `~/localai/gui/notify.json` (see `notify.example.json`). The inbound Telegram bridge cannot send alerts. Email uses local sendmail when enabled (postfix here is loopback-only unless a relay is configured).
 - **Exports** — Draft Captions only for Camera Exports folders.
@@ -84,7 +85,7 @@ CPU, memory, NAS mount, free disk (M5 + NAS), Capture One running, Ollama/captio
 
 ### Profiles (examples)
 
-Seeded under `profiles/`: Gig standard, Idol gig, Motorsport full, Temple/travel, Schedule tags only, Exports only (Draft Captions). Catalog profiles must never include captions.
+Seeded under `profiles/`: Gig standard, Idol gig, Motorsport full, Street photography, Schedule tags only, Exports only (Draft Captions). Catalog profiles must never include captions.
 
 
 ## What each Scripts menu action does
@@ -159,6 +160,7 @@ Copy `config.example.json` to `config.json` (the installer does this). Useful ke
 - `script_context` — optional per-folder context strings for the Scripts menu
 - `camera_utc_offset` — set if the camera clock is not in the schedule timezone (for example `"+00:00"` when shooting Japan on London time)
 - `imports_root` / `exports_root` — Camera Imports and Camera Exports folders (often on a NAS). The control panel also honours `LOCALAI_IMPORTS` and `LOCALAI_EXPORTS`.
+- `keyword_library` — Capture One keyword library name (default **Trip Keywords**). The apply path reads this from `config.json` so an existing catalog can keep using **Trip Keywords** without renaming the library.
 
 ---
 
@@ -170,7 +172,7 @@ Rebuild the tab-indented list and CSV:
 ~/localai/venv/bin/python ~/localai/keywords/build_library.py
 ```
 
-Then re-import `trip-keyword-library.txt` into the **Trip Keywords** library in Capture One. The builder includes motorsport, gig, Kyoto, Japan, aviation, wildlife, static vehicles, film, general quality flags, Focus and Rank, generalised `General/Scene/*` keywords, `General/Camera/*` (lens, focal band, exposure flags, AF, IS) plus clip flags under `General/Quality`, and the confirmed Japan November 2026 event / venue / act names. New names can also be imported from a tab-indented `keywords/delta-*.txt` without replacing the rest of the library.
+Then re-import `trip-keyword-library.txt` into the **Trip Keywords** library in Capture One. The builder includes motorsport, gig, street photography, Japan, aviation, wildlife, static vehicles, film, general quality flags, Focus and Rank, generalised `General/Scene/*` keywords, `General/Camera/*` (lens, focal band, exposure flags, AF, IS) plus clip flags under `General/Quality`, and the confirmed Japan November 2026 event / venue / act names. New names can also be imported from a tab-indented `keywords/delta-*.txt` without replacing the rest of the library.
 
 ---
 
@@ -243,7 +245,7 @@ Capture One is written to only through the additive apply path (see below): keyw
 
 ### Run
 ```
-~/localai/tag "/Volumes/Photos/Camera Imports/2026/<folder>" --profile motorsport|gig|kyoto \
+~/localai/tag "/Volumes/Photos/Camera Imports/2026/<folder>" --profile motorsport|gig|street \
     [--sample 40] [--limit N] [--no-caption] [--context "Britcar Into The Night, Brands Hatch"] [--tag dryrun]
 ```
 - top-level files only (nested export folders skipped); MP4/MOV ignored.
@@ -260,7 +262,7 @@ car_colour, race_number + source, OCR candidates, label scores, caption, timings
   Number is proposed only when Apple Vision OCR and the VLM agree; a VLM-only, OCR-only or disagreeing
   read goes to `tentative_keywords` and needs_review.
 - gig: `Gig/Crowd`, `Gig/Stage`, `Gig/Portrait`.
-- kyoto: `Kyoto/Temple`, `Kyoto/Street`, `Kyoto/Nature`, `Kyoto/People`, `Kyoto/Landscape`, `Kyoto/Transit`, plus `Kyoto/Shrine Gate`, `Kyoto/Night`, `Kyoto/Rain`.
+- street: `Street/Alley`, `Street/Crowd`, `Street/Pedestrian`, `Street/Shopfront`, `Street/Market`, `Street/Crossing`, `Street/Cyclist`, `Street/Temple`, `Street/Candid`, plus binaries such as `Street/Shrine Gate`, `Street/Night Street`, `Street/Rain`, `Street/Neon`, `Street/Signage`, `Street/Vending Machine`, `Street/Reflections`, `Street/Silhouette`, `Street/Umbrella`, `Street/Lantern`. (`kyoto` is an alias of this profile.)
 
 ### Models (all local)
 - SigLIP ViT-B-16-SigLIP-256 (open_clip, PyTorch MPS): zero-shot scene/shot/place and car colour.

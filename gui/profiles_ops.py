@@ -13,7 +13,7 @@ ORDER_FILE = PROFILES / "_order.json"
 
 SHOOT_TYPES = [
     "Gig", "Idol gig", "Concert/arena", "Motorsport", "Wildlife",
-    "Aviation", "Temple/travel", "Street", "Exports only",
+    "Aviation", "Street", "Exports only",
 ]
 
 PASS_BUNDLES = {
@@ -38,8 +38,7 @@ KEYWORD_SETS = {
     "Motorsport": ["Motorsport/Night", "Motorsport/Session/Race"],
     "Wildlife": ["Wildlife/Wild"],
     "Aviation": ["Aviation/Airshow"],
-    "Temple/travel": ["Japan/Temple", "Kyoto/Landscape"],
-    "Street": ["General/Scene/Street"],
+    "Street": ["Street", "General/Scene/Street"],
     "Exports only": [],
 }
 
@@ -74,14 +73,9 @@ SHOOT_DEFAULTS = {
         "buffer_min": 0, "strictness": "Normal", "notify": "Finish",
         "keyword_set": "Aviation",
     },
-    "Temple/travel": {
-        "tagger_profile": "kyoto", "pass_bundle": "Standard", "camera_tz": "Asia/Tokyo",
-        "buffer_min": 0, "strictness": "Lenient", "notify": "Finish",
-        "keyword_set": "Temple/travel",
-    },
     "Street": {
-        "tagger_profile": "gig", "pass_bundle": "Quick", "camera_tz": "Europe/London",
-        "buffer_min": 0, "strictness": "Lenient", "notify": "Off",
+        "tagger_profile": "street", "pass_bundle": "Standard", "camera_tz": "Europe/London",
+        "buffer_min": 0, "strictness": "Lenient", "notify": "Finish",
         "keyword_set": "Street",
     },
     "Exports only": {
@@ -95,7 +89,7 @@ SEED = [
     {"id": "gig-standard", "name": "Gig standard", "shoot_type": "Gig"},
     {"id": "idol-gig", "name": "Idol gig", "shoot_type": "Idol gig"},
     {"id": "motorsport-full", "name": "Motorsport full", "shoot_type": "Motorsport"},
-    {"id": "temple-travel", "name": "Temple / travel", "shoot_type": "Temple/travel"},
+    {"id": "street-photography", "name": "Street photography", "shoot_type": "Street"},
     {"id": "schedule-only", "name": "Schedule tags only", "shoot_type": "Gig",
      "pass_bundle": "Schedule tags only", "passes": ["schedule"]},
     {"id": "exports-captions", "name": "Exports only (Draft Captions)", "shoot_type": "Exports only"},
@@ -112,7 +106,7 @@ def catalogs():
         "notify": NOTIFY,
         "keyword_sets": {k: v for k, v in KEYWORD_SETS.items()},
         "shoot_defaults": SHOOT_DEFAULTS,
-        "tagger_profiles": ["motorsport", "gig", "kyoto"],
+        "tagger_profiles": ["motorsport", "gig", "street"],
     }
 
 

@@ -1123,16 +1123,26 @@ Gig|Act|Headline Act,Gig/Act/Headline Act,3,Gig
 Gig|Act|Support Act,Gig/Act/Support Act,3,Gig
 Gig|Act|No Photo Act,Gig/Act/No Photo Act,3,Gig
 Gig|Act|Main Act,Gig/Act/Main Act,3,Gig
-Kyoto,Kyoto,1,Kyoto
-Kyoto|Temple,Kyoto/Temple,2,Kyoto
-Kyoto|Street,Kyoto/Street,2,Kyoto
-Kyoto|Nature,Kyoto/Nature,2,Kyoto
-Kyoto|People,Kyoto/People,2,Kyoto
-Kyoto|Shrine Gate,Kyoto/Shrine Gate,2,Kyoto
-Kyoto|Night,Kyoto/Night,2,Kyoto
-Kyoto|Rain,Kyoto/Rain,2,Kyoto
-Kyoto|Landscape,Kyoto/Landscape,2,Kyoto
-Kyoto|Transit,Kyoto/Transit,2,Kyoto
+Street,Street,1,Street
+Street|Alley,Street/Alley,2,Street
+Street|Crowd,Street/Crowd,2,Street
+Street|Pedestrian,Street/Pedestrian,2,Street
+Street|Signage,Street/Signage,2,Street
+Street|Neon,Street/Neon,2,Street
+Street|Shopfront,Street/Shopfront,2,Street
+Street|Vending Machine,Street/Vending Machine,2,Street
+Street|Crossing,Street/Crossing,2,Street
+Street|Night Street,Street/Night Street,2,Street
+Street|Reflections,Street/Reflections,2,Street
+Street|Silhouette,Street/Silhouette,2,Street
+Street|Candid,Street/Candid,2,Street
+Street|Rain,Street/Rain,2,Street
+Street|Umbrella,Street/Umbrella,2,Street
+Street|Cyclist,Street/Cyclist,2,Street
+Street|Market,Street/Market,2,Street
+Street|Lantern,Street/Lantern,2,Street
+Street|Shrine Gate,Street/Shrine Gate,2,Street
+Street|Temple,Street/Temple,2,Street
 Japan,Japan,1,Japan
 Japan|City,Japan/City,2,Japan
 Japan|City|Tokyo,Japan/City/Tokyo,3,Japan
@@ -1141,10 +1151,6 @@ Japan|City|Tokyo|Shinjuku,Japan/City/Tokyo/Shinjuku,4,Japan
 Japan|City|Tokyo|Akihabara,Japan/City/Tokyo/Akihabara,4,Japan
 Japan|City|Tokyo|Asakusa,Japan/City/Tokyo/Asakusa,4,Japan
 Japan|City|Tokyo|Harajuku,Japan/City/Tokyo/Harajuku,4,Japan
-Japan|City|Kyoto,Japan/City/Kyoto,3,Japan
-Japan|City|Kyoto|Gion,Japan/City/Kyoto/Gion,4,Japan
-Japan|City|Kyoto|Arashiyama,Japan/City/Kyoto/Arashiyama,4,Japan
-Japan|City|Kyoto|Fushimi Inari,Japan/City/Kyoto/Fushimi Inari,4,Japan
 Japan|City|Osaka,Japan/City/Osaka,3,Japan
 Japan|City|Osaka|Dotonbori,Japan/City/Osaka/Dotonbori,4,Japan
 Japan|City|Osaka|Namba,Japan/City/Osaka/Namba,4,Japan

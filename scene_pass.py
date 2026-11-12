@@ -136,12 +136,12 @@ VOCAB: dict[str, tuple[str, str, float]] = {
         0.90,
     ),
     "Temple": (
-        "a photo of a Japanese or East Asian temple building, temple roof, temple gate or temple grounds",
+        "a photo of a temple building, temple roof, temple gate or temple grounds",
         "a photo of a concert, a race track, or a place that is not a temple",
         0.88,
     ),
     "Shrine": (
-        "a photo of a Japanese shrine, a torii gate, or a large shrine or temple gate such as a mon",
+        "a photo of a shrine, a shrine gate, or a temple gate",
         "a photo of a concert, a race track, or a place that is not a shrine or shrine gate",
         0.85,
     ),

@@ -193,7 +193,7 @@ def import_proposals(c, folder_name):
     for f in sorted((OUT / folder_name).glob("*-proposals*.json")):
         try: data = json.load(open(f))
         except Exception: continue
-        tagger_file = data.get("profile") in ("motorsport", "gig", "kyoto")
+        tagger_file = data.get("profile") in ("motorsport", "gig", "street", "kyoto")
         for r in data.get("images", []):
             sha = r.get("sha256")
             if not sha: continue

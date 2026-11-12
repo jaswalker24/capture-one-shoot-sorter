@@ -1,8 +1,28 @@
-// JXA: additively apply keywords from the "Trip Keywords" library to variants in the open Capture One catalog.
+// JXA: additively apply keywords from the configured keyword library to variants in the open Capture One catalog.
 // usage: osascript -l JavaScript apply_c1.js <plan.json> <result.json> [dry]
 // plan: {"folder": "<abs folder path>", "library": "Trip Keywords",
 //        "items": [{"filename": "_A3A3807.CR3", "path": "<abs path>", "keywords": ["Motorsport/Car Colour/Green", ...]}]}
 // Never removes keywords, never changes ratings/colour tags. Keywords not found in the library are skipped (no flat ones).
+
+function findKeywordLibrary(C1, preferred) {
+  // Prefer the name in the plan (from config.json keyword_library). Fall back
+  // to Trip Keywords, then the legacy Trip Keywords name so an older catalog still applies.
+  var names = [];
+  if (preferred) names.push(preferred);
+  names.push("Trip Keywords", "Trip Keywords");
+  var seen = {};
+  var tried = [];
+  for (var i = 0; i < names.length; i++) {
+    var n = names[i];
+    if (!n || seen[n]) continue;
+    seen[n] = true;
+    tried.push(n);
+    var lib = C1.keywordLibraries.whose({name: n});
+    if (lib.length) return lib;
+  }
+  throw new Error("keyword library not found (tried " + tried.join(", ") + ")");
+}
+
 ObjC.import('Foundation');
 function readJSON(p){ return JSON.parse($.NSString.stringWithContentsOfFileEncodingError(p,4,null).js); }
 function writeJSON(p,o){ $.NSString.alloc.initWithUTF8String(JSON.stringify(o,null,1)).writeToFileAtomicallyEncodingError(p,true,4,null); }
@@ -121,8 +141,7 @@ function run(argv){
   finally { if(plan.scope_folder){ try{ d.currentCollection=prev; }catch(e){} } }
 }
 function runScoped(argv, plan, dry, C1, d){
-  const lib=C1.keywordLibraries.whose({name:plan.library||'Trip Keywords'});
-  if(!lib.length) throw new Error('keyword library not found');
+  const lib=findKeywordLibrary(C1, plan.library);
   const L=lib[0]; const kwCache={};
   function libKw(path){
     if(path in kwCache) return kwCache[path];

@@ -4,7 +4,7 @@ Confident = needs_review is false; only proposed_keywords (never tentative_keywo
 SHA-256 of each original is re-checked before applying."""
 import argparse, hashlib, json, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"
+HOME = Path(__import__("os").environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
 IMAGE_EXT = {".cr3", ".cr2", ".dng", ".arw", ".nef", ".raf", ".jpg", ".jpeg", ".heic", ".tif", ".tiff", ".png"}  # MP4/MOV ignored
 
 def sha256(p):
@@ -14,11 +14,34 @@ def sha256(p):
             h.update(b)
     return h.hexdigest()
 
-def apply_proposals(proposals_json, apply=False, prefix=None, library="Trip Keywords"):
+DEFAULT_KEYWORD_LIBRARY = "Trip Keywords"
+LEGACY_KEYWORD_LIBRARY = "Trip Keywords"
+
+
+def keyword_library(name=None):
+    """Library name for Capture One. config.json keyword_library, else Trip Keywords.
+
+    The live M5 catalog still uses "Trip Keywords"; set that in config.json there.
+    """
+    if name:
+        return name
+    cfg_path = HOME / "config.json"
+    if cfg_path.is_file():
+        try:
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            if isinstance(cfg, dict) and cfg.get("keyword_library"):
+                return str(cfg["keyword_library"])
+        except Exception:
+            pass
+    return DEFAULT_KEYWORD_LIBRARY
+
+
+def apply_proposals(proposals_json, apply=False, prefix=None, library=None):
     data = json.load(open(proposals_json))
     folder = Path(data["folder"])
     stamp = time.strftime("%Y%m%d-%H%M%S")
     prefix = prefix or f"/tmp/trip-localai-apply-{stamp}"
+    library = keyword_library(library)
     items, skipped = [], []
     for r in data["images"]:
         if r.get("error"):

@@ -16,7 +16,7 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
 IDX = HOME / "index" / "catalog.sqlite"
 OUT = HOME / "out"
 PHOTOS = Path("/Volumes/Photos")
@@ -189,6 +189,111 @@ def map_date_to_import(date: str, suffix: str, year_imports: dict[str, list[str]
     return exact[0] if len(exact) == 1 else None
 
 
+
+
+def _cfg() -> dict:
+    p = HOME / "config.json"
+    if p.is_file():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+
+def photos_root() -> Path:
+    env = os.environ.get("LOCALAI_PHOTOS")
+    if env:
+        return Path(env)
+    cfg = _cfg()
+    if cfg.get("photos_root"):
+        return Path(cfg["photos_root"])
+    exp = os.environ.get("LOCALAI_EXPORTS") or cfg.get("exports_root")
+    if exp:
+        return Path(exp).parent
+    return PHOTOS
+
+
+def exports_root() -> Path:
+    return Path(os.environ.get("LOCALAI_EXPORTS") or _cfg().get("exports_root") or EXPORTS_ROOT)
+
+
+def imports_root() -> Path:
+    return Path(os.environ.get("LOCALAI_IMPORTS") or _cfg().get("imports_root") or IMPORTS_ROOT)
+
+
+def list_export_roots(photos: Path | None = None) -> list[dict]:
+    """Known export roots the Training tab can offer: Camera Exports and 2025 Exports."""
+    photos = Path(photos) if photos is not None else photos_root()
+    cam = exports_root()
+    if not cam.is_dir():
+        # still show the conventional path under photos
+        cam = photos / "Camera Exports"
+    candidates = [
+        ("camera-exports", "Camera Exports", cam),
+        ("2025-exports", "2025 Exports", photos / "2025 Exports"),
+    ]
+    # If 2025 Exports is only a bucket inside Camera Exports, offer that path too
+    inner = cam / "2025 Exports"
+    roots, seen = [], set()
+    for rid, label, path in candidates:
+        if rid == "2025-exports" and not path.is_dir() and inner.is_dir():
+            path = inner
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        roots.append({"id": rid, "label": label, "path": key, "available": path.is_dir()})
+    return roots
+
+
+def discover_export_folders_many(roots) -> list[dict]:
+    """Union of dated/event export folders under one or more roots, unique by path."""
+    found, seen = [], set()
+    for root in roots or []:
+        for f in discover_export_folders(Path(root)):
+            if f["path"] in seen:
+                continue
+            seen.add(f["path"])
+            found.append(f)
+    return found
+
+
+def import_folder_path(name: str, year_imports: dict | None = None) -> Path | None:
+    """Resolve an import shoot folder name to a path under Camera Imports."""
+    year_imports = year_imports if year_imports is not None else list_year_imports()
+    for year, names in year_imports.items():
+        if name in names:
+            p = IMPORTS_ROOT / year / name
+            if p.is_dir():
+                return p
+    if IMPORTS_ROOT.is_dir():
+        for ydir in IMPORTS_ROOT.iterdir():
+            if ydir.is_dir() and re.fullmatch(r"\d{4}", ydir.name):
+                p = ydir / name
+                if p.is_dir():
+                    return p
+    return None
+
+
+def folders_needing_index(positives, index_by_folder, min_indexed=50, year_imports=None):
+    """Import folders with export matches that are missing or too small in the local index."""
+    out = []
+    for fo, stems in (positives or {}).items():
+        n = len(index_by_folder.get(fo) or [])
+        if n >= min_indexed:
+            continue
+        path = import_folder_path(fo, year_imports)
+        out.append({
+            "folder": fo,
+            "path": str(path) if path else None,
+            "indexed": n,
+            "exported_matched": len(stems),
+            "missing_path": path is None,
+        })
+    return out
+
+
 def discover_export_folders(root: Path = EXPORTS_ROOT) -> list[dict]:
     """Dated export folders only (top-level, under '<Year> Exports', and dated subfolders)."""
     found = []
@@ -202,28 +307,42 @@ def discover_export_folders(root: Path = EXPORTS_ROOT) -> list[dict]:
         date, suffix = parsed
         found.append({"path": str(path), "name": path.name, "date": date, "suffix": suffix, "source": source, "kind": "dated"})
 
+    def add_bucket_children(bucket: Path, source: str):
+        loose = False
+        for c in sorted(bucket.iterdir(), key=lambda x: x.name):
+            if c.name.startswith(".") or c.name.startswith("._"):
+                continue
+            if c.is_dir() and c.name.lower() not in SKIP_SUBDIR:
+                parsed = parse_export_folder_date(c.name)
+                if parsed:
+                    consider(c, source)
+                else:
+                    found.append({"path": str(c), "name": c.name, "date": None,
+                                  "suffix": "", "source": source, "kind": "event"})
+            elif c.is_file():
+                ext = c.suffix.lower()
+                if ext in IMAGE_EXT and ext not in SKIP_VIDEO:
+                    loose = True
+        if loose:
+            found.append({"path": str(bucket), "name": bucket.name + " (root files)", "date": None,
+                          "suffix": "", "source": source, "kind": "event-root"})
+
+    # When the selected root itself is '<Year> Exports', walk its event/dated children.
+    if YEAR_BUCKET.match(root.name):
+        add_bucket_children(root, root.name)
+        uniq, seen = [], set()
+        for f in found:
+            if f["path"] in seen:
+                continue
+            seen.add(f["path"])
+            uniq.append(f)
+        return uniq
+
     for p in sorted(root.iterdir(), key=lambda x: x.name):
         if not p.is_dir() or p.name.startswith(".") or p.name.lower() in SKIP_SUBDIR:
             continue
         if YEAR_BUCKET.match(p.name):
-            loose = False
-            for c in sorted(p.iterdir(), key=lambda x: x.name):
-                if c.name.startswith(".") or c.name.startswith("._"):
-                    continue
-                if c.is_dir() and c.name.lower() not in SKIP_SUBDIR:
-                    parsed = parse_export_folder_date(c.name)
-                    if parsed:
-                        consider(c, p.name)
-                    else:
-                        found.append({"path": str(c), "name": c.name, "date": None,
-                                      "suffix": "", "source": p.name, "kind": "event"})
-                elif c.is_file():
-                    ext = c.suffix.lower()
-                    if ext in IMAGE_EXT and ext not in SKIP_VIDEO:
-                        loose = True
-            if loose:
-                found.append({"path": str(p), "name": p.name + " (root files)", "date": None,
-                              "suffix": "", "source": p.name, "kind": "event-root"})
+            add_bucket_children(p, p.name)
             continue
         if p.name.lower() in ("archive", "archiveimages", "botrequested", "c1 high res", "untitled export"):
             continue

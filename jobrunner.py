@@ -9,7 +9,7 @@ from __future__ import annotations
 import json, os, re, subprocess, sys, time, traceback
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
 sys.path.insert(0, str(HOME))
 TAG = str(HOME / "tag")
 SNAP_JS = HOME / "snap.js"
@@ -263,6 +263,62 @@ def ensure_pass_order(passes: list[str], folder: Path | None = None) -> list[str
     return out
 
 
+
+def run_rank_train(state):
+    """Queued rank training: match exports, optionally index missing, train/eval.
+
+    Read-only on the NAS. Never talks to Capture One and never writes stars,
+    colour tags or rank keywords.
+    """
+    log(state, "RANK TRAIN — NAS read-only; no Capture One, stars, colours or rank keyword writes")
+    state["current_pass"] = "train"
+    state["progress"] = {"pass": "train", "n": 0, "total": 0, "line": "starting"}
+    state["apply_each"] = False
+    state["apply_rank_keywords"] = False
+    state["dry_run"] = True
+    py = HOME / "venv" / "bin" / "python"
+    script = HOME / "tools" / "train_rank_exports.py"
+    if not script.is_file():
+        alt = Path(__file__).resolve().parent / "tools" / "train_rank_exports.py"
+        if alt.is_file():
+            script = alt
+    if not script.is_file():
+        raise RuntimeError(f"train_rank_exports.py not found at {script}")
+    exe = str(py) if py.is_file() else sys.executable
+    cmd = [exe, str(script)]
+    for root in state.get("export_roots") or []:
+        cmd += ["--export-root", str(root)]
+    if state.get("index_missing"):
+        cmd.append("--index-missing")
+    else:
+        cmd.append("--no-index-missing")
+    if state.get("auto_adopt"):
+        cmd.append("--write-config")
+    log(state, "roots:", ", ".join(str(r) for r in (state.get("export_roots") or [])) or "(default)")
+    log(state, "index_missing=", bool(state.get("index_missing")), "auto_adopt=", bool(state.get("auto_adopt")))
+    _run_streaming(state, cmd, pass_id="train")
+    latest = HOME / "out" / "rank-exports" / "train-latest.json"
+    if latest.is_file():
+        state["report_path"] = str(latest)
+        try:
+            rep = json.loads(latest.read_text(encoding="utf-8"))
+            train = rep.get("train") or {}
+            state["train_summary"] = {
+                "stamp": rep.get("stamp"),
+                "adopt": train.get("adopt"),
+                "adopt_reason": train.get("adopt_reason"),
+                "after_loso_macro": train.get("after_loso_macro"),
+                "before": (train.get("before") or {}).get("overall"),
+            }
+        except Exception as e:
+            log(state, "could not read report:", e)
+    state["status"] = "done"
+    state["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    state["current_pass"] = None
+    log(state, "RANK TRAIN finished")
+    _save(state)
+
+
 def run_job(state_path: Path):
     state = json.load(open(state_path))
     state["_path"] = str(state_path)
@@ -272,6 +328,22 @@ def run_job(state_path: Path):
     state.setdefault("log", [])
     state.setdefault("pass_results", {})
     _save(state)
+
+    if state.get("kind") == "rank_train":
+        try:
+            run_rank_train(state)
+        except Exception as e:
+            state["status"] = "cancelled" if state.get("cancel_requested") else "error"
+            state["error"] = str(e)
+            state["traceback"] = traceback.format_exc()[-2000:]
+            state["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+            log(state, "ERROR", e)
+            _save(state)
+            raise
+        finally:
+            state["_proc"] = None
+            _save(state)
+        return
 
     folder = Path(state["folder"])
     profile = state.get("profile") or "motorsport"

@@ -1122,16 +1122,26 @@ Gig
 		Support Act
 		No Photo Act
 		Main Act
-Kyoto
-	Temple
-	Street
-	Nature
-	People
-	Shrine Gate
-	Night
+Street
+	Alley
+	Crowd
+	Pedestrian
+	Signage
+	Neon
+	Shopfront
+	Vending Machine
+	Crossing
+	Night Street
+	Reflections
+	Silhouette
+	Candid
 	Rain
-	Landscape
-	Transit
+	Umbrella
+	Cyclist
+	Market
+	Lantern
+	Shrine Gate
+	Temple
 Japan
 	City
 		Tokyo
@@ -1140,10 +1150,6 @@ Japan
 			Akihabara
 			Asakusa
 			Harajuku
-		Kyoto
-			Gion
-			Arashiyama
-			Fushimi Inari
 		Osaka
 			Dotonbori
 			Namba

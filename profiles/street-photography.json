@@ -1,9 +1,9 @@
 {
-  "id": "temple-travel",
-  "name": "Temple / travel",
+  "id": "street-photography",
+  "name": "Street photography",
   "kind": "catalog",
-  "shoot_type": "Temple/travel",
-  "tagger_profile": "kyoto",
+  "shoot_type": "Street",
+  "tagger_profile": "street",
   "pass_bundle": "Standard",
   "passes": [
     "tagger",
@@ -27,14 +27,14 @@
     "scene": {},
     "camera": {}
   },
-  "camera_tz": "Asia/Tokyo",
+  "camera_tz": "Europe/London",
   "camera_tz_other": "",
   "buffer_min": 3,
   "default_keywords": [
-    "Japan/Temple",
-    "Kyoto/Landscape"
+    "Street",
+    "General/Scene/Street"
   ],
-  "keyword_set": "Temple/travel",
+  "keyword_set": "Street",
   "schedule_path": "",
   "ocr_missing_car_number": false,
   "apply_rank_keywords": false,

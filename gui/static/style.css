@@ -138,3 +138,10 @@ textarea.code { font-family:ui-monospace, Menlo, monospace; font-size:12px; min-
   .pv-table table.data { display: table; white-space: normal; }
   .preset-row { flex-wrap: wrap; }
 }
+
+.train-roots label.inline { display:block; margin: 6px 0; }
+.train-table { width:100%; border-collapse:collapse; font-size:12px; margin-top:8px; }
+.train-table th, .train-table td { text-align:left; padding:4px 8px; border-bottom:1px solid var(--border); }
+.train-table th { color:var(--muted); font-weight:600; }
+.train-table .up { color: #6fdf9f; }
+.train-table .down { color: var(--danger); }

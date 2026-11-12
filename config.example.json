@@ -7,6 +7,7 @@
   "vlm_max_px": 1120,
   "imports_root": "/Volumes/your-nas/Camera Imports",
   "exports_root": "/Volumes/your-nas/Camera Exports",
+  "keyword_library": "Trip Keywords",
   "thresholds": {
     "label_min": 0.55,
     "colour_min": 0.45,
@@ -21,7 +22,7 @@
   "script_profile_default": "gig",
   "profile_by_folder": {
     "BrandsHatch|Britcar|Silverstone|Donington|Snetterton|Oulton|Thruxton|Goodwood|Fuji Speedway|Suzuka|Motegi": "motorsport",
-    "Kyoto|Gion|Arashiyama|Fushimi": "kyoto"
+    "Street|Alley|Night|Market|Downtown|OldTown": "street"
   },
   "camera_utc_offset": null,
   "rank": {

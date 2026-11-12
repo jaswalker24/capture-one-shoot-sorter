@@ -4,7 +4,7 @@ set -euo pipefail
 APP="$HOME/Applications/Trips Local AI.app"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$HOME/Applications"
-rm -rf "$APP" "$HOME/Applications/Trips Local AI.app"
+rm -rf "$APP" "$HOME/Applications/Trip Local AI.app"
 if [ -d "$ROOT/Trips Local AI.app" ]; then
   cp -R "$ROOT/Trips Local AI.app" "$APP"
 else

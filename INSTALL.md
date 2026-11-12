@@ -72,12 +72,17 @@ The control panel LaunchAgent is a Python process under your account. If a job c
 The control panel’s health strip looks for your Camera Imports and Camera Exports folders.
 
 1. Mount the volume that holds those folders (they stay off this Mac).
-2. Edit `~/localai/config.json` and set:
+2. Edit `~/localai/config.json` and set `imports_root` / `exports_root`:
+
 
 ```json
 "imports_root": "/Volumes/your-volume/Camera Imports",
-"exports_root": "/Volumes/your-volume/Camera Exports"
+"exports_root": "/Volumes/your-volume/Camera Exports",
+"keyword_library": "Trip Keywords"
 ```
+
+The Capture One library name is configurable (`keyword_library`). New installs use **Trip Keywords**. An existing catalog that already has a library named **Trip Keywords** should set `"keyword_library": "Trip Keywords"` instead of renaming the library.
+
 
 Do not commit `config.json`; it is local to the machine. You can also set `LOCALAI_IMPORTS` and `LOCALAI_EXPORTS` in the environment.
 
@@ -93,7 +98,7 @@ Do not commit `config.json`; it is local to the machine. You can also set `LOCAL
 
 3. Confirm **Scripts → Trip Local AI** lists the actions (Tag with Local AI, Find Bursts, Rank Selection, Check Sharpness, Read Text in Frame, Tag by Schedule, and Draft Captions for export folders only).
 
-4. Open http://127.0.0.1:8765/ or the Dock app. Sign-in uses the local token file; it is never sent anywhere.
+4. Open http://127.0.0.1:8765/ or the Dock app. Sign-in uses the local token file; it is never sent anywhere. The **Training** tab can queue a rank-training job (export roots, optional index-missing, auto-adopt only if held-out accuracy improves). Training never writes to Capture One, stars, colours or rank keywords.
 
 5. Select 3–5 frames and run **Scripts → Trip Local AI → Tag with Local AI**. Check that keywords appeared and that stars and colour tags did not change.
 
@@ -124,6 +129,7 @@ rm -f ~/Library/LaunchAgents/com.trips.localai.gui.plist
 
 # Scripts menu, Dock app, runtime
 rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"
+rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"  # older name
 rm -rf "$HOME/Applications/Trips Local AI.app"
 rm -rf ~/localai
 ```

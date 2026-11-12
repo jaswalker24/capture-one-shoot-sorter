@@ -153,6 +153,16 @@ class AdoptTests(unittest.TestCase):
         self.assertFalse(ok)
 
 
+    def test_year_bucket_as_root(self):
+        """Training can point at the sibling 2025 Exports folder itself."""
+        with tempfile.TemporaryDirectory() as tmp:
+            bucket = Path(tmp) / "2025 Exports"
+            (bucket / "2025-Hakone").mkdir(parents=True)
+            (bucket / "2025-Hakone" / "a.jpg").write_bytes(b"x")
+            found = R.discover_export_folders(bucket)
+            kinds = {(f["name"], f["kind"]) for f in found}
+            self.assertIn(("2025-Hakone", "event"), kinds)
+
 if __name__ == "__main__":
     unittest.main()
 

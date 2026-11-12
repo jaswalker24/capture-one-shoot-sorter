@@ -69,6 +69,18 @@ def collect_added_keywords(job: dict) -> dict:
             "variant_count": len(added)}
 
 
+
+def _keyword_library():
+    try:
+        import sys as _sys
+        _sys.path.insert(0, str(HOME))
+        import apply_c1 as _AC
+        _AC.HOME = HOME
+        return _AC.keyword_library()
+    except Exception:
+        return "Trip Keywords"
+
+
 def run_undo(job: dict, apply: bool = False, prefix: str | None = None):
     plan_data = collect_added_keywords(job)
     if not plan_data["items"]:
@@ -77,7 +89,7 @@ def run_undo(job: dict, apply: bool = False, prefix: str | None = None):
     prefix = prefix or str(HOME / "out" / plan_data["folder_name"] / f"undo-{job.get('id','job')}-{stamp}")
     plan_path = prefix + "-plan.json"
     result_path = prefix + "-result.json"
-    json.dump({"library": "Trip Keywords", "items": plan_data["items"], "job_id": job.get("id"),
+    json.dump({"library": _keyword_library(), "items": plan_data["items"], "job_id": job.get("id"),
                "sources": plan_data["sources"],
                # folder scope: undo_c1.js selects this folder and matches by image path (never by name alone)
                "scope_folder": job.get("folder") or plan_data.get("folder")}, open(plan_path, "w"), indent=1)

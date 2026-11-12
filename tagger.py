@@ -6,7 +6,7 @@ READ-ONLY on originals: files are opened for reading only (hash + embedded previ
 Previews are cached under ~/localai/cache, outputs under ~/localai/out/<folder>/.
 Never writes to Capture One - it only produces keyword PROPOSALS (json + csv).
 
-Profiles: motorsport | gig | kyoto
+Profiles: motorsport | gig | street (kyoto is an alias of street)
 """
 import argparse, base64, csv, hashlib, io, json, os, re, subprocess, sys, time
 from pathlib import Path
@@ -60,29 +60,40 @@ PROFILES = {
                            "caption (one vivid line, max 20 words, no hashtags, suitable as a draft "
                            "social caption), shot_type (crowd, stage or portrait)."),
     },
-    "kyoto": {
+    "street": {
         "groups": {
             "place": {
-                "Kyoto/Temple": "a photo of a Japanese temple or shrine",
-                "Kyoto/Street": "a photo of a Japanese street or alley with shops and houses",
-                "Kyoto/Nature": "a photo of a Japanese garden, forest or bamboo grove",
-                "Kyoto/People": "a portrait photo of a person",
-                "Kyoto/Landscape": "a wide landscape photo of countryside, fields, mountains or a distant city",
-                "Kyoto/Transit": "a photo of a train, station platform or the view from a train window",
+                "Street/Alley": "a photo of a narrow alley or passageway between buildings",
+                "Street/Crowd": "a photo of a crowd of pedestrians on a street",
+                "Street/Pedestrian": "a photo of one or more pedestrians walking on a street or pavement",
+                "Street/Shopfront": "a photo of a shop front, storefront or window display on a street",
+                "Street/Market": "a photo of a street market or market stalls",
+                "Street/Crossing": "a photo of a pedestrian crossing or a street crossing",
+                "Street/Cyclist": "a photo of a cyclist or bicycle on a street",
+                "Street/Temple": "a photo of a temple building, temple roof, temple gate or temple grounds",
+                "Street/Candid": "a candid photo of a person in a public place, not posing for the camera",
             },
         },
         "binary": {
-            "Kyoto/Shrine Gate": ("a photo of a torii gate at a Japanese shrine, red or stone", "a photo of a place without a torii gate"),
-            "Kyoto/Night": ("a photo taken at night", "a photo taken in daylight"),
-            "Kyoto/Rain": ("a photo taken in the rain with wet ground and umbrellas", "a photo taken in dry weather"),
+            "Street/Shrine Gate": ("a photo of a shrine gate or temple gate as a main subject", "a photo of a place without a shrine gate or temple gate"),
+            "Street/Night Street": ("a photo of a city street at night with artificial lights", "a photo of a street in daylight"),
+            "Street/Rain": ("a photo taken in the rain with wet ground, raindrops or umbrellas", "a photo taken in dry weather"),
+            "Street/Neon": ("a photo of neon signs or colourful neon lights on a city street", "a photo without neon signs or neon lighting"),
+            "Street/Signage": ("a photo of a large sign, billboard, shop sign or written lantern as a main subject", "a photo in which signs are absent or only a tiny background detail"),
+            "Street/Vending Machine": ("a photo of a vending machine as a main subject", "a photo with no vending machine"),
+            "Street/Reflections": ("a photo of reflections in wet pavement, a window or glass", "a photo without noticeable reflections"),
+            "Street/Silhouette": ("a photo of a silhouette against a bright sky or lights", "a photo in which the subject is lit from the front, not a silhouette"),
+            "Street/Umbrella": ("a photo in which an umbrella is clearly visible", "a photo with no umbrella"),
+            "Street/Lantern": ("a photo of a lantern or hanging lanterns as a main subject", "a photo with no lantern"),
         },
-        "caption_prompt": ("You are helping a travel photographer in Japan. Return JSON with keys: "
+        "caption_prompt": ("You are helping a street photographer. Return JSON with keys: "
                            "caption (one vivid line, max 20 words, no hashtags, suitable as a draft "
-                           "social caption), place_type (temple, street, nature, people, landscape or transit), torii_gate (true if a "
-                           "torii shrine gate of any colour or material is visible), night (true/false), rain (true/false)."),
-        "vlm_flags": {"Kyoto/Shrine Gate": "torii_gate", "Kyoto/Night": "night", "Kyoto/Rain": "rain"},
+                           "social caption), place_type (alley, crowd, shopfront, market, crossing, temple or candid), "
+                           "shrine_gate (true if a shrine gate or temple gate is visible), night (true/false), rain (true/false)."),
+        "vlm_flags": {"Street/Shrine Gate": "shrine_gate", "Street/Night Street": "night", "Street/Rain": "rain"},
     },
 }
+PROFILES["kyoto"] = PROFILES["street"]  # alias so older profiles keep working
 
 # ---------------------------------------------------------------- helpers
 def sha256_file(p, bs=4 * 1024 * 1024):

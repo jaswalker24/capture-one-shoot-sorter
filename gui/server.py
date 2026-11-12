@@ -11,7 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
 OUT = HOME / "out"
 GUI = HOME / "gui"
 STATIC = GUI / "static"
@@ -425,6 +425,159 @@ def ensure_worker():
     _WORKER.start()
 
 
+
+def _train_mod():
+    tools = HOME / "tools"
+    repo_tools = Path(__file__).resolve().parent.parent / "tools"
+    for d in (tools, repo_tools, HOME, Path(__file__).resolve().parent.parent):
+        s = str(d)
+        if s not in sys.path:
+            sys.path.insert(0, s)
+    import train_rank_exports as TR  # noqa: E402
+    import rank_exports as R  # noqa: E402
+    # Point the modules at this process's HOME (tests / LOCALAI_HOME)
+    TR.HOME = HOME
+    TR.OUTDIR = HOME / "out" / "rank-exports"
+    R.HOME = HOME
+    return TR, R
+
+
+def list_train_roots():
+    TR, R = _train_mod()
+    return R.list_export_roots()
+
+
+def _create_train_job(data: dict) -> dict:
+    """Queue a rank-training job. Never applies keywords or talks to Capture One."""
+    TR, R = _train_mod()
+    known = {r["path"]: r for r in R.list_export_roots() if r.get("available")}
+    # Also accept label / id
+    by_id = {r["id"]: r for r in R.list_export_roots()}
+    by_label = {r["label"]: r for r in R.list_export_roots()}
+    chosen = []
+    for item in data.get("export_roots") or []:
+        rec = None
+        if isinstance(item, dict):
+            item = item.get("path") or item.get("id") or item.get("label")
+        if item in known:
+            rec = known[item]
+        elif item in by_id and by_id[item].get("available"):
+            rec = by_id[item]
+        elif item in by_label and by_label[item].get("available"):
+            rec = by_label[item]
+        else:
+            # resolved path
+            try:
+                rp = str(Path(item).expanduser())
+            except Exception:
+                rp = None
+            if rp in known:
+                rec = known[rp]
+        if not rec:
+            raise ValueError(f"unknown or unavailable export root: {item}")
+        if rec["path"] not in chosen:
+            chosen.append(rec["path"])
+    if not chosen:
+        raise ValueError("pick at least one available export root")
+    # refuse a second train job while one is queued or running
+    with _QUEUE_LOCK:
+        for j in _load_queue_unlocked():
+            if j.get("kind") == "rank_train" and j.get("status") in ("queued", "running"):
+                raise ValueError(f"a rank training job is already {j.get('status')}: {j.get('id')}")
+        jid = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:6]
+        job = {
+            "id": jid,
+            "kind": "rank_train",
+            "folder": chosen[0],
+            "folder_name": "Rank training",
+            "profile": "train",
+            "passes": ["rank-train"],
+            "apply_each": False,
+            "dry_run": True,
+            "apply_rank_keywords": False,
+            "export_roots": chosen,
+            "index_missing": bool(data.get("index_missing", False)),
+            "auto_adopt": bool(data.get("auto_adopt", True)),
+            "status": "queued",
+            "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "queue_order": _next_queue_order(),
+            "log": [],
+            "pass_results": {},
+            "added_keywords": {},
+        }
+        json.dump(job, open(_job_path(jid), "w"), indent=1, ensure_ascii=False)
+    return job
+
+
+def train_status() -> dict:
+    TR, R = _train_mod()
+    report = TR.load_latest_report()
+    rank = TR.load_rank_config()
+    active = None
+    recent = []
+    with _QUEUE_LOCK:
+        jobs = _load_queue_unlocked()
+    for j in jobs:
+        if j.get("kind") != "rank_train":
+            continue
+        slim = {k: j.get(k) for k in
+                ("id", "status", "created", "started", "finished", "export_roots",
+                 "index_missing", "auto_adopt", "current_pass", "progress", "error",
+                 "report_path", "train_summary", "folder_name")}
+        slim["log_tail"] = (j.get("log") or [])[-40:]
+        if j.get("status") in ("queued", "running"):
+            active = slim
+        else:
+            recent.append(slim)
+    # history folder may also hold finished train jobs already archived
+    if HISTORY.is_dir():
+        for p in sorted(HISTORY.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True)[:20]:
+            try:
+                j = json.load(open(p))
+            except Exception:
+                continue
+            if j.get("kind") != "rank_train":
+                continue
+            if recent and recent[0].get("id") == j.get("id"):
+                continue
+            slim = {k: j.get(k) for k in
+                    ("id", "status", "created", "started", "finished", "export_roots",
+                     "index_missing", "auto_adopt", "error", "report_path", "train_summary")}
+            slim["log_tail"] = (j.get("log") or [])[-40:]
+            recent.append(slim)
+    # strip huge positives lists from the report copy for the UI
+    report_out = None
+    if report:
+        report_out = dict(report)
+        report_out.pop("positives_by_shoot", None)
+        # keep unmatched_names short
+        for s in report_out.get("export_folders") or []:
+            names = s.get("unmatched_names") or []
+            if len(names) > 20:
+                s["unmatched_names"] = names[:20]
+                s["unmatched_names_truncated"] = len(names) - 20
+    return {
+        "roots": R.list_export_roots(),
+        "report": report_out,
+        "rank": {
+            "weights": rank.get("weights"),
+            "previous_weights": rank.get("previous_weights"),
+            "model": rank.get("model") or "weighted",
+            "previous_model": rank.get("previous_model"),
+            "adopted": rank.get("adopted"),
+            "adopt_reason": rank.get("adopt_reason"),
+            "source": rank.get("source"),
+            "trained": rank.get("trained") or rank.get("last_export_training"),
+            "has_previous": isinstance(rank.get("previous_weights"), dict),
+            "has_candidate": bool((report or {}).get("train", {}).get("candidate_weights")
+                                  or (report or {}).get("train", {}).get("candidate_model")
+                                  or rank.get("candidate_weights")),
+        },
+        "active_job": active,
+        "recent_jobs": recent[:8],
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "TripsLocalAIGui/1.0"
 
@@ -488,7 +641,12 @@ class Handler(BaseHTTPRequestHandler):
                         item["note"] = p.get("note") or "Calibrated: top 10% General/Rank/Best, next 20% General/Rank/Good."
                     passes.append(item)
                 return _json(self, 200, {"passes": passes, "default_order": JR.DEFAULT_ORDER,
-                                         "profiles": ["motorsport", "gig", "kyoto"]})
+                                         "profiles": ["motorsport", "gig", "street"]})
+            if path == "/api/train/status":
+                try:
+                    return _json(self, 200, train_status())
+                except Exception as e:
+                    return _json(self, 500, {"error": str(e)})
             if path == "/api/queue":
                 with _QUEUE_LOCK:
                     jobs = _load_queue_unlocked()
@@ -570,8 +728,8 @@ class Handler(BaseHTTPRequestHandler):
                         j = json.load(open(p))
                         items.append({k: j.get(k) for k in
                                       ("id", "folder", "folder_name", "profile", "status", "created", "started", "finished",
-                                       "passes", "pass_results", "verify", "error", "sample", "dry_run",
-                                       "added_keywords", "undo_result_files", "notify")}
+                                       "passes", "pass_results", "verify", "error", "sample", "dry_run", "kind",
+                                       "added_keywords", "undo_result_files", "notify", "train_summary")}
                                      | {"keyword_count": sum(len(v) for v in (j.get("added_keywords") or {}).values()),
                                         "variant_count": len(j.get("added_keywords") or {})})
                     except Exception:
@@ -712,6 +870,31 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 return _json(self, 500, {"error": str(e)})
 
+        if path == "/api/train/start":
+            try:
+                job = _create_train_job(data or {})
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
+            ensure_worker()
+            return _json(self, 200, {"ok": True, "job": job})
+        if path == "/api/train/adopt":
+            if not (data or {}).get("confirm"):
+                return _json(self, 400, {"error": "confirmation required"})
+            try:
+                TR, _R = _train_mod()
+                result = TR.adopt_from_report()
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
+            return _json(self, 200, result)
+        if path == "/api/train/rollback":
+            if not (data or {}).get("confirm"):
+                return _json(self, 400, {"error": "confirmation required"})
+            try:
+                TR, _R = _train_mod()
+                result = TR.rollback_rank()
+            except ValueError as e:
+                return _json(self, 400, {"error": str(e)})
+            return _json(self, 200, result)
         if path == "/api/queue/add":
             try:
                 job = _create_job(data)

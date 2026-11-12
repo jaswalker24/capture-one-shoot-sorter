@@ -31,6 +31,7 @@
       <button type="button" data-tab="run" class="active">Run</button>
       <button type="button" data-tab="schedule">Schedule importer</button>
       <button type="button" data-tab="history">History &amp; undo</button>
+      <button type="button" data-tab="training">Training</button>
       <button type="button" data-tab="profiles">Profiles</button>
       <button type="button" data-tab="settings">Settings</button>
       <button type="button" data-tab="exports">Exports</button>
@@ -147,6 +148,43 @@
     </div>
 
     
+
+    <div id="tab-training" class="panel-section">
+      <div class="grid">
+        <section class="card">
+          <h2>Rank training</h2>
+          <p class="note">Retrains the quality ranking from your exports and 3★+ ratings. Leave-one-shoot-out evaluation. Read-only on the NAS. It never writes to Capture One and never changes stars, colour tags or rank keywords. The run is queued like any other job.</p>
+          <div class="hr"></div>
+          <h2>Export roots</h2>
+          <div id="trainRoots" class="train-roots"></div>
+          <p class="note" id="trainRootsNote">Checking available folders…</p>
+          <div class="row" style="margin-top:12px">
+            <label class="inline"><input type="checkbox" id="trainIndexMissing" checked /> Index missing import folders first</label>
+            <label class="inline"><input type="checkbox" id="trainAutoAdopt" checked /> Auto-adopt only if held-out accuracy is better</label>
+          </div>
+          <div class="row"><button id="trainStart">Queue training run</button></div>
+          <p class="note" id="trainStartNote"></p>
+        </section>
+        <section>
+          <div class="card" style="margin-bottom:16px">
+            <h2>Progress</h2>
+            <div id="trainJob"></div>
+          </div>
+          <div class="card">
+            <div class="row" style="justify-content:space-between;align-items:center">
+              <h2 style="margin:0">Last report</h2>
+              <div style="display:flex;gap:8px">
+                <button id="trainAdopt">Adopt</button>
+                <button class="secondary" id="trainRollback">Roll back</button>
+              </div>
+            </div>
+            <p class="note" id="trainRankState"></p>
+            <div id="trainReport"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
     <div id="tab-profiles" class="panel-section">
       <div class="grid">
         <section class="card">

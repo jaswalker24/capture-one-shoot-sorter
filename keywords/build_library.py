@@ -23,10 +23,11 @@ tree = {
   "Underground Idol": L("Cheki","Dance","Group"),
   "Venue Type": L("Live House","Club","Arena","Festival"),
  },
- "Kyoto": L("Temple","Street","Nature","People","Shrine Gate","Night","Rain","Landscape","Transit"),
+ "Street": L("Alley","Crowd","Pedestrian","Signage","Neon","Shopfront","Vending Machine",
+             "Crossing","Night Street","Reflections","Silhouette","Candid","Rain","Umbrella",
+             "Cyclist","Market","Lantern","Shrine Gate","Temple"),
  "Japan": {
   "City": {"Tokyo": L("Shibuya","Shinjuku","Akihabara","Asakusa","Harajuku"),
-           "Kyoto": L("Gion","Arashiyama","Fushimi Inari"),
            "Osaka": L("Dotonbori","Namba","Umeda")},
   "Subject": L("Shrine","Temple","Torii","Street","Neon","Food","Train","Station","Market","Garden",
                "Autumn Leaves","Skyline","Night","Rain","Transit","Landscape","Mt Fuji"),

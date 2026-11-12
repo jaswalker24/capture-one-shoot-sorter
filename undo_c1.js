@@ -1,6 +1,26 @@
 // JXA: remove keywords that a prior apply added. Never changes rating/colour.
 // usage: osascript -l JavaScript undo_c1.js plan.json result.json [dry]
 // plan.json: { library?: "Trip Keywords", items: [{filename, keywords: ["Gig/Act/X", ...]}] }
+
+function findKeywordLibrary(C1, preferred) {
+  // Prefer the name in the plan (from config.json keyword_library). Fall back
+  // to Trip Keywords, then the legacy Trip Keywords name so an older catalog still applies.
+  var names = [];
+  if (preferred) names.push(preferred);
+  names.push("Trip Keywords", "Trip Keywords");
+  var seen = {};
+  var tried = [];
+  for (var i = 0; i < names.length; i++) {
+    var n = names[i];
+    if (!n || seen[n]) continue;
+    seen[n] = true;
+    tried.push(n);
+    var lib = C1.keywordLibraries.whose({name: n});
+    if (lib.length) return lib;
+  }
+  throw new Error("keyword library not found (tried " + tried.join(", ") + ")");
+}
+
 ObjC.import('Foundation');
 function kwList(v){
   return v.keywords().map(k=>{const pa=k.parent(); return (pa? pa.split('|').join('/')+'/' : '')+k.name();});
@@ -87,8 +107,7 @@ function runScoped(argv, plan, C1, d){
       return 0;
     }
   }
-  const lib=C1.keywordLibraries.whose({name:plan.library||'Trip Keywords'});
-  if(!lib.length) throw new Error('keyword library not found');
+  const lib=findKeywordLibrary(C1, plan.library);
   const L=lib[0]; const kwCache={};
   const res={dry:!!dry, removed:[], skipped:[], failures:[], before:[], after:[]};
   for(const it of (plan.items||[])){

@@ -69,8 +69,6 @@ _WORKER: threading.Thread | None = None
 _CURRENT_PROC: subprocess.Popen | None = None
 _PAUSE = threading.Event()  # set = paused (don't start next)
 _PAUSE.clear()
-
-
 def _token() -> str:
     return AUTH_FILE.read_text().strip() if AUTH_FILE.exists() else ""
 
@@ -101,6 +99,18 @@ def _read_json(handler):
     if n <= 0:
         return {}
     return json.loads(handler.rfile.read(n).decode() or "{}")
+
+
+def _start_browse_job(prompt: str) -> dict:
+    """Run the native M5 folder picker in a thread so the HTTP request does not hang."""
+    import nas_paths as NP
+    NP.HOME = HOME
+    return NP.start_choose_folder_job(prompt)
+
+
+def _browse_job_status(jid: str) -> dict:
+    import nas_paths as NP
+    return NP.choose_folder_job_status(jid)
 
 
 def list_years():
@@ -675,6 +685,19 @@ class Handler(BaseHTTPRequestHandler):
                 import nas_paths as NP
                 NP.HOME = HOME
                 return _json(self, 200, NP.current_locations(HOME))
+            if path == "/api/locations/list":
+                import nas_paths as NP
+                NP.HOME = HOME
+                qs = parse_qs(u.query)
+                raw = (qs.get("path") or [""])[0]
+                try:
+                    return _json(self, 200, NP.list_location_dir(raw, home_cfg=HOME))
+                except Exception as e:
+                    return _json(self, 400, {"ok": False, "error": str(e)})
+            if path == "/api/locations/browse/status":
+                qs = parse_qs(u.query)
+                jid = (qs.get("id") or [""])[0]
+                return _json(self, 200, _browse_job_status(jid))
             if path.startswith("/api/review/"):
                 return self._review_get(path, parse_qs(u.query))
             if path == "/api/stats":
@@ -1196,7 +1219,9 @@ class Handler(BaseHTTPRequestHandler):
                     break
             if not prompt:
                 prompt = str(body.get("prompt") or "Choose a folder")
-            return _json(self, 200, NP.choose_folder(prompt))
+            # Async: never block this request on osascript (that hung the page
+            # and only showed the dialog after a refresh).
+            return _json(self, 200, _start_browse_job(prompt))
         if path == "/api/locations/save":
             body = _read_json(self)
             import nas_paths as NP

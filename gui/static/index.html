@@ -262,7 +262,7 @@
     <div id="tab-settings" class="panel-section">
       <section class="card">
         <h2>Locations</h2>
-        <p class="note">Photo-folder roots on the NAS (Camera Imports, Camera Exports, Other Exports, and the Photos parent). Browse opens the macOS folder picker on this Mac — use it at the M5 or over screen share. You can also paste a path. Paths are checked that they exist and are readable, and a count of immediate folders/files is shown; the whole library is never scanned. Save writes <code>config.json</code> after a timestamped backup. The panel picks up the new paths immediately, without a restart. Folders marked <strong>Training data</strong> are read only: they are used to train your personal ranking model and are never modified. Camera Exports and Other Exports supply exported frames; Camera Imports supplies 3★+ star labels.</p>
+        <p class="note">Photo-folder roots on the NAS (Camera Imports, Camera Exports, Other Exports, and the Photos parent). Browse opens a folder list in this page (it works from another Mac). The path is not changed unless you click Choose this folder. You can also paste a path. “Open on M5 screen” is optional: it opens a Finder dialog on the Mac running the panel (brought to the front immediately) without hanging this page, and still does not change the path unless you pick a folder. Paths are checked that they exist and are readable, and a count of immediate folders/files is shown; the whole library is never scanned. Save writes <code>config.json</code> after a timestamped backup. The panel picks up the new paths immediately, without a restart. Folders marked <strong>Training data</strong> are read only: they are used to train your personal ranking model and are never modified. Camera Exports and Other Exports supply exported frames; Camera Imports supplies 3★+ star labels.</p>
         <div id="locFields"></div>
         <div class="row">
           <button type="button" id="locSave">Save locations</button>
@@ -338,6 +338,27 @@
         <span style="flex:1"></span>
         <button class="secondary hidden" id="pvDiscard">Discard this preview</button>
         <button id="pvApprove">Approve &amp; apply selected</button>
+      </div>
+    </div>
+  </div>
+  <div id="folderBrowser" class="fb-overlay hidden" hidden>
+    <div class="fb-modal" role="dialog" aria-modal="true" aria-labelledby="fbTitle">
+      <div class="fb-head">
+        <h2 id="fbTitle">Choose a folder</h2>
+        <button type="button" class="secondary" id="fbCancelTop">Cancel</button>
+      </div>
+      <p class="note" id="fbNote"></p>
+      <div class="fb-roots" id="fbRoots"></div>
+      <div class="fb-bar">
+        <button type="button" class="secondary" id="fbUp">Up</button>
+        <nav class="fb-crumbs" id="fbCrumbs"></nav>
+      </div>
+      <div class="fb-list" id="fbList"></div>
+      <div class="fb-foot">
+        <button type="button" class="secondary" id="fbM5" title="Opens a Finder dialog on the M5 itself. This page stays usable; the path is unchanged unless you choose a folder.">Open on M5 screen</button>
+        <span style="flex:1"></span>
+        <button type="button" class="secondary" id="fbCancel">Cancel</button>
+        <button type="button" id="fbChoose">Choose this folder</button>
       </div>
     </div>
   </div>

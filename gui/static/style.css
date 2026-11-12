@@ -196,3 +196,34 @@ textarea.code { font-family:ui-monospace, Menlo, monospace; font-size:12px; min-
 @media (max-width: 800px) {
   .loc-train { margin-left: 0; }
 }
+
+.fb-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 80; padding: 16px;
+}
+.fb-overlay.hidden { display: none !important; }
+.fb-modal {
+  width: min(720px, 100%);
+  max-height: min(80vh, 720px);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 14px; padding: 16px 18px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.fb-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.fb-head h2 { margin: 0; font-size: 16px; }
+.fb-roots { display: flex; flex-wrap: wrap; gap: 6px; }
+.fb-bar { display: flex; align-items: center; gap: 8px; }
+.fb-crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
+.fb-crumbs button { background: transparent; border: 0; color: var(--accent); padding: 2px 4px; }
+.fb-list {
+  border: 1px solid var(--border); border-radius: 8px;
+  min-height: 180px; max-height: 42vh; overflow: auto; background: var(--panel2);
+}
+.fb-list button {
+  display: block; width: 100%; text-align: left; background: transparent;
+  color: var(--text); border: 0; border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+}
+.fb-list button:hover { background: rgba(255,255,255,.04); }
+.fb-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }

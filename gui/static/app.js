@@ -634,7 +634,7 @@ function renderLocations() {
     <div class="loc-preview ${ok ? "ok" : (val ? "bad" : "")}" id="loc-prev-${escapeHtml(f.key)}">${escapeHtml(locPreviewText(prev))}</div>`;
   }).join("");
   box.querySelectorAll(".loc-browse-btn").forEach(btn => {
-    btn.onclick = () => browseLocation(btn.dataset.key);
+    btn.onclick = () => openFolderBrowser(btn.dataset.key);
   });
   box.querySelectorAll(".loc-preview-btn").forEach(btn => {
     btn.onclick = () => previewLocation(btn.dataset.key);
@@ -678,35 +678,200 @@ async function previewLocation(key) {
   }
 }
 
-async function browseLocation(key) {
-  const btn = document.querySelector(`.loc-browse-btn[data-key="${key}"]`);
-  const status = $("locStatus");
+let _fbKey = null;
+let _fbPath = null;
+let _fbParent = null;
+let _fbOpen = false;
+
+function applyChosenFolder(key, path, preview, via) {
+  if (!path) return false;
   const inp = $("loc-" + key);
   const out = $("loc-prev-" + key);
-  if (btn) btn.disabled = true;
-  if (status) status.textContent = "A folder picker is on the Mac desktop — choose a folder or press Cancel.";
+  const status = $("locStatus");
+  if (inp) inp.value = path;
+  if (out && preview) {
+    out.className = "loc-preview " + (preview.readable ? "ok" : "bad");
+    out.textContent = locPreviewText(preview);
+  } else if (inp) {
+    previewLocation(key);
+  }
+  if (status) status.textContent = (via === "m5"
+    ? "Path filled from the M5 folder picker. Click Save locations to write config.json."
+    : "Path filled from Browse. Click Save locations to write config.json.");
+  return true;
+}
+
+function closeFolderBrowser() {
+  _fbOpen = false;
+  _fbKey = null;
+  const box = $("folderBrowser");
+  if (box) { box.classList.add("hidden"); box.hidden = true; }
+}
+
+async function loadFolderBrowser(path) {
+  const list = $("fbList");
+  const note = $("fbNote");
+  const crumbs = $("fbCrumbs");
+  const roots = $("fbRoots");
+  const up = $("fbUp");
+  if (note) note.textContent = "Listing…";
+  if (list) list.innerHTML = "";
+  const data = await api("/api/locations/list?path=" + encodeURIComponent(path || "/Volumes"));
+  _fbPath = data.path || path || "/Volumes";
+  _fbParent = data.parent || null;
+  if (note) note.textContent = data.note || data.error || (_fbPath || "");
+  if (up) up.disabled = !data.can_up;
+  if (crumbs) {
+    crumbs.innerHTML = (data.breadcrumbs || []).map((c, i, arr) => {
+      const sep = i < arr.length - 1 ? `<span class="note">/</span>` : "";
+      return `<button type="button" data-path="${escapeHtml(c.path)}">${escapeHtml(c.name)}</button>${sep}`;
+    }).join("") || "";
+    crumbs.querySelectorAll("button").forEach(btn => {
+      btn.onclick = () => loadFolderBrowser(btn.dataset.path);
+    });
+  }
+  if (roots) {
+    roots.innerHTML = (data.quick_roots || []).map(r =>
+      `<button type="button" class="secondary" data-path="${escapeHtml(r.path)}" ${r.available ? "" : "disabled"}>${escapeHtml(r.name)}</button>`
+    ).join("");
+    roots.querySelectorAll("button").forEach(btn => {
+      btn.onclick = () => loadFolderBrowser(btn.dataset.path);
+    });
+  }
+  if (list) {
+    const entries = data.entries || [];
+    list.innerHTML = entries.length
+      ? entries.map(e => `<button type="button" data-path="${escapeHtml(e.path)}">${escapeHtml(e.name)}</button>`).join("")
+      : `<p class="note" style="padding:10px">No subfolders here. You can still choose this folder.</p>`;
+    list.querySelectorAll("button").forEach(btn => {
+      btn.onclick = () => loadFolderBrowser(btn.dataset.path);
+    });
+  }
+  if (!data.ok && data.path && data.path !== path) {
+    // already shown the fallback listing when the helper returns it with entries
+  }
+}
+
+async function openFolderBrowser(key) {
+  const inp = $("loc-" + key);
+  const start = (inp && inp.value.trim()) || "/Volumes";
+  _fbKey = key;
+  _fbOpen = true;
+  const box = $("folderBrowser");
+  const title = $("fbTitle");
+  const field = (_locFields || []).find(f => f.key === key);
+  if (title) title.textContent = "Choose " + (field && field.label ? field.label : "a folder");
+  if (box) { box.hidden = false; box.classList.remove("hidden"); }
   try {
-    const r = await api("/api/locations/browse", { method: "POST", body: JSON.stringify({ key }) });
-    if (r.cancelled) {
-      if (status) status.textContent = "Browse cancelled.";
-      return;
-    }
-    if (!r.ok) {
-      if (status) status.textContent = r.error || "Browse failed. Paste the path instead.";
-      return;
-    }
-    if (inp) inp.value = r.path || "";
-    if (out) {
-      out.className = "loc-preview " + (r.preview && r.preview.readable ? "ok" : "bad");
-      out.textContent = locPreviewText(r.preview);
-    }
-    if (status) status.textContent = "Path filled from the folder picker. Click Save locations to write config.json.";
+    await loadFolderBrowser(start);
   } catch (e) {
-    if (status) status.textContent = e.message || "Browse failed. Paste the path instead.";
-  } finally {
+    const note = $("fbNote");
+    if (note) note.textContent = e.message || "Could not list folders.";
+  }
+}
+
+async function chooseFolderFromBrowser() {
+  const key = _fbKey;
+  const path = _fbPath;
+  if (!key || !path) return;
+  closeFolderBrowser();
+  applyChosenFolder(key, path, null, "browser");
+}
+
+let _m5Poll = null;
+let _m5Key = null;
+
+function stopM5Poll() {
+  if (_m5Poll) { clearTimeout(_m5Poll); _m5Poll = null; }
+}
+
+function applyM5Result(r) {
+  const status = $("locStatus");
+  const btn = $("fbM5");
+  const key = _m5Key;
+  if (btn) btn.disabled = false;
+  if (r && r.cancelled) {
+    if (status) status.textContent = "M5 picker cancelled. The path was left unchanged.";
+    return;
+  }
+  if (!r || !r.ok || !r.path) {
+    if (status) status.textContent = ((r && r.error) || "M5 picker failed.") + " The path was left unchanged. Use Browse in this page instead.";
+    return;
+  }
+  if (!key) {
+    if (status) status.textContent = "M5 picker chose a folder, but the Locations field is no longer open. The path was left unchanged.";
+    return;
+  }
+  applyChosenFolder(key, r.path, r.preview, "m5");
+  closeFolderBrowser();
+}
+
+async function pollM5Picker(jobId) {
+  const status = $("locStatus");
+  try {
+    const r = await api("/api/locations/browse/status?id=" + encodeURIComponent(jobId));
+    const st = r.status || "";
+    if (st === "pending" || st === "running") {
+      if (status) status.textContent = "A folder picker should be in front on the M5 screen — choose a folder there, or press Cancel. This page stays usable and the path will not change unless you pick one.";
+      _m5Poll = setTimeout(() => pollM5Picker(jobId), 1000);
+      return;
+    }
+    applyM5Result(r);
+  } catch (e) {
+    if (status) status.textContent = (e.message || "M5 picker failed.") + " The path was left unchanged.";
+    const btn = $("fbM5");
     if (btn) btn.disabled = false;
   }
 }
+
+async function openOnM5Screen() {
+  const key = _fbKey;
+  const status = $("locStatus");
+  const btn = $("fbM5");
+  if (!key) return;
+  stopM5Poll();
+  _m5Key = key;
+  if (btn) btn.disabled = true;
+  if (status) status.textContent = "Asking the M5 to open a folder picker in front… The path will not change unless you pick a folder.";
+  try {
+    const start = await api("/api/locations/browse", { method: "POST", body: JSON.stringify({ key }) });
+    // If a legacy server still returns a path synchronously, honour it without hanging the next time.
+    if (start && start.path && start.ok) {
+      applyM5Result(start);
+      return;
+    }
+    if (start && (start.cancelled || start.status === "cancelled")) {
+      applyM5Result(start);
+      return;
+    }
+    const jobId = start && start.job_id;
+    if (!jobId) {
+      applyM5Result({ ok: false, error: (start && start.error) || "M5 picker did not start." });
+      return;
+    }
+    if (status) status.textContent = "A folder picker should be in front on the M5 screen — choose a folder there, or press Cancel. This page stays usable and the path will not change unless you pick one.";
+    pollM5Picker(jobId);
+  } catch (e) {
+    applyM5Result({ ok: false, error: e.message || "M5 picker failed." });
+  }
+}
+
+function wireFolderBrowser() {
+  if (!$("folderBrowser") || $("folderBrowser").dataset.wired) return;
+  $("folderBrowser").dataset.wired = "1";
+  if ($("fbUp")) $("fbUp").onclick = () => { if (_fbParent) loadFolderBrowser(_fbParent); };
+  if ($("fbChoose")) $("fbChoose").onclick = chooseFolderFromBrowser;
+  if ($("fbCancel")) $("fbCancel").onclick = closeFolderBrowser;
+  if ($("fbCancelTop")) $("fbCancelTop").onclick = closeFolderBrowser;
+  if ($("fbM5")) $("fbM5").onclick = openOnM5Screen;
+  $("folderBrowser").addEventListener("click", ev => {
+    if (ev.target.id === "folderBrowser") closeFolderBrowser();
+  });
+  document.addEventListener("keydown", ev => {
+    if (ev.key === "Escape" && _fbOpen) closeFolderBrowser();
+  });
+}
+wireFolderBrowser();
 
 if ($("locSave")) $("locSave").onclick = async () => {
   const status = $("locStatus");

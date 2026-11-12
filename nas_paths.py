@@ -7,7 +7,7 @@ Never walks a whole library: previews count immediate children only.
 """
 from __future__ import annotations
 
-import json, os, shutil, subprocess, sys
+import json, os, shutil, subprocess, sys, threading, time, uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -273,6 +273,173 @@ def preview_path(path: str) -> dict:
     return out
 
 
+
+def default_allowed_roots() -> list[Path]:
+    """Browse is limited to /Volumes and the logged-in user's home."""
+    return [Path("/Volumes"), Path.home()]
+
+
+def _resolve(path: Path) -> Path:
+    return Path(path).expanduser().resolve()
+
+
+def _is_allowed(path: Path, roots: list[Path] | None = None) -> bool:
+    try:
+        rp = _resolve(path)
+    except (OSError, RuntimeError):
+        return False
+    for root in (roots or default_allowed_roots()):
+        try:
+            rr = _resolve(root)
+        except (OSError, RuntimeError):
+            continue
+        if rp == rr or rr in rp.parents:
+            return True
+    return False
+
+
+def _breadcrumbs(path: Path, roots: list[Path]) -> list[dict]:
+    crumbs = []
+    cur = path
+    seen = set()
+    while True:
+        try:
+            key = str(_resolve(cur))
+        except (OSError, RuntimeError):
+            key = str(cur)
+        if key in seen:
+            break
+        seen.add(key)
+        if not _is_allowed(cur, roots):
+            break
+        crumbs.append({"name": cur.name or str(cur), "path": str(cur)})
+        parent = cur.parent
+        if parent == cur:
+            break
+        cur = parent
+    crumbs.reverse()
+    return crumbs
+
+
+def quick_list_roots(home_cfg: Path | None = None) -> list[dict]:
+    photos = DEFAULT_PHOTOS
+    try:
+        photos = photos_root(home_cfg)
+    except Exception:
+        pass
+    items = [
+        {"id": "volumes", "name": "Volumes", "path": "/Volumes"},
+        {"id": "photos", "name": "Photos (NAS)", "path": str(photos)},
+        {"id": "home", "name": "Home", "path": str(Path.home())},
+    ]
+    out, seen = [], set()
+    for item in items:
+        key = item["path"]
+        if key in seen:
+            continue
+        seen.add(key)
+        p = Path(item["path"])
+        item["available"] = p.is_dir() and _is_allowed(p)
+        out.append(item)
+    return out
+
+
+def list_location_dir(path: str, allowed_roots: list[Path] | None = None,
+                      home_cfg: Path | None = None) -> dict:
+    """List immediate subdirectories of an allowed folder. Never recurses.
+
+    Restricted to /Volumes and the user's home (or allowed_roots in tests).
+    Missing or forbidden paths fall back to /Volumes when that exists, else home.
+    """
+    roots = [Path(r) for r in (allowed_roots or default_allowed_roots())]
+    volumes = Path("/Volumes")
+    fallback = volumes if volumes.is_dir() else Path.home()
+    requested = normalize_path(path)
+    note = None
+    target = Path(requested) if requested else fallback
+    try:
+        if requested and not target.exists():
+            # nearest existing ancestor, then fallback
+            cur = target
+            while cur != cur.parent and not cur.exists():
+                cur = cur.parent
+            if cur.exists() and _is_allowed(cur, roots):
+                note = f"{requested} is not present; showing {cur}"
+                target = cur
+            else:
+                note = f"{requested} is not present; showing {fallback}"
+                target = fallback
+        elif requested and target.exists() and not target.is_dir():
+            parent = target.parent
+            if parent.exists() and _is_allowed(parent, roots):
+                note = f"{requested} is not a folder; showing {parent}"
+                target = parent
+            else:
+                note = f"{requested} is not a folder; showing {fallback}"
+                target = fallback
+    except OSError as e:
+        return {"ok": False, "error": str(e), "path": str(fallback),
+                "entries": [], "breadcrumbs": [], "quick_roots": quick_list_roots(home_cfg),
+                "can_up": False, "parent": None}
+
+    if not _is_allowed(target, roots):
+        return {
+            "ok": False,
+            "error": "Folder browsing is limited to /Volumes and your home directory.",
+            "path": str(fallback) if _is_allowed(fallback, roots) else str(Path.home()),
+            "entries": [],
+            "breadcrumbs": [],
+            "quick_roots": quick_list_roots(home_cfg),
+            "can_up": False,
+            "parent": None,
+        }
+
+    try:
+        target = _resolve(target)
+    except (OSError, RuntimeError) as e:
+        return {"ok": False, "error": str(e), "path": str(fallback),
+                "entries": [], "breadcrumbs": [], "quick_roots": quick_list_roots(home_cfg),
+                "can_up": False, "parent": None}
+
+    entries = []
+    try:
+        with os.scandir(target) as it:
+            for ent in it:
+                name = ent.name
+                if name.startswith(".") or name.startswith("._") or name.lower() in {"@eadir"}:
+                    continue
+                try:
+                    if not ent.is_dir(follow_symlinks=False):
+                        continue
+                    # Reject a symlink that would escape the allow-list
+                    child = Path(ent.path)
+                    if not _is_allowed(child, roots):
+                        continue
+                    entries.append({"name": name, "path": str(_resolve(child))})
+                except OSError:
+                    continue
+    except OSError as e:
+        return {"ok": False, "error": str(e), "path": str(target),
+                "entries": [], "breadcrumbs": _breadcrumbs(target, roots),
+                "quick_roots": quick_list_roots(home_cfg),
+                "can_up": False, "parent": None}
+
+    entries.sort(key=lambda e: e["name"].lower())
+    parent = target.parent
+    can_up = parent != target and _is_allowed(parent, roots)
+    return {
+        "ok": True,
+        "path": str(target),
+        "parent": str(parent) if can_up else None,
+        "can_up": can_up,
+        "breadcrumbs": _breadcrumbs(target, roots),
+        "entries": entries,
+        "quick_roots": quick_list_roots(home_cfg),
+        "note": note,
+        "error": None,
+    }
+
+
 def current_locations(home: Path | None = None) -> dict:
     """Resolved paths, config values, env overrides and a shallow preview each."""
     home = home or HOME
@@ -316,21 +483,30 @@ def choose_folder(prompt: str, timeout: int = 360) -> dict:
     if sys.platform != "darwin":
         return {"ok": False, "cancelled": False,
                 "error": "Folder picker only works on the Mac running the control panel. Paste the path instead."}
-    script = f'''
-tell application "SystemUIServer"
-    activate
-    try
-        set theFolder to choose folder with prompt {_as_literal(prompt)}
-        return POSIX path of theFolder
-    on error errMsg number errNum
-        if errNum is -128 then
-            return "__CANCELLED__"
-        else
-            return "__ERROR__" & errMsg
-        end if
-    end try
-end tell
-'''
+    # Activate Finder first so the dialog comes to the front immediately
+    # (SystemUIServer dialogs often stay behind the browser until a refresh).
+    script = "\n".join([
+        'tell application "Finder" to activate',
+        'delay 0.15',
+        'tell application "System Events"',
+        '    try',
+        '        set frontmost of process "Finder" to true',
+        '    end try',
+        'end tell',
+        'try',
+        '    tell application "Finder"',
+        '        activate',
+        '        set theFolder to choose folder with prompt ' + _as_literal(prompt),
+        '        return POSIX path of theFolder',
+        '    end tell',
+        'on error errMsg number errNum',
+        '    if errNum is -128 then',
+        '        return "__CANCELLED__"',
+        '    else',
+        '        return "__ERROR__" & errMsg',
+        '    end if',
+        'end try',
+    ]) + "\n"
     try:
         r = subprocess.run(
             ["osascript", "-"],
@@ -353,6 +529,69 @@ end tell
     path = normalize_path(text)
     preview = preview_path(path)
     return {"ok": True, "cancelled": False, "path": path, "preview": preview}
+
+
+
+_CHOOSE_JOBS: dict[str, dict] = {}
+_CHOOSE_LOCK = threading.Lock()
+
+
+def start_choose_folder_job(prompt: str) -> dict:
+    """Start choose_folder in a background thread. Returns immediately with a job_id.
+
+    The HTTP handler must not wait on osascript: a blocking POST hung the
+    laptop tab, and the Finder dialog often stayed behind the browser until
+    a refresh brought it forward (and cleared unsaved path fields).
+    """
+    jid = uuid.uuid4().hex[:12]
+    rec = {
+        "id": jid,
+        "job_id": jid,
+        "status": "pending",
+        "ok": False,
+        "cancelled": False,
+        "path": None,
+        "error": None,
+        "preview": None,
+        "started": time.time(),
+    }
+    with _CHOOSE_LOCK:
+        stale = [k for k, v in _CHOOSE_JOBS.items()
+                 if time.time() - float(v.get("started") or 0) > 1800]
+        for k in stale:
+            _CHOOSE_JOBS.pop(k, None)
+        _CHOOSE_JOBS[jid] = rec
+
+    def run():
+        with _CHOOSE_LOCK:
+            job = _CHOOSE_JOBS.get(jid)
+            if job is not None:
+                job["status"] = "running"
+        result = choose_folder(prompt)
+        with _CHOOSE_LOCK:
+            job = _CHOOSE_JOBS.get(jid)
+            if job is None:
+                return
+            job.update(result or {})
+            if job.get("ok") and job.get("path"):
+                job["status"] = "done"
+            elif job.get("cancelled"):
+                job["status"] = "cancelled"
+            else:
+                job["status"] = "error"
+                job["ok"] = False
+
+    threading.Thread(target=run, name=f"choose-folder-{jid}", daemon=True).start()
+    return {"ok": True, "job_id": jid, "status": "pending"}
+
+
+def choose_folder_job_status(jid: str) -> dict:
+    jid = (jid or "").strip()
+    with _CHOOSE_LOCK:
+        job = dict(_CHOOSE_JOBS.get(jid) or {})
+    if not job:
+        return {"ok": False, "status": "missing", "error": "No such picker job", "path": None}
+    return job
 
 
 def save_locations(updates: dict, home: Path | None = None, require_readable: bool = True,

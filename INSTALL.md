@@ -86,7 +86,7 @@ The control panel’s health strip looks for your Camera Imports and Camera Expo
 The Capture One library name is configurable (`keyword_library`). New installs use **Trip Keywords**. An existing catalog that already has a library named **Trip Keywords** should set `"keyword_library": "Trip Keywords"` instead of renaming the library.
 
 
-Do not commit `config.json`; it is local to the machine. You can also set these later in **Settings → Locations** (Browse uses the macOS folder picker on this Mac, or paste a path). A timestamped `config.json.bak-locations-*` backup is written on save. Use the **Training data** toggles on Camera Exports, Other Exports and Camera Imports to mark which folders train the personal ranking model (read only, never modified). Environment variables `LOCALAI_PHOTOS`, `LOCALAI_IMPORTS`, `LOCALAI_EXPORTS` and `LOCALAI_OTHER_EXPORTS` still override config if set.
+Do not commit `config.json`; it is local to the machine. You can also set these later in **Settings → Locations** (Browse lists folders in the page so it works from another Mac, or paste a path. Optional “Open on M5 screen” opens a Finder dialog on the Mac running the panel without hanging this page, and does not change the path unless you pick a folder). A timestamped `config.json.bak-locations-*` backup is written on save. Use the **Training data** toggles on Camera Exports, Other Exports and Camera Imports to mark which folders train the personal ranking model (read only, never modified). Environment variables `LOCALAI_PHOTOS`, `LOCALAI_IMPORTS`, `LOCALAI_EXPORTS` and `LOCALAI_OTHER_EXPORTS` still override config if set.
 
 ## First run
 

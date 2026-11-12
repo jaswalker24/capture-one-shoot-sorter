@@ -1,0 +1,148 @@
+{
+  "name": "Example schedule",
+  "source": "Template — copy this file and fill in confirmed shows only.",
+  "timezone": "Asia/Tokyo",
+  "notes": "CONFIRMED shows only. Times use the timezone above. Placeholder acts and times. When a slot is announced, add start/end under slots and move the act out of acts_tba. Mark window_end_estimated when the organiser has not published an end time. attend_until (optional) ends the event window early when you plan to leave.",
+  "changeover_buffer_min": 3,
+  "events": [
+    {
+      "id": "sample-festival",
+      "status": "confirmed",
+      "date": "2026-06-01",
+      "event": "Sample Festival vol.1",
+      "venue": "Example Hall",
+      "area": "Example City",
+      "doors": "12:00",
+      "start": "13:00",
+      "window_end": "19:00",
+      "window_end_estimated": true,
+      "slots": [
+        {"act": "Act One", "type": "set", "start": "13:00", "end": "13:35"},
+        {"act": "Act Two", "type": "set", "start": "13:40", "end": "14:15"},
+        {"type": "cheki", "acts": ["Act One", "Act Two"], "start": "14:20", "end": "15:00"}
+      ],
+      "acts_tba": ["Act Three", "Act Four"],
+      "no_photo_acts": []
+    },
+    {
+      "id": "evening-lights",
+      "status": "confirmed",
+      "date": "2026-06-01",
+      "event": "Evening Lights Showcase",
+      "venue": "City Plaza",
+      "area": "Example City",
+      "doors": "18:00",
+      "start": "18:15",
+      "window_end": "19:30",
+      "slots": [
+        {"act": "Headline Lights", "type": "show", "start": "18:15", "end": "19:30", "note": "Preferred over the overlapping festival window when this show slot is in progress."}
+      ],
+      "acts_tba": [],
+      "no_photo_acts": []
+    },
+    {
+      "id": "afternoon-bill",
+      "status": "confirmed",
+      "date": "2026-06-02",
+      "event": "Afternoon Bill",
+      "venue": "Club Example",
+      "area": "Example City",
+      "doors": "12:30",
+      "start": "13:00",
+      "window_end": "16:00",
+      "attend_until": "15:00",
+      "attend_note": "Optional early leave; the matcher stops tagging after attend_until.",
+      "slots": [
+        {"act": "Act Alpha", "type": "set", "start": "13:00", "end": "13:50"},
+        {"act": "Act Beta", "type": "set", "start": "14:00", "end": "14:40"},
+        {"type": "meet", "act": "Act Alpha", "start": "14:00", "end": "14:30", "note": "Overlaps Act Beta's set — frames in this window are flagged for review."}
+      ],
+      "acts_tba": [],
+      "no_photo_acts": []
+    },
+    {
+      "id": "headline-show",
+      "status": "confirmed",
+      "date": "2026-06-02",
+      "event": "Headline Show",
+      "venue": "Example Arena",
+      "area": "Example City",
+      "doors": "17:00",
+      "start": "17:30",
+      "window_end": "20:00",
+      "photo_policy": "Placeholder — record any venue photo rule here.",
+      "slots": [
+        {"act": "Headline Act", "type": "set", "start": "17:30", "end": "19:30"}
+      ],
+      "acts_tba": [],
+      "no_photo_acts": []
+    },
+    {
+      "id": "example-tour",
+      "status": "confirmed",
+      "date": "2026-06-03",
+      "event": "Example Tour 2026",
+      "venue": "Example SOMA",
+      "area": "Example City",
+      "doors": "14:30",
+      "start": "15:00",
+      "window_end": "18:30",
+      "changeover_buffer_min": 10,
+      "timing_note": "This event uses a 10-minute changeover buffer.",
+      "slots": [
+        {"act": "No Photo Act", "type": "set", "start": "15:00", "end": "16:00"},
+        {"act": "Support Act", "type": "set", "start": "16:10", "end": "16:50"},
+        {"act": "Main Act", "type": "set", "start": "17:00", "end": "17:40"}
+      ],
+      "acts_tba": [],
+      "no_photo_acts": ["No Photo Act"]
+    },
+    {
+      "id": "stadium-headline",
+      "status": "confirmed",
+      "date": "2026-06-04",
+      "event": "Stadium Headline",
+      "venue": "Example Stadium",
+      "area": "Example City",
+      "doors": "17:00",
+      "start": "18:00",
+      "window_end": "22:00",
+      "window_end_estimated": true,
+      "slots": [],
+      "acts_tba": [],
+      "no_photo_acts": [],
+      "photo_policy": "No timed acts in this template entry, so tagging is event and venue only."
+    },
+    {
+      "id": "birthday-showcase",
+      "status": "confirmed",
+      "date": "2026-06-05",
+      "event": "Birthday Showcase",
+      "venue": "Example REX",
+      "area": "Example City",
+      "doors": "17:00",
+      "start": "17:30",
+      "window_end": "21:00",
+      "window_end_estimated": true,
+      "slots": [],
+      "acts_tba": ["TBA Act A", "TBA Act B"],
+      "no_photo_acts": []
+    },
+    {
+      "id": "unconfirmed-bill",
+      "status": "unconfirmed",
+      "date": "2026-06-07",
+      "event": "Unconfirmed Support Bill",
+      "venue": "Example Club",
+      "area": "Example City",
+      "doors": "18:00",
+      "start": "19:00",
+      "window_end": "22:00",
+      "slots": [
+        {"act": "Should Not Tag", "type": "set", "start": "19:00", "end": "20:00"}
+      ],
+      "acts_tba": [],
+      "no_photo_acts": []
+    }
+  ]
+}

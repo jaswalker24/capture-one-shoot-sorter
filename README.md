@@ -140,7 +140,7 @@ or **Scripts → Trip Local AI → Draft Captions (Exports)** with export files 
   apply_c1.py/.js     additive Capture One writer
   config.json         local settings (from config.example.json)
   keywords/           Trip Keywords library source
-  schedules/          confirmed-show schedules (JSON)
+  schedules/          start from `example.json` (copy and fill in confirmed shows)
   scripts/src/        AppleScript sources for the Scripts menu
   venv/               Python 3.12 environment
   ollama/             standalone Ollama binary
@@ -178,10 +178,10 @@ Then re-import `trip-keyword-library.txt` into the **Trip Keywords** library in 
 
 ## Schedule tagging
 
-Confirmed shows only live in `schedules/example.json`. Tag a folder:
+Copy `schedules/example.json` and fill in confirmed shows only (times, venues, acts). The control panel Schedule importer can also load or paste a schedule. Tag a folder:
 
 ```bash
-~/localai/tag schedule "/path/to/japan/shoot" \
+~/localai/tag schedule "/path/to/shoot" \
   --schedule ~/localai/schedules/example.json
 ```
 

@@ -6,10 +6,10 @@
 
 function findKeywordLibrary(C1, preferred) {
   // Prefer the name in the plan (from config.json keyword_library). Fall back
-  // to Trip Keywords, then the legacy Trip Keywords name so an older catalog still applies.
+  // to Trip Keywords, then the previous library name so an older catalog still applies.
   var names = [];
   if (preferred) names.push(preferred);
-  names.push("Trip Keywords", "Trip Keywords");
+  names.push("Trip Keywords", "Grok Keywords");
   var seen = {};
   var tried = [];
   for (var i = 0; i < names.length; i++) {

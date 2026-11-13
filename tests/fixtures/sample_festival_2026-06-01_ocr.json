@@ -1,7 +1,7 @@
 {
-  "date": "2026-11-21",
+  "date": "2026-06-01",
   "event": "Sample Festival",
-  "note": "OCR lines only from a schedule poster (Apple Vision). No image is included.",
+  "note": "Synthetic OCR lines for tests (Apple Vision layout). No image is included.",
   "lines": [
     {
       "text": "Amber Parade × Iron Lantern presents",
@@ -22,7 +22,7 @@
       "y": 0.20925414329503356
     },
     {
-      "text": "2026.11.21(t)",
+      "text": "2026.06.01(m)",
       "conf": 1.0,
       "x": 0.03682170174346178,
       "y": 0.21511627848514636
@@ -40,7 +40,7 @@
       "y": 0.2630813956603927
     },
     {
-      "text": "SHIBUYA",
+      "text": "MIDTOWN",
       "conf": 1.0,
       "x": 0.06579238344083484,
       "y": 0.2670129530856904
@@ -58,7 +58,7 @@
       "y": 0.2877906975526674
     },
     {
-      "text": "CYCLONE",
+      "text": "HALL",
       "conf": 1.0,
       "x": 0.03867260396501682,
       "y": 0.2984317860291448

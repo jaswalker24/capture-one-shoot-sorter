@@ -21,8 +21,6 @@ HISTORY_DIR = HOME / "gui" / "history"
 
 DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})")
 ILLEGAL_FOLDER = re.compile(r'[\\/:*?"<>|]')
-JAPAN_TRIP_START = date(2026, 11, 19)
-JAPAN_TRIP_END = date(2026, 11, 28)
 APPLY_UNTIL_DAYS = 14
 CLASH_TOLERANCE_MIN = 5
 GAP_WARN_MIN = 60
@@ -55,14 +53,8 @@ COLUMN_HINTS = {
 }
 
 
-def default_timezone(d: date | str) -> str:
-    if isinstance(d, str):
-        try:
-            d = date.fromisoformat(d[:10])
-        except Exception:
-            return "Europe/London"
-    if JAPAN_TRIP_START <= d <= JAPAN_TRIP_END:
-        return "Asia/Tokyo"
+def default_timezone(d: date | str | None = None) -> str:
+    """Default event timezone. Each event can set its own."""
     return "Europe/London"
 
 

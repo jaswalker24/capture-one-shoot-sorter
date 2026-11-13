@@ -73,17 +73,6 @@
     $("seFolderPath").textContent = `Schedules/${year}/${day}/${n}/schedule.json`;
   }
 
-  function japanNote() {
-    const d = $("seDate").value;
-    const note = $("seTzNote");
-    if (!note) return;
-    if (d >= "2026-11-19" && d <= "2026-11-28") {
-      note.textContent = "Japan trip dates use Japan time. The camera clock should be on Japan time too (the 19 Nov reminder).";
-    } else {
-      note.textContent = "";
-    }
-  }
-
   function setMetaToForm() {
     const m = state.meta;
     $("seDate").value = m.date || "";
@@ -94,7 +83,6 @@
     $("seType").value = m.event_type || "gig";
     applyHints();
     folderPreview();
-    japanNote();
   }
 
   function applyHints() {
@@ -491,7 +479,6 @@
   async function onDateChange() {
     const d = $("seDate").value;
     folderPreview();
-    japanNote();
     if (!d) return;
     try {
       const r = await api("/api/schedules/defaults?date=" + encodeURIComponent(d) + "&event_type=" + encodeURIComponent($("seType").value));

@@ -435,7 +435,7 @@ def _clean_act_name(name: str) -> str:
     name = re.sub(r"\s+[0oO]{1,2}[0-9iIl]{1,3}[DX]*\s*$", "", name)
     name = re.sub(r"\s+[0oO]?\d{2,}[A-Za-z0-9]*$", "", name)
     name = re.sub(r"\s+[▶■区以回]+\S*$", "", name)
-    # keep internal : and - (Station Four, Copper Crown); only collapse other punctuation
+    # keep internal : and - (for example Act:One, Able-Two); only collapse other punctuation
     name = re.sub(r"[\s/|,;·・]+", " ", name).strip(" /|,;·・")
     name = re.sub(r"\s+", " ", name).strip().strip("-:：")
     return name
@@ -478,7 +478,7 @@ def _is_header_noise(name: str) -> bool:
     n = _clean_act_name(name)
     return bool(re.fullmatch(
         r"(time\s*table|timetable|presents?|idol|band|-?\s*act\s*-?|"
-        r"ol|open|start|ticket|tickets|shibuya|cyclone|venue)",
+        r"ol|open|start|ticket|tickets|shibuya|cyclone|midtown|hall|venue)",
         n, re.I,
     ))
 
@@ -611,7 +611,7 @@ def _parse_spatial(raw: list[dict], *, date_str: str, event_name: str,
         acts.append({"act": name, "start": start or "", "end": end or "", "doors": "", "notes": ""})
 
     # Each timetable time picks the name on the same row to its right,
-    # or the label already on the time fragment (Example Hall style).
+    # or the label already on the time fragment (name and time on one line).
     for f in frags:
         if not f["is_time_slot"]:
             continue
@@ -623,7 +623,7 @@ def _parse_spatial(raw: list[dict], *, date_str: str, event_name: str,
                     continue
             name = "" if _is_junk_label(label or "") else _clean_act_name(label or "")
             # Same-fragment leftover wins: act, changeover or merch already
-            # on this line (Example Hall). Don't look right and steal a neighbour.
+            # on this line. Don't look right and steal a neighbour.
             if name and not _is_header_noise(name):
                 add_named(name, st, en, source_text=f["text"])
                 continue
@@ -662,7 +662,7 @@ def _parse_spatial(raw: list[dict], *, date_str: str, event_name: str,
             other.append(_other_item(kind, work))
             f["used"] = True
 
-    # infer missing ends (should be rare; two-column timetable times already have ends)
+    # infer missing ends (should be rare when both start and end are printed)
     timed = [r for r in acts if r.get("start")]
     for i, row in enumerate(timed):
         if row.get("end"):

@@ -67,7 +67,7 @@ class SaveLocations(unittest.TestCase):
             "imports_root": "/old/imports",
             "exports_root": "/old/exports",
             "rank": {"weights": {"aes": 0.15}},
-            "keyword_library": "Trip Keywords",
+            "keyword_library": "Custom Keywords",
         }, indent=2))
 
     def test_save_backs_up_and_keeps_other_keys(self):
@@ -90,7 +90,7 @@ class SaveLocations(unittest.TestCase):
         self.assertEqual(new["imports_root"], str(photos / "Camera Imports"))
         self.assertEqual(new["photos_root"], str(photos))
         self.assertEqual(new["other_exports_root"], str(photos / "2025 Exports"))
-        self.assertEqual(new["keyword_library"], "Trip Keywords")
+        self.assertEqual(new["keyword_library"], "Custom Keywords")
         self.assertEqual(new["rank"]["weights"]["aes"], 0.15)
         # no second backup when unchanged
         out2 = NP.save_locations({

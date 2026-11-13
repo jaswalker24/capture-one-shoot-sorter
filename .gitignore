@@ -66,3 +66,8 @@ people/
 gui/presets.json
 gui/schedule-drafts/
 schedules/_merged-*.json
+
+# Personal schedules stay on the machine, not in the repo.
+# Keep the public template.
+schedules/*.json
+!schedules/example.json

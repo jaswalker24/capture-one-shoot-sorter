@@ -23,7 +23,7 @@ LOCATION_FIELDS = (
         "key": "photos_root",
         "label": "Photos root",
         "prompt": "Choose the Photos root folder (parent of Camera Imports and Camera Exports)",
-        "hint": "Parent folder that contains Camera Imports and Camera Exports, for example …/[03] Photos. Optional if Imports and Exports are set.",
+        "hint": "Parent folder that contains Camera Imports and Camera Exports, for example /Volumes/Photos. Optional if Imports and Exports are set.",
         "optional": True,
         "training_source": False,
     },

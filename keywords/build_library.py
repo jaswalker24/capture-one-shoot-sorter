@@ -50,7 +50,7 @@ tree = {
  },
 }
 
-# Feature + confirmed Japan Nov 2026 schedule keywords
+# Extra feature keywords and example gig events, venues and acts
 _extra = {
  "General": {
   "Burst Best": [],
@@ -88,27 +88,26 @@ _extra = {
   "Event": [
     "Sample Festival vol.1",
     "Evening Lights Showcase",
-    "Example Hall Live",
-    "Headline Show",
     "Afternoon Bill",
+    "Headline Show",
     "Example Tour 2026",
+    "Stadium Headline",
     "Birthday Showcase",
   ],
   "Venue": [
-    "Example Cyclone",
-    "City Plaza",
     "Example Hall",
+    "City Plaza",
+    "Club Example",
     "Example Arena",
     "Example SOMA",
     "Example Stadium",
     "Example REX",
   ],
   "Act": [
-    "Red Harbor", "Steel Orchard'", "Amber Parade",
-    "メロディうさぎ", "HALO",
-    "Headline Act",
-    "Support Act", "No Photo Act",
-    "Main Act",
+    "Act One", "Act Two", "Act Three",
+    "Act Alpha", "Act Beta",
+    "Headline Act", "Support Act",
+    "Main Act", "No Photo Act",
   ],
  },
 }

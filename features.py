@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Local AI features for this Mac (all on-device, originals read-only).
+Local AI features (all on-device, originals read-only).
 
   index      build/extend the image index (SigLIP embedding, aesthetic score, sharpness, EXIF)
   search     text search over the index

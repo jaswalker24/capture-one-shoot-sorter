@@ -10,7 +10,7 @@ You need an **Apple-silicon Mac (M1 or newer)**, **macOS 14 or newer**, **Captur
 2. Open **Terminal**, go into the unzipped folder, and run:
 
 ```bash
-cd /path/to/trips-local-ai-1.0.0
+cd /path/to/trips-local-ai-1.1.0
 ./install.sh
 ```
 
@@ -84,7 +84,7 @@ The control panel’s health strip looks for your Camera Imports and Camera Expo
 "keyword_library": "Trip Keywords"
 ```
 
-The Capture One library name is configurable (`keyword_library`). New installs use **Trip Keywords**. An existing catalog that already has a library named **Trip Keywords** should set `"keyword_library": "Trip Keywords"` instead of renaming the library.
+The Capture One library name is configurable (`keyword_library`). New installs use **Trip Keywords**. If your catalog already has a library under a different name, set `keyword_library` in `config.json` to that name instead of renaming the library.
 
 
 Do not commit `config.json`; it is local to the machine. You can also set these later in **Settings → Locations** (Browse lists folders in the page so it works from another Mac, or paste a path. Optional “Open on M5 screen” opens a Finder dialog on the Mac running the panel without hanging this page, and does not change the path unless you pick a folder). A timestamped `config.json.bak-locations-*` backup is written on save. Use the **Training data** toggles on Camera Exports, Other Exports and Camera Imports to mark which folders train the personal ranking model (read only, never modified). **Schedules root** points at the Schedules tree (Year / YYYY-MM-DD / Event name). It defaults to Photos root/Schedules. A folder that holds a single image is read on the Schedule review page (Apple Vision OCR); the result stays on this Mac until you Confirm, and confirmed.json is the master. Posters are never moved, renamed or trashed. Any file named `_schedule*` is skipped by every pass, so schedule posters never get tagged, ranked or put in cull albums. Environment variables `LOCALAI_PHOTOS`, `LOCALAI_IMPORTS`, `LOCALAI_EXPORTS`, `LOCALAI_OTHER_EXPORTS` and `LOCALAI_SCHEDULES` still override config if set.
@@ -126,18 +126,11 @@ Do not unload or restart the GUI or job runner while a job is running or queued.
 This removes the tool only. It does not delete your photos, Capture One catalog, or keyword library inside Capture One.
 
 ```bash
-# Stop the control panel (only when no job is running)
-launchctl bootout "gui/$(id -u)/com.trips.localai.gui" 2>/dev/null || true
-rm -f ~/Library/LaunchAgents/com.trips.localai.gui.plist
-
-# Scripts menu, Dock app, runtime
-rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"
-rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"  # older name
-rm -rf "$HOME/Applications/Trips Local AI.app"
-rm -rf ~/localai
+# Stop the control panel first if a job is running, then:
+./install.sh --uninstall
 ```
 
-You can then remove the **Trips Local AI** tile from the Dock if it is still there. Optionally stop Ollama with `kill "$(cat ~/localai/logs/ollama.pid)"` before deleting `~/localai`.
+This unloads the LaunchAgent, removes the Scripts menu and Dock app, and deletes `~/localai`. Photos and the Capture One catalog are not touched. You can then remove the **Trips Local AI** tile from the Dock if it is still there.
 
 ## Options and layout
 

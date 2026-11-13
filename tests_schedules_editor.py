@@ -30,7 +30,7 @@ def _rows(*acts):
     return out
 
 
-def _meta(date="2026-11-22", event="Example Hall Show", venue="Example Hall", **kw):
+def _meta(date="2026-06-02", event="Example Hall Show", venue="Example Hall", **kw):
     d = {"date": date, "event": event, "venue": venue,
          "timezone": kw.pop("timezone", ST.default_timezone(date)),
          "changeover_buffer_min": kw.pop("changeover_buffer_min", 3),
@@ -45,7 +45,7 @@ class SanitiserAndTime(unittest.TestCase):
         cleaned = ST.sanitize_event_name('Example Hall / City: "Night"?')
         self.assertNotRegex(cleaned, r'[\\/:*?"<>|]')
         self.assertIn("Example Hall", cleaned)
-        self.assertIn("Osaka", cleaned)
+        self.assertIn("City", cleaned)
         self.assertIn("Night", cleaned)
         self.assertFalse(cleaned.endswith("-"))
         self.assertEqual(ST.sanitize_event_name("  ヘップホール  "), "ヘップホール")
@@ -64,12 +64,10 @@ class SanitiserAndTime(unittest.TestCase):
         self.assertIsNone(ST.parse_time("abc"))
         self.assertIsNone(ST.parse_time(""))
 
-    def test_default_timezone_japan_trip_window(self):
-        self.assertEqual(ST.default_timezone("2026-11-19"), "Asia/Tokyo")
-        self.assertEqual(ST.default_timezone("2026-11-28"), "Asia/Tokyo")
-        self.assertEqual(ST.default_timezone("2026-11-22"), "Asia/Tokyo")
-        self.assertEqual(ST.default_timezone("2026-11-18"), "Europe/London")
-        self.assertEqual(ST.default_timezone("2026-06-23"), "Europe/London")
+    def test_default_timezone_is_home(self):
+        self.assertEqual(ST.default_timezone("2026-06-02"), "Europe/London")
+        self.assertEqual(ST.default_timezone("2026-11-22"), "Europe/London")
+        self.assertEqual(ST.default_timezone("not-a-date"), "Europe/London")
 
 
 class Validation(unittest.TestCase):
@@ -135,21 +133,21 @@ class MidnightCrossing(unittest.TestCase):
     def test_load_schedule_rolls_end_to_next_day(self):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "s.json"
-            data = ST.build_schedule(_meta(), _rows(
+            data = ST.build_schedule(_meta(timezone="Asia/Tokyo"), _rows(
                 ("Opener", "22:00", "22:40"),
                 ("Headliner", "23:30", "00:15"),
             ))
             p.write_text(json.dumps(data), encoding="utf-8")
             sched, tz = TAG.load_schedule(str(p))
             ev = sched["events"][0]
-            self.assertEqual(ev["_end"].date().isoformat(), "2026-11-23")
+            self.assertEqual(ev["_end"].date().isoformat(), "2026-06-03")
             head = ev["slots"][1]
-            self.assertEqual(head["_s"].isoformat(), "2026-11-22T23:30:00+09:00")
-            self.assertEqual(head["_e"].isoformat(), "2026-11-23T00:15:00+09:00")
-            mid = datetime.fromisoformat("2026-11-23T00:05:00+09:00")
+            self.assertEqual(head["_s"].isoformat(), "2026-06-02T23:30:00+09:00")
+            self.assertEqual(head["_e"].isoformat(), "2026-06-03T00:15:00+09:00")
+            mid = datetime.fromisoformat("2026-06-03T00:05:00+09:00")
             m = TAG.match(mid, (sched, tz), tz)
             self.assertIn("Gig/Act/Headliner", m["keywords"])
-            after = datetime.fromisoformat("2026-11-23T00:20:00+09:00")
+            after = datetime.fromisoformat("2026-06-03T00:20:00+09:00")
             m2 = TAG.match(after, (sched, tz), tz)
             self.assertNotIn("Gig/Act/Headliner", m2["keywords"])
 
@@ -186,7 +184,7 @@ class HistoryAndRollback(unittest.TestCase):
         self.assertEqual(len(versions), 2)
         self.assertIn("Act Two", versions[0]["summary"])  # newest first
         # rollback to v1
-        rb = ST.rollback(self.root, "2026-11-22", "Example Hall Show", 1,
+        rb = ST.rollback(self.root, "2026-06-02", "Example Hall Show", 1,
                          jobs_dir=self.jobs, history_jobs=self.histjobs)
         self.assertTrue(rb["ok"], rb)
         self.assertEqual(rb["history"]["source"], "rollback")
@@ -206,11 +204,11 @@ class HistoryAndRollback(unittest.TestCase):
             "schedule_path": r1["path"],
             "added_keywords": {"a.jpg": ["Gig/Act/Act One"]},
             "status": "done",
-            "folder_name": "2026-11-22",
+            "folder_name": "2026-06-02",
         }
         (self.jobs / "job-1.json").write_text(json.dumps(job))
         self._save(_rows(("Act One", "19:10", "19:50")))
-        rb = ST.rollback(self.root, "2026-11-22", "Example Hall Show", 1,
+        rb = ST.rollback(self.root, "2026-06-02", "Example Hall Show", 1,
                          jobs_dir=self.jobs, history_jobs=self.histjobs)
         self.assertTrue(rb["applied_jobs"])
         self.assertIn("does not remove keywords", rb["warning"])
@@ -233,12 +231,12 @@ class HistoryAndRollback(unittest.TestCase):
                                 ack_warnings=True, drafts_dir=self.drafts)
             self.assertFalse(d["ok"])
             self.assertTrue(d.get("kept_draft"))
-            self.assertIsNotNone(ST.load_draft("2026-11-22", "Example Hall Show", drafts_dir=self.drafts))
+            self.assertIsNotNone(ST.load_draft("2026-06-02", "Example Hall Show", drafts_dir=self.drafts))
 
     def test_history_diff_marks_changed_rows(self):
         self._save(_rows(("Act One", "19:00", "19:40")))
         self._save(_rows(("Act One", "19:00", "19:50"), ("Act Two", "20:00", "20:30")))
-        evdir = ST.event_dir(self.root, "2026-11-22", "Example Hall Show")
+        evdir = ST.event_dir(self.root, "2026-06-02", "Example Hall Show")
         diff = ST.history_diff(evdir, 1, 2)
         statuses = {row["status"] for row in diff["rows"]}
         self.assertIn("changed", statuses)
@@ -255,7 +253,7 @@ class ManifestAndTwoFolders(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def _event(self, date="2026-11-22", event="Example Hall Show", rows=None):
+    def _event(self, date="2026-06-02", event="Example Hall Show", rows=None):
         rows = rows or _rows(("Act One", "19:00", "19:40"), ("Act Two", "19:50", "20:30"))
         return ST.confirm_save(self.root, _meta(date=date, event=event), rows,
                                ack_warnings=True, drafts_dir=self.drafts)
@@ -263,64 +261,64 @@ class ManifestAndTwoFolders(unittest.TestCase):
     def test_load_trip_and_state_machine(self):
         self._event()
         trip = ST.confirm_load_trip(self.root, [{
-            "date": "2026-11-22", "event": "Example Hall Show", "venue": "Example Hall",
-            "activation": "2026-11-22T19:00:00+09:00",
+            "date": "2026-06-02", "event": "Example Hall Show", "venue": "Example Hall",
+            "activation": "2026-06-02T19:00:00+09:00",
         }])
         self.assertTrue(trip["ok"])
         self.assertEqual(trip["added"], 1)
         entry = trip["entries"][0]
         self.assertEqual(entry["state"], "pending")
         self.assertTrue(entry["activation"].endswith("+09:00") or "+09:00" in entry["activation"])
-        self.assertEqual(entry["apply_until"], "2026-12-06T19:00:00+09:00")
+        self.assertEqual(entry["apply_until"], "2026-06-16T19:00:00+09:00")
 
-        before = datetime.fromisoformat("2026-11-22T10:00:00+09:00")
+        before = datetime.fromisoformat("2026-06-02T10:00:00+09:00")
         tick = ST.tick_manifest(self.root, now=before, dates_with_photos=[], write=True)
         self.assertEqual(tick["entries"][0]["state"], "pending")
 
-        after_open = datetime.fromisoformat("2026-11-22T19:05:00+09:00")
+        after_open = datetime.fromisoformat("2026-06-02T19:05:00+09:00")
         tick = ST.tick_manifest(self.root, now=after_open, dates_with_photos=[], write=True)
         self.assertEqual([c["to"] for c in tick["changed"]], ["waiting"])
         self.assertEqual(tick["entries"][0]["state"], "waiting")
 
-        late = datetime.fromisoformat("2026-12-07T19:01:00+09:00")
+        late = datetime.fromisoformat("2026-06-17T19:01:00+09:00")
         tick = ST.tick_manifest(self.root, now=late, dates_with_photos=[], write=True)
         self.assertEqual(tick["entries"][0]["state"], "skipped")
 
     def test_lookup_two_folders_same_date_and_late_photos(self):
         self._event()
         ST.confirm_load_trip(self.root, [{
-            "date": "2026-11-22", "event": "Example Hall Show", "venue": "Example Hall",
-            "activation": "2026-11-22T18:00:00+09:00",
+            "date": "2026-06-02", "event": "Example Hall Show", "venue": "Example Hall",
+            "activation": "2026-06-02T18:00:00+09:00",
         }])
-        now = datetime.fromisoformat("2026-11-22T18:05:00+09:00")
+        now = datetime.fromisoformat("2026-06-02T18:05:00+09:00")
         # activation passed, no folder yet
-        none = ST.lookup_for_date(self.root, "2026-11-22", now=now, photos_present=False, write_manifest=True)
+        none = ST.lookup_for_date(self.root, "2026-06-02", now=now, photos_present=False, write_manifest=True)
         # schedule.json is still listed from the tree; state should be waiting
         man = ST.load_manifest(self.root)
         self.assertEqual(man["entries"][0]["state"], "waiting")
 
         # folder arrives later (even days later)
-        later = datetime.fromisoformat("2026-11-25T12:00:00+09:00")
-        a = ST.lookup_for_import_folder(self.root, Path("/tmp/imports/2026/2026-11-22"), now=later, write_manifest=True)
-        b = ST.lookup_for_import_folder(self.root, Path("/tmp/imports/2026/2026-11-22-card2"), now=later, write_manifest=True)
+        later = datetime.fromisoformat("2026-06-05T12:00:00+09:00")
+        a = ST.lookup_for_import_folder(self.root, Path("/tmp/imports/2026/2026-06-02"), now=later, write_manifest=True)
+        b = ST.lookup_for_import_folder(self.root, Path("/tmp/imports/2026/2026-06-02-card2"), now=later, write_manifest=True)
         self.assertEqual(a["paths"], b["paths"])
         self.assertTrue(a["paths"])
         self.assertTrue(a["paths"][0].endswith("schedule.json"))
         self.assertEqual(ST.load_manifest(self.root)["entries"][0]["state"], "applied")
 
         # past apply_until with no photos would skip — already applied stays applied
-        late = datetime.fromisoformat("2026-12-20T00:00:00+09:00")
+        late = datetime.fromisoformat("2026-07-04T00:00:00+09:00")
         ST.tick_manifest(self.root, now=late, dates_with_photos=[], write=True)
         self.assertEqual(ST.load_manifest(self.root)["entries"][0]["state"], "applied")
 
     def test_held_and_remove_do_not_delete_files(self):
         saved = self._event()
-        ST.confirm_load_trip(self.root, [{"date": "2026-11-22", "event": "Example Hall Show",
-                                         "activation": "2026-11-22T18:00:00+09:00"}])
+        ST.confirm_load_trip(self.root, [{"date": "2026-06-02", "event": "Example Hall Show",
+                                         "activation": "2026-06-02T18:00:00+09:00"}])
         eid = ST.load_manifest(self.root)["entries"][0]["id"]
         ST.set_manifest_state(self.root, eid, "held")
-        now = datetime.fromisoformat("2026-11-22T19:00:00+09:00")
-        found = ST.lookup_for_date(self.root, "2026-11-22", now=now, photos_present=True, write_manifest=True)
+        now = datetime.fromisoformat("2026-06-02T19:00:00+09:00")
+        found = ST.lookup_for_date(self.root, "2026-06-02", now=now, photos_present=True, write_manifest=True)
         # tree file is still used; held only excludes the manifest-driven apply flag
         self.assertTrue(found["paths"])  # schedule.json still present
         # but held entry is not in applying list
@@ -331,8 +329,8 @@ class ManifestAndTwoFolders(unittest.TestCase):
         self.assertEqual(ST.load_manifest(self.root)["entries"], [])
 
     def test_folder_name_suffix_still_matches_date(self):
-        self.assertEqual(ST.import_folder_date("2026-11-22"), "2026-11-22")
-        self.assertEqual(ST.import_folder_date("/photos/2026/2026-11-22-card2"), "2026-11-22")
+        self.assertEqual(ST.import_folder_date("2026-06-02"), "2026-06-02")
+        self.assertEqual(ST.import_folder_date("/photos/2026/2026-06-02-card2"), "2026-06-02")
         self.assertIsNone(ST.import_folder_date("Example Hall"))
 
 
@@ -340,8 +338,8 @@ class MultiSchedulePass(unittest.TestCase):
     def test_merge_and_match_two_events_same_day(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
-            a = ST.build_schedule(_meta(event="Example Hall Show"), _rows(("Act One", "17:00", "17:40")))
-            b = ST.build_schedule(_meta(event="Evening Bill", event_id="evening"),
+            a = ST.build_schedule(_meta(event="Example Hall Show", timezone="Asia/Tokyo"), _rows(("Act One", "17:00", "17:40")))
+            b = ST.build_schedule(_meta(event="Evening Bill", event_id="evening", timezone="Asia/Tokyo"),
                                   _rows(("Act Two", "19:00", "19:40")))
             # fix id for second
             b["events"][0]["id"] = "evening-bill"
@@ -354,8 +352,8 @@ class MultiSchedulePass(unittest.TestCase):
             self.assertIsNotNone(dest)
             self.assertNotEqual(dest, pa)
             sched, tz = TAG.load_schedule(str(dest))
-            t1 = datetime.fromisoformat("2026-11-22T17:10:00+09:00")
-            t2 = datetime.fromisoformat("2026-11-22T19:10:00+09:00")
+            t1 = datetime.fromisoformat("2026-06-02T17:10:00+09:00")
+            t2 = datetime.fromisoformat("2026-06-02T19:10:00+09:00")
             m1, m2 = TAG.match(t1, (sched, tz), tz), TAG.match(t2, (sched, tz), tz)
             self.assertIn("Gig/Event/Example Hall Show", m1["keywords"])
             self.assertIn("Gig/Act/Act One", m1["keywords"])
@@ -386,7 +384,7 @@ class DraftsAndPaste(unittest.TestCase):
             drafts = Path(d)
             path = ST.save_draft(_meta(), _rows(("Act One", "1930", "20:00")), drafts_dir=drafts)
             self.assertTrue(str(path).startswith(str(drafts)))
-            loaded = ST.load_draft("2026-11-22", "Example Hall Show", drafts_dir=drafts)
+            loaded = ST.load_draft("2026-06-02", "Example Hall Show", drafts_dir=drafts)
             self.assertEqual(loaded["rows"][0]["act"], "Act One")
             preview = ST.parse_paste("act\tstart\tend\nAct One\t1930\t20:00\nAct Two\t20:10\t20:40")
             self.assertTrue(preview["has_header"])
@@ -397,7 +395,7 @@ class DraftsAndPaste(unittest.TestCase):
             self.assertEqual(preview2["rows"][0]["act"], "Opener")
 
     def test_build_schedule_source_and_load_schedule(self):
-        data = ST.build_schedule(_meta(source="manual"), _rows(("Act One", "19:00", "19:40", "18:30")))
+        data = ST.build_schedule(_meta(source="manual", timezone="Asia/Tokyo"), _rows(("Act One", "19:00", "19:40", "18:30")))
         self.assertEqual(data["source"], "manual")
         self.assertEqual(data["timezone"], "Asia/Tokyo")
         ev = data["events"][0]
@@ -408,7 +406,7 @@ class DraftsAndPaste(unittest.TestCase):
             p = Path(d) / "s.json"
             p.write_text(json.dumps(data), encoding="utf-8")
             sched, tz = TAG.load_schedule(str(p))
-            t = datetime.fromisoformat("2026-11-22T19:10:00+09:00")
+            t = datetime.fromisoformat("2026-06-02T19:10:00+09:00")
             m = TAG.match(t, (sched, tz), tz)
             self.assertIn("Gig/Act/Act One", m["keywords"])
 

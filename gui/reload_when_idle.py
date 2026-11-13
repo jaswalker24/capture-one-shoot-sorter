@@ -12,7 +12,7 @@ HOME = Path.home() / "localai"
 JOBS = HOME / "gui" / "jobs"
 LOG = HOME / "logs" / "gui" / "reload-when-idle.log"
 POLL = float(os.environ.get("LOCALAI_RELOAD_POLL", "20"))
-LABEL = "com.trips.localai.gui"
+LABELS = ("com.trips.localai.gui", "com.grok.localai.gui")
 
 
 def log(msg: str):
@@ -40,7 +40,17 @@ def busy_jobs():
 
 
 def main():
-    log(f"watcher start; poll={POLL}s; waiting for empty queue before kickstart {LABEL}")
+    uid = os.getuid()
+    def _loaded():
+        for label in LABELS:
+            r = subprocess.run(["launchctl", "print", f"gui/{uid}/{label}"],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                return label
+        return LABELS[0]
+
+    label = _loaded()
+    log(f"watcher start; poll={POLL}s; waiting for empty queue before kickstart {label}")
     while True:
         busy = busy_jobs()
         if not busy:
@@ -48,10 +58,19 @@ def main():
         log("busy: " + ", ".join(f"{b['id']}={b['status']}/{b.get('pass') or '-'} ({b.get('folder')})" for b in busy))
         time.sleep(POLL)
     log("queue empty — kickstarting LaunchAgent")
-    uid = os.getuid()
-    cmd = ["launchctl", "kickstart", "-k", f"gui/{uid}/{LABEL}"]
+    cmd = ["launchctl", "kickstart", "-k", f"gui/{uid}/{label}"]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode:
+        # Try the other known label if the first one is not loaded.
+        other = next((x for x in LABELS if x != label), None)
+        if other:
+            cmd2 = ["launchctl", "kickstart", "-k", f"gui/{uid}/{other}"]
+            r2 = subprocess.run(cmd2, capture_output=True, text=True)
+            if r2.returncode == 0:
+                log(f"kickstart ok: {' '.join(cmd2)}")
+                subprocess.run(["pkill", "-f", "LOCALAI_GUI_PORT=8766"], capture_output=True)
+                log("done")
+                return
         log(f"kickstart FAILED rc={r.returncode} stdout={r.stdout!r} stderr={r.stderr!r}")
         sys.exit(1)
     log(f"kickstart ok: {' '.join(cmd)}")

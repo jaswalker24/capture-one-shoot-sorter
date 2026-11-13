@@ -28,7 +28,7 @@ def _write_jpeg(path: Path, text: str = "x", size=(40, 40), colour=(200, 180, 40
     return path
 
 
-def _event_folder(root: Path, date="2026-11-22", event="Example Hall Show", flat=False) -> Path:
+def _event_folder(root: Path, date="2026-06-02", event="Example Hall Show", flat=False) -> Path:
     if flat:
         d = Path(root) / date / event
     else:
@@ -48,7 +48,7 @@ def _rows(*acts):
     return out
 
 
-def _confirmed(*acts, date="2026-11-22", event="Example Hall Show"):
+def _confirmed(*acts, date="2026-06-02", event="Example Hall Show"):
     return ST.build_schedule(
         {"date": date, "event": event, "venue": "Example Hall",
          "timezone": "Asia/Tokyo", "source": "notion"},
@@ -61,15 +61,15 @@ class Parser(unittest.TestCase):
         text = [
             "TIMETABLE",
             "Example Hall Show",
-            "2026.11.22",
+            "2026.06.02",
             "開場 16:30",
             "開演 17:00",
             "17:00-17:30 Act One",
             "17:40-18:20 Act Two",
             "18:30-19:10 Headliner",
         ]
-        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Example Hall Show")
-        self.assertEqual(p["meta"]["timezone"], "Asia/Tokyo")
+        p = PR.parse_ocr_lines(text, date="2026-06-02", event="Example Hall Show")
+        self.assertEqual(p["meta"]["timezone"], "Europe/London")
         self.assertEqual(p["doors"], "16:30")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(acts, [
@@ -81,7 +81,7 @@ class Parser(unittest.TestCase):
 
     def test_name_then_time_and_english_doors(self):
         text = ["Doors 18:00", "Opener 19:00-19:30", "Main Act 19:45-20:30"]
-        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Night")
+        p = PR.parse_ocr_lines(text, date="2026-06-02", event="Night")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(p["doors"], "18:00")
         self.assertEqual(acts, [
@@ -91,7 +91,7 @@ class Parser(unittest.TestCase):
 
     def test_japanese_wave_dash_and_kaijo(self):
         text = ["開場 17:00", "バンドA 18:00〜18:30", "バンドB 18:40〜19:10"]
-        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Show")
+        p = PR.parse_ocr_lines(text, date="2026-06-02", event="Show")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(p["doors"], "17:00")
         self.assertEqual(acts, [
@@ -101,7 +101,7 @@ class Parser(unittest.TestCase):
 
     def test_fullwidth_digits_and_colon(self):
         text = ["１７：００－１７：３０ バンドＡ", "１７：４０－１８：１０ バンドＢ"]
-        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Show")
+        p = PR.parse_ocr_lines(text, date="2026-06-02", event="Show")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(acts, [
             ("バンドＡ", "17:00", "17:30"),
@@ -110,7 +110,7 @@ class Parser(unittest.TestCase):
 
     def test_start_only_infers_end_from_next(self):
         text = ["17:00 Act One", "17:40 Act Two", "18:30 Headliner"]
-        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Show")
+        p = PR.parse_ocr_lines(text, date="2026-06-02", event="Show")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(acts[0], ("Act One", "17:00", "17:40"))
         self.assertEqual(acts[1], ("Act Two", "17:40", "18:30"))
@@ -119,7 +119,7 @@ class Parser(unittest.TestCase):
 
     def test_time_on_own_line_then_name(self):
         text = ["17:00-17:30", "Act One", "17:40-18:20", "Act Two"]
-        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Show")
+        p = PR.parse_ocr_lines(text, date="2026-06-02", event="Show")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(acts, [
             ("Act One", "17:00", "17:30"),
@@ -164,12 +164,12 @@ class DetectionAndHash(unittest.TestCase):
         self.assertEqual(item["image"]["name"], "flyer.jpg")
         self.assertEqual(len(item["rows"]), 2)
         self.assertEqual(item["rows"][0]["act"], "Act One")
-        self.assertEqual(item["meta"]["timezone"], "Asia/Tokyo")
+        self.assertEqual(item["meta"]["timezone"], "Europe/London")
         self.assertEqual(self.ocr_calls, ["flyer.jpg"])
         # no NAS-style writes
         self.assertFalse((ev / "poster.json").exists())
         self.assertFalse((ev / "schedule.json").exists())
-        self.assertTrue(PR.draft_path("2026-11-22", "Example Hall Show", drafts=self.drafts).is_file())
+        self.assertTrue(PR.draft_path("2026-06-02", "Example Hall Show", drafts=self.drafts).is_file())
 
     def test_flat_layout_accepted(self):
         ev = _event_folder(self.root, flat=True)
@@ -178,7 +178,7 @@ class DetectionAndHash(unittest.TestCase):
         out = PR.scan_tree(self.root, drafts=self.drafts, ocr_fn=self.ocr, read=True)
         self.assertEqual(out["read"], 1)
         self.assertEqual(out["review"][0]["layout"], "flat")
-        self.assertEqual(out["review"][0]["date"], "2026-11-22")
+        self.assertEqual(out["review"][0]["date"], "2026-06-02")
 
     def test_zero_images_not_listed(self):
         _event_folder(self.root)
@@ -301,28 +301,28 @@ class ComparisonAndAccept(unittest.TestCase):
         self.assertFalse((self.ev / "poster.json").exists())
         self.assertFalse((self.ev / "schedule.json").exists())
         # preview without confirm writes nothing
-        prev = PR.accept(self.root, "2026-11-22", "Example Hall Show",
+        prev = PR.accept(self.root, "2026-06-02", "Example Hall Show",
                          confirm=False, drafts=self.drafts)
         self.assertFalse(prev.get("written"))
         self.assertFalse((self.ev / "poster.json").exists())
         self.assertFalse((self.ev / "schedule.json").exists())
         self.assertTrue(prev["can_accept"])
         # confirm writes both, via confirm_save (history appears)
-        result = PR.accept(self.root, "2026-11-22", "Example Hall Show",
+        result = PR.accept(self.root, "2026-06-02", "Example Hall Show",
                            confirm=True, drafts=self.drafts)
         self.assertTrue(result.get("ok"), result)
         self.assertTrue((self.ev / "schedule.json").is_file())
         self.assertTrue((self.ev / "poster.json").is_file())
         data = json.loads((self.ev / "schedule.json").read_text())
         self.assertEqual(data["source"], "poster")
-        self.assertEqual(data["timezone"], "Asia/Tokyo")
+        self.assertEqual(data["timezone"], "Europe/London")
         self.assertEqual(data["events"][0]["slots"][0]["act"], "Act One")
         hist = json.loads((self.ev / "history.json").read_text())
         self.assertEqual(hist["versions"][0]["source"], "poster")
         poster = json.loads((self.ev / "poster.json").read_text())
         self.assertEqual(poster["engine"], "apple-vision")
         self.assertNotIn("path", poster.get("image") or {})
-        draft = PR.load_draft("2026-11-22", "Example Hall Show", drafts=self.drafts)
+        draft = PR.load_draft("2026-06-02", "Example Hall Show", drafts=self.drafts)
         self.assertEqual(draft["status"], "accepted")
 
     def test_accept_blocked_on_disagreement(self):
@@ -332,7 +332,7 @@ class ComparisonAndAccept(unittest.TestCase):
             ("Act Three", "18:30", "19:00"),
         )), encoding="utf-8")
         PR.scan_tree(self.root, drafts=self.drafts, ocr_fn=self.ocr, read=True)
-        result = PR.accept(self.root, "2026-11-22", "Example Hall Show",
+        result = PR.accept(self.root, "2026-06-02", "Example Hall Show",
                            confirm=True, drafts=self.drafts)
         self.assertFalse(result.get("ok"))
         self.assertIn("disagrees", (result.get("error") or "").lower())
@@ -341,10 +341,10 @@ class ComparisonAndAccept(unittest.TestCase):
 
     def test_hold_and_reject_stay_local(self):
         PR.scan_tree(self.root, drafts=self.drafts, ocr_fn=self.ocr, read=True)
-        h = PR.set_status("2026-11-22", "Example Hall Show", "held", drafts=self.drafts)
+        h = PR.set_status("2026-06-02", "Example Hall Show", "held", drafts=self.drafts)
         self.assertTrue(h["ok"])
         self.assertEqual(h["item"]["status"], "held")
-        r = PR.set_status("2026-11-22", "Example Hall Show", "rejected", drafts=self.drafts)
+        r = PR.set_status("2026-06-02", "Example Hall Show", "rejected", drafts=self.drafts)
         self.assertEqual(r["item"]["status"], "rejected")
         self.assertFalse((self.ev / "poster.json").exists())
         self.assertFalse((self.ev / "schedule.json").exists())
@@ -353,7 +353,7 @@ class ComparisonAndAccept(unittest.TestCase):
         _write_jpeg(self.ev / "other.jpg", "o", colour=(1, 2, 3))
         out = PR.scan_tree(self.root, drafts=self.drafts, ocr_fn=self.ocr, read=True)
         self.assertEqual(out["review"][0]["status"], "multiple")
-        got = PR.reread(self.root, "2026-11-22", "Example Hall Show",
+        got = PR.reread(self.root, "2026-06-02", "Example Hall Show",
                         filename="flyer.jpg", drafts=self.drafts, ocr_fn=self.ocr)
         self.assertTrue(got["ok"])
         self.assertEqual(got["status"], "pending_review")
@@ -367,15 +367,15 @@ class ApiAndFind(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             canon = _event_folder(root, event="Canon Show")
-            flat = _event_folder(root, date="2026-11-23", event="Flat Show", flat=True)
-            self.assertEqual(ST.find_event_dir(root, "2026-11-22", "Canon Show"), canon)
-            self.assertEqual(ST.find_event_dir(root, "2026-11-23", "Flat Show"), flat)
+            flat = _event_folder(root, date="2026-06-03", event="Flat Show", flat=True)
+            self.assertEqual(ST.find_event_dir(root, "2026-06-02", "Canon Show"), canon)
+            self.assertEqual(ST.find_event_dir(root, "2026-06-03", "Flat Show"), flat)
             # new events still resolve to the canonical path
-            fresh = ST.find_event_dir(root, "2026-11-24", "New Night")
-            self.assertEqual(fresh, root / "2026" / "2026-11-24" / "New Night")
+            fresh = ST.find_event_dir(root, "2026-06-04", "New Night")
+            self.assertEqual(fresh, root / "2026" / "2026-06-04" / "New Night")
             names = {(e["date"], e["event"]) for e in ST.list_events(root)}
-            self.assertIn(("2026-11-22", "Canon Show"), names)
-            self.assertIn(("2026-11-23", "Flat Show"), names)
+            self.assertIn(("2026-06-02", "Canon Show"), names)
+            self.assertIn(("2026-06-03", "Flat Show"), names)
 
     def test_api_list_preview_and_confirm(self):
         with tempfile.TemporaryDirectory() as d:
@@ -403,17 +403,17 @@ class ApiAndFind(unittest.TestCase):
                 self.assertFalse((ev / "poster.json").exists())
                 self.assertFalse((ev / "schedule.json").exists())
                 code, item = SA.handle_get("/api/schedules/posters/item",
-                                           {"date": ["2026-11-22"], "name": ["Example Hall Show"]}, home)
+                                           {"date": ["2026-06-02"], "name": ["Example Hall Show"]}, home)
                 self.assertEqual(code, 200)
                 self.assertEqual(item["rows"][0]["act"], "Act One")
                 # accept without confirm writes nothing
                 code, prevw = SA.handle_post("/api/schedules/posters/accept", {
-                    "date": "2026-11-22", "event": "Example Hall Show", "confirm": False
+                    "date": "2026-06-02", "event": "Example Hall Show", "confirm": False
                 }, home)
                 self.assertEqual(code, 400)
                 self.assertFalse((ev / "schedule.json").exists())
                 code, result = SA.handle_post("/api/schedules/posters/accept", {
-                    "date": "2026-11-22", "event": "Example Hall Show", "confirm": True
+                    "date": "2026-06-02", "event": "Example Hall Show", "confirm": True
                 }, home)
                 self.assertEqual(code, 200, result)
                 self.assertTrue((ev / "schedule.json").is_file())
@@ -502,7 +502,7 @@ def _render_sample_poster(path: Path):
     jp = font(52, jp=True)
     dr.text((80, 80), "TIMETABLE", fill=(240, 240, 250), font=title)
     dr.text((80, 180), "Example Hall Show", fill=(240, 240, 250), font=title)
-    dr.text((80, 280), "2026.11.22", fill=(200, 200, 210), font=body)
+    dr.text((80, 280), "2026.06.02", fill=(200, 200, 210), font=body)
     dr.text((80, 400), "開場 16:30", fill=(240, 220, 120), font=jp)
     dr.text((80, 500), "開演 17:00", fill=(240, 220, 120), font=jp)
     dr.text((80, 680), "17:00-17:30  Act One", fill=(250, 250, 250), font=body)
@@ -515,8 +515,8 @@ def _render_sample_poster(path: Path):
 
 class SaleTimesExcluded(unittest.TestCase):
     def test_date_is_not_read_as_a_time(self):
-        self.assertEqual(PR.extract_times("2026.11.22（日）"), [])
-        self.assertTrue(PR.is_date_only_line("2026.11.22（日）"))
+        self.assertEqual(PR.extract_times("2026.06.02（火）"), [])
+        self.assertTrue(PR.is_date_only_line("2026.06.02（火）"))
         self.assertTrue(PR.is_date_only_line("11/1(土)"))
         # dotted clock times still work when they are not dates
         self.assertEqual(PR.extract_times("19.30-20.00 Act")[0][:2], ("19:30", "20:00"))
@@ -524,7 +524,7 @@ class SaleTimesExcluded(unittest.TestCase):
     def test_japanese_sale_lines_are_other(self):
         text = [
             "Example Hall",
-            "2026.11.22（日）",
+            "2026.06.02（火）",
             "開場 16:30",
             "17:00-17:30 Act One",
             "17:40-18:20 Act Two",
@@ -532,7 +532,7 @@ class SaleTimesExcluded(unittest.TestCase):
             "先行抽選 10/20 18:00",
             "チケット販売 10:00-18:00",
         ]
-        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Example Hall")
+        p = PR.parse_ocr_lines(text, date="2026-06-02", event="Example Hall")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(acts, [("Act One", "17:00", "17:30"), ("Act Two", "17:40", "18:20")])
         self.assertEqual(p["doors"], "16:30")
@@ -554,7 +554,7 @@ class SaleTimesExcluded(unittest.TestCase):
             "Presale 10/20 18:00",
             "Lottery 11/1(Sat) 10:00~",
         ]
-        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Night")
+        p = PR.parse_ocr_lines(text, date="2026-06-02", event="Night")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(acts, [("Opener", "19:00", "19:30"), ("Main Act", "19:45", "20:30")])
         self.assertEqual(p["doors"], "18:00")
@@ -562,10 +562,10 @@ class SaleTimesExcluded(unittest.TestCase):
         self.assertTrue("sale" in blob or "presale" in blob or "lottery" in blob)
         self.assertFalse(any(r["start"] == "10:00" for r in p["rows"]))
 
-    def test_hep_hall_fixture_excludes_parallel_and_sale_times(self):
-        fix_path = ROOT / "tests" / "fixtures" / "hep_hall_2026-11-22_ocr.json"
+    def test_example_hall_fixture_excludes_parallel_and_sale_times(self):
+        fix_path = ROOT / "tests" / "fixtures" / "example_hall_2026-06-02_ocr.json"
         fix = json.loads(fix_path.read_text(encoding="utf-8"))
-        p = PR.parse_ocr_lines(fix["lines"], date=fix["date"], event=fix["event"])
+        p = PR.parse_ocr_lines(fix["lines"], date=fix["date"], event=fix["event"], timezone="Asia/Tokyo")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         names = [a for a, *_ in acts]
         self.assertEqual(p["doors"], "11:15")
@@ -602,10 +602,10 @@ class SaleTimesExcluded(unittest.TestCase):
                          ("ソラノウタ", "17:50", "18:05"))
 
 
-    def test_mix_metal_fes_fixture_uses_spatial_timetable(self):
-        fix_path = ROOT / "tests" / "fixtures" / "mix_metal_fes_2026-11-21_ocr.json"
+    def test_sample_festival_fixture_uses_spatial_timetable(self):
+        fix_path = ROOT / "tests" / "fixtures" / "sample_festival_2026-06-01_ocr.json"
         fix = json.loads(fix_path.read_text(encoding="utf-8"))
-        p = PR.parse_ocr_lines(fix["lines"], date=fix["date"], event=fix["event"])
+        p = PR.parse_ocr_lines(fix["lines"], date=fix["date"], event=fix["event"], timezone="Asia/Tokyo")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(p["doors"], "11:30")
         self.assertEqual(p.get("start") or p["meta"].get("start"), "12:00")
@@ -653,7 +653,7 @@ class SaleTimesExcluded(unittest.TestCase):
             "19:30-20:00 Amber@Parade",
             "21:00-22:00 終演後物販",
         ]
-        p = PR.parse_ocr_lines(text, date="2026-11-21", event="Sample Festival")
+        p = PR.parse_ocr_lines(text, date="2026-06-01", event="Sample Festival")
         acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
         self.assertEqual(acts, [
             ("Northline", "12:00", "12:25"),
@@ -677,15 +677,15 @@ class SaleTimesExcluded(unittest.TestCase):
             drafts = d / "drafts"
             ev = _event_folder(d / "Schedules")
             # no image needed; seed a draft that already has OCR
-            fix = json.loads((ROOT / "tests" / "fixtures" / "hep_hall_2026-11-22_ocr.json").read_text(encoding="utf-8"))
+            fix = json.loads((ROOT / "tests" / "fixtures" / "example_hall_2026-06-02_ocr.json").read_text(encoding="utf-8"))
             rec = {
-                "date": "2026-11-22", "event": "Example Hall", "status": "rejected",
+                "date": "2026-06-02", "event": "Example Hall", "status": "rejected",
                 "folder": str(ev), "ocr": {"engine": "apple-vision", "lines": fix["lines"], "text": ""},
                 "rows": [{"act": "一般発売", "start": "10:00", "end": "18:00", "doors": "", "notes": ""}],
                 "other": [],
             }
             PR.save_draft(rec, drafts=drafts)
-            loaded = PR.load_draft("2026-11-22", "Example Hall", drafts=drafts)
+            loaded = PR.load_draft("2026-06-02", "Example Hall", drafts=drafts)
             updated = PR.reparse_draft(loaded)
             PR.save_draft(updated, drafts=drafts)
             self.assertEqual(updated["status"], "pending_review")

@@ -13,6 +13,7 @@ UV_VER="0.13.7"
 OLLAMA_VER="0.40.15"
 PYTHON_VER="3.12"
 GUI_LABEL="com.trips.localai.gui"
+LEGACY_GUI_LABEL="com.grok.localai.gui"
 
 DRY_RUN=0
 SKIP_MODELS=0
@@ -20,6 +21,7 @@ SKIP_DOCK=0
 SKIP_LAUNCH=0
 SKIP_DOWNLOADS=0
 WITH_TRANSLATION=0
+DO_UNINSTALL=0
 
 usage() {
   cat <<EOF
@@ -36,6 +38,9 @@ Options:
   --skip-dock               Do not install or refresh the Dock shortcut
   --skip-launch-agents      Write no LaunchAgent and do not load one
   --with-translation-model  Also pull qwen3:8b (OCR translation, ~5 GB)
+  --uninstall               Remove the LaunchAgent, Scripts menu, Dock app
+                            and the runtime folder. Photos and the Capture
+                            One catalog are not touched.
   -h, --help                Show this help
 
 Environment:
@@ -53,6 +58,7 @@ while [[ $# -gt 0 ]]; do
     --skip-dock) SKIP_DOCK=1 ;;
     --skip-launch-agents) SKIP_LAUNCH=1 ;;
     --with-translation-model) WITH_TRANSLATION=1 ;;
+    --uninstall) DO_UNINSTALL=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -68,6 +74,30 @@ run() {
     return 0
   fi
   "$@"
+}
+
+do_uninstall() {
+  echo "Removing Trips Local AI."
+  echo "Photos and the Capture One catalog are not touched."
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    echo "[dry-run] would unload LaunchAgents, remove Scripts menu, Dock app and $DEST"
+    exit 0
+  fi
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    UID_N="$(id -u)"
+    launchctl bootout "gui/${UID_N}/${GUI_LABEL}" 2>/dev/null || true
+    launchctl bootout "gui/${UID_N}/${LEGACY_GUI_LABEL}" 2>/dev/null || true
+  fi
+  rm -f "$HOME/Library/LaunchAgents/${GUI_LABEL}.plist"
+  rm -f "$HOME/Library/LaunchAgents/${LEGACY_GUI_LABEL}.plist"
+  rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"
+  rm -rf "$HOME/Library/Scripts/Capture One Scripts/Grok Local AI"
+  rm -rf "$HOME/Applications/Trips Local AI.app"
+  rm -rf "$HOME/Applications/Trip Local AI.app"
+  rm -rf "$HOME/Applications/Grok Local AI.app"
+  rm -rf "$DEST"
+  echo "Removed. You can delete the Dock tile if it is still there."
+  exit 0
 }
 
 ARCH="$(uname -m)"
@@ -109,6 +139,10 @@ if [[ "$OS" == "Darwin" ]] && have sw_vers; then
       exit 1
     fi
   fi
+fi
+
+if [[ "$DO_UNINSTALL" -eq 1 ]]; then
+  do_uninstall
 fi
 
 # uv wheel tag: aarch64-apple-darwin or x86_64-apple-darwin
@@ -412,17 +446,26 @@ else
   if [[ ! -f "$PLIST_SRC" ]]; then
     PLIST_SRC="$DEST/gui/com.trips.localai.gui.plist"
   fi
+  if [[ ! -f "$PLIST_SRC" ]]; then
+    PLIST_SRC="$ROOT/gui/${LEGACY_GUI_LABEL}.plist"
+  fi
+  if [[ ! -f "$PLIST_SRC" ]]; then
+    PLIST_SRC="$DEST/gui/${LEGACY_GUI_LABEL}.plist"
+  fi
   if [[ -f "$PLIST_SRC" ]]; then
-    # Rewrite any baked-in __HOME__ (or other home) to this user, and
-    # point program paths at DEST.
+    # Fill __HOME__ and point program paths at DEST.
     sed -e "s|__HOME__|$HOME|g" \
         -e "s|$HOME/localai|$DEST|g" \
         "$PLIST_SRC" > "$LAUNCH_AGENTS_DIR/$GUI_LABEL.plist"
+    if command -v plutil >/dev/null 2>&1; then
+      plutil -replace Label -string "$GUI_LABEL" "$LAUNCH_AGENTS_DIR/$GUI_LABEL.plist" 2>/dev/null || true
+    fi
     cp "$LAUNCH_AGENTS_DIR/$GUI_LABEL.plist" "$DEST/gui/$GUI_LABEL.plist"
     REAL_AGENTS="$HOME/Library/LaunchAgents"
     if [[ "$OS" == "Darwin" && "$LAUNCH_AGENTS_DIR" == "$REAL_AGENTS" ]]; then
       UID_N="$(id -u)"
-      if launchctl print "gui/${UID_N}/${GUI_LABEL}" >/dev/null 2>&1; then
+      if launchctl print "gui/${UID_N}/${GUI_LABEL}" >/dev/null 2>&1 \
+         || launchctl print "gui/${UID_N}/${LEGACY_GUI_LABEL}" >/dev/null 2>&1; then
         echo "Control panel LaunchAgent is already loaded; leaving it running."
         echo "To refresh after an update, use: $DEST/gui/reload_when_idle.py"
       else

@@ -4,7 +4,7 @@ set -euo pipefail
 APP="$HOME/Applications/Trips Local AI.app"
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 mkdir -p "$HOME/Applications"
-rm -rf "$APP" "$HOME/Applications/Trip Local AI.app"
+rm -rf "$APP" "$HOME/Applications/Trip Local AI.app" "$HOME/Applications/Grok Local AI.app"
 if [ -d "$ROOT/Trips Local AI.app" ]; then
   cp -R "$ROOT/Trips Local AI.app" "$APP"
 else
@@ -47,7 +47,7 @@ export_path = Path("/tmp/dock-current.plist")
 subprocess.check_call(["defaults", "export", "com.apple.dock", str(export_path)])
 dock = plistlib.load(open(export_path, "rb"))
 drop_urls = {
-    f"file://{Path.home()}/Applications/Trips%20Local%20AI.app/",
+    f"file://{Path.home()}/Applications/Grok%20Local%20AI.app/",
     f"file://{Path.home()}/Applications/Trips%20Local%20AI.app/",
 }
 apps = []
@@ -55,7 +55,8 @@ for tile in dock.get("persistent-apps", []):
     url = tile.get("tile-data", {}).get("file-data", {}).get("_CFURLString", "")
     label = tile.get("tile-data", {}).get("file-label", "")
     bid = tile.get("tile-data", {}).get("bundle-identifier", "")
-    if url in drop_urls or label in ("Trip Local AI", "Trips Local AI") or bid == "com.trips.localai.panel":
+    old_bids = {"com.trips.localai.panel", "com.grok.localai.panel"}
+    if url in drop_urls or label in ("Trip Local AI", "Trips Local AI", "Grok Local AI") or bid in old_bids:
         continue
     apps.append(tile)
 apps.append({"tile-type":"file-tile","tile-data":{"file-data":{"_CFURLString":f"file://{Path.home()}/Applications/Trips%20Local%20AI.app/","_CFURLStringType":15},"file-label":"Trips Local AI","bundle-identifier":"com.trips.localai.panel"}})

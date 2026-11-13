@@ -65,9 +65,9 @@ Use `--no-apply` on `fullrun.py` if you only want the proposal files.
 
 ## Control panel (Trips Local AI)
 
-Local web UI on the M5 (and LAN): **http://127.0.0.1:8765/** or **http://127.0.0.1:8765/** / **http://127.0.0.1:8765/**.
+Local web UI: **http://127.0.0.1:8765/**.
 
-LaunchAgent: `com.trips.localai.gui` (internal label unchanged). Dock app: **Trips Local AI** (opens already signed in via `?token=` from `~/localai/gui/auth.token`).
+LaunchAgent: `com.trips.localai.gui`. Dock app: **Trips Local AI** (opens already signed in via `?token=` from `~/localai/gui/auth.token`).
 
 ### Tabs
 
@@ -76,7 +76,7 @@ LaunchAgent: `com.trips.localai.gui` (internal label unchanged). Dock app: **Tri
 - **History & undo** — past runs with keyword counts; preview then remove **only** keywords that run added (never stars/colours).
 - **Training** — queue a rank-training job on folders marked as training data in Settings → Locations (optional index-missing, auto-adopt only if held-out accuracy improves). Shows leave-one-shoot-out AUC before/after, per-shoot results and label counts. Adopt and Roll back update `config.json` only, after a confirmation. Never writes to Capture One, stars, colours or rank keywords.
 - **Profiles** — create/edit from dropdowns (shoot type, pass bundle, camera TZ, buffer, keyword set, linked schedule, sharpness strictness, notifications). Shoot type auto-fills the rest. Supersedes the old Presets list. Stored in `~/localai/profiles/`.
-- **Settings** — **Locations** (Camera Imports, Camera Exports, Other Exports and the Photos root; Browse lists folders in the page so it works from another Mac (optional “Open on M5 screen” shows a Finder dialog on the Mac running the panel, without hanging this page); or paste a path; save writes `config.json` after a timestamped backup, without a restart or a library scan) and notification toggles. Telegram needs `bot_token` + `chat_id` in untracked `~/localai/gui/notify.json` (see `notify.example.json`). The inbound Telegram bridge cannot send alerts. Email uses local sendmail when enabled (postfix here is loopback-only unless a relay is configured).
+- **Settings** — **Locations** (Camera Imports, Camera Exports, Other Exports and the Photos root; Browse lists folders in the page so it works from another Mac (optional “Open on M5 screen” shows a Finder dialog on the Mac running the panel, without hanging this page); or paste a path; save writes `config.json` after a timestamped backup, without a restart or a library scan) and notification toggles. Telegram needs `bot_token` + `chat_id` in untracked `~/localai/gui/notify.json` (see `notify.example.json`). The inbound Telegram bridge cannot send alerts. Email uses local sendmail when enabled (postfix is loopback-only unless a relay is configured).
 - **Exports** — Draft Captions only for Camera Exports folders.
 
 ### Health strip
@@ -158,10 +158,10 @@ Copy `config.example.json` to `config.json` (the installer does this). Useful ke
 - `script_profile_default` — profile used by the Scripts menu when the folder name does not match a pattern (`gig` by default)
 - `profile_by_folder` — regex → profile map
 - `script_context` — optional per-folder context strings for the Scripts menu
-- `camera_utc_offset` — set if the camera clock is not in the schedule timezone (for example `"+00:00"` when shooting Japan on London time)
+- `camera_utc_offset` — set if the camera clock is not in the schedule timezone (for example `"+00:00"` when the camera stays on home time)
 - `photos_root` / `imports_root` / `exports_root` / `other_exports_root` — NAS photo-folder roots. The control panel **Settings → Locations** section can set these (Browse lists folders in the page, or paste a path). Environment variables `LOCALAI_PHOTOS`, `LOCALAI_IMPORTS`, `LOCALAI_EXPORTS` and `LOCALAI_OTHER_EXPORTS` override config if set. The older `exports_2025_root` key and `LOCALAI_EXPORTS_2025` environment variable are still honoured as fallbacks. The default Other Exports folder on the NAS remains `2025 Exports` (the folder itself is not renamed).
 - `training.sources` — which of those folders are marked as **Training data** for the personal ranking model (`exports_root` and `other_exports_root` default on; `imports_root` is also on by default so 3★+ star labels stay included). Marked folders are read only and are never modified. The Training tab uses only the marked sources.
-- `keyword_library` — Capture One keyword library name (default **Trip Keywords**). The apply path reads this from `config.json` so an existing catalog can keep using **Trip Keywords** without renaming the library.
+- `keyword_library` — Capture One keyword library name (default **Trip Keywords**). The apply path reads this from `config.json`, so an existing catalog can keep the name already in use without renaming the library.
 
 ---
 
@@ -333,12 +333,12 @@ Progress is kept in `out/<folder>/fullrun-state.json`. Re-running the same comma
 
 ### Control panel
 
-Web UI: http://127.0.0.1:8765/ or http://127.0.0.1:8765/ (LaunchAgent `com.trips.localai.gui`).
+Web UI: http://127.0.0.1:8765/ (LaunchAgent `com.trips.localai.gui`).
 Dock app: **Trips Local AI** (opens already signed in on this Mac). Token file: `~/localai/gui/auth.token`.
 
 
 ### Rank, cull albums and race-number review (added 2026-11-09)
-- **Rank** (`tag rank`, in fullrun and the panel by default): tiers are relative to the shoot. Weights live in `features.py` `RANK_DEFAULTS` and can be overridden in `config.json` under `"rank"`. Calibrated on Brands Hatch against your 3★+ frames: AUC 0.80 (the old aesthetic-only score was 0.62), and 16 of your 35 3★+ frames land in Best (top 10%). A 2026-11-10 retraining that used Camera Exports as positives (plus 3★+ ratings) was evaluated leave-one-shoot-out on 2026-06-23, 2026-10-04 and Brands Hatch; held-out combined AUC was 0.747 vs 0.749 for the current weights, so the Brands Hatch weights stay the default. Rollback is `config.json` `rank.previous_weights` or deleting the `rank.weights` override. Re-run with `venv/bin/python tools/train_rank_exports.py` (read-only on the NAS; does not apply keywords or change stars).
+- **Rank** (`tag rank`, in fullrun and the panel by default): tiers are relative to the shoot. Weights live in `features.py` `RANK_DEFAULTS` and can be overridden in `config.json` under `"rank"`. Calibrated on a motorsport shoot against 3★+ frames: AUC 0.80 (the old aesthetic-only score was 0.62), and 16 of 35 3★+ frames land in Best (top 10%). A later retraining that used Camera Exports as positives (plus 3★+ ratings) was evaluated leave-one-shoot-out on held-out shoots; held-out combined AUC was 0.747 vs 0.749 for the current weights, so the earlier weights stay the default. Rollback is `config.json` `rank.previous_weights` or deleting the `rank.weights` override. Re-run with `venv/bin/python tools/train_rank_exports.py` (read-only on the NAS; does not apply keywords or change stars).
 - **Cull albums** (`venv/bin/python cull_album.py <folder>`, fullrun step `cull_albums`, panel pass "Cull smart albums"): in the collection group **Trips Local AI**, three ordinary albums per shoot, filled with the matching frames from the catalog folder collection: `<shoot> · Cull: Sharp + Burst Best`, `<shoot> · Cull: Rank Best` and `<shoot> · Cull: Shortlist` (either of those). All exclude Motion Blur and Soft Focus and only include frames in that shoot's folder. Re-running keeps existing ordinary albums and adds any missing frames (same-named smart albums are replaced). Only collections change (keywords, stars and colours are left alone). After each add the catalog folder is re-selected, because addInside can leave another collection current.
 - **Race-number review**: open the panel and click **Review race numbers**, or go to `http://<M5>:8765/review`. Keys: Enter/Y confirms, typing digits then Enter fixes, X/R rejects, S skips, ←/→ move, U undoes. **Apply reviewed numbers** adds only confirmed or fixed `Motorsport/Car Number/<n>` keywords, in chunks of 200. A star/colour snapshot is taken before and checked after. Decisions are saved in `out/<shoot>/review-decisions.json`, applied ones in `review-applied.json`, and undo data in `review-apply-*-c*-before.json`.
 - `apply_chunked.py <proposals.json> --tag NAME [--prefix-keyword General/Rank/] --apply` is a generic additive apply with before/after snapshots.

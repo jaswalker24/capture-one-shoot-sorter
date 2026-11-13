@@ -104,11 +104,11 @@ class KeywordLibrary(unittest.TestCase):
         self.assertEqual(AC.keyword_library(), "Trip Keywords")
 
     def test_config_override(self):
-        (self.tmp / "config.json").write_text(json.dumps({"keyword_library": "Trip Keywords"}))
-        self.assertEqual(AC.keyword_library(), "Trip Keywords")
+        (self.tmp / "config.json").write_text(json.dumps({"keyword_library": "Grok Keywords"}))
+        self.assertEqual(AC.keyword_library(), "Grok Keywords")
 
     def test_explicit_name_wins(self):
-        (self.tmp / "config.json").write_text(json.dumps({"keyword_library": "Trip Keywords"}))
+        (self.tmp / "config.json").write_text(json.dumps({"keyword_library": "Grok Keywords"}))
         self.assertEqual(AC.keyword_library("Trip Keywords"), "Trip Keywords")
 
 

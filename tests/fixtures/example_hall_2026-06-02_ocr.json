@@ -1,7 +1,7 @@
 {
-  "date": "2026-11-22",
+  "date": "2026-06-02",
   "event": "Example Hall",
-  "note": "OCR lines only from a schedule poster (Apple Vision). No image is included.",
+  "note": "Synthetic OCR lines for tests (Apple Vision layout). No image is included.",
   "lines": [
     {
       "text": "サンプルステージ Live",
@@ -16,7 +16,7 @@
       "y": 0.07122093040372923
     },
     {
-      "text": "2026.11.22（日）",
+      "text": "2026.06.02（火）",
       "conf": 1.0,
       "x": 0.1829007547961953,
       "y": 0.09820522771977092
@@ -364,7 +364,7 @@
       "y": 0.9636510499390186
     },
     {
-      "text": "UP Example Sounds",
+      "text": "Example Sounds",
       "conf": 1.0,
       "x": 0.4748201433712405,
       "y": 0.9752288638613555

@@ -15,13 +15,13 @@ def sha256(p):
     return h.hexdigest()
 
 DEFAULT_KEYWORD_LIBRARY = "Trip Keywords"
-LEGACY_KEYWORD_LIBRARY = "Trip Keywords"
+LEGACY_KEYWORD_LIBRARY = "Grok Keywords"
 
 
 def keyword_library(name=None):
     """Library name for Capture One. config.json keyword_library, else Trip Keywords.
 
-    The live M5 catalog still uses "Trip Keywords"; set that in config.json there.
+    An existing catalog can set keyword_library in config.json to the name already in use.
     """
     if name:
         return name

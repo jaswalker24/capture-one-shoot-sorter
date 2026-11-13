@@ -124,7 +124,6 @@ def handle_get(path: str, qs: dict, home: Path) -> tuple[int, dict]:
             "changeover_buffer_min": 3,
             "event_type": typ,
             "hints": ST.column_hints(typ),
-            "japan_trip": bool(date_str and ST.default_timezone(date_str) == "Asia/Tokyo"),
         }
 
     if path == "/api/schedules/history":

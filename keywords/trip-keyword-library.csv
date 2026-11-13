@@ -1100,29 +1100,29 @@ Gig|Changeover,Gig/Changeover,2,Gig
 Gig|Event,Gig/Event,2,Gig
 Gig|Event|Sample Festival vol.1,Gig/Event/Sample Festival vol.1,3,Gig
 Gig|Event|Evening Lights Showcase,Gig/Event/Evening Lights Showcase,3,Gig
-Gig|Event|Example Hall Live,Gig/Event/Example Hall Live,3,Gig
-Gig|Event|Headline Show,Gig/Event/Headline Show,3,Gig
 Gig|Event|Afternoon Bill,Gig/Event/Afternoon Bill,3,Gig
+Gig|Event|Headline Show,Gig/Event/Headline Show,3,Gig
 Gig|Event|Example Tour 2026,Gig/Event/Example Tour 2026,3,Gig
+Gig|Event|Stadium Headline,Gig/Event/Stadium Headline,3,Gig
 Gig|Event|Birthday Showcase,Gig/Event/Birthday Showcase,3,Gig
 Gig|Venue,Gig/Venue,2,Gig
-Gig|Venue|Example Cyclone,Gig/Venue/Example Cyclone,3,Gig
-Gig|Venue|City Plaza,Gig/Venue/City Plaza,3,Gig
 Gig|Venue|Example Hall,Gig/Venue/Example Hall,3,Gig
+Gig|Venue|City Plaza,Gig/Venue/City Plaza,3,Gig
+Gig|Venue|Club Example,Gig/Venue/Club Example,3,Gig
 Gig|Venue|Example Arena,Gig/Venue/Example Arena,3,Gig
 Gig|Venue|Example SOMA,Gig/Venue/Example SOMA,3,Gig
 Gig|Venue|Example Stadium,Gig/Venue/Example Stadium,3,Gig
 Gig|Venue|Example REX,Gig/Venue/Example REX,3,Gig
 Gig|Act,Gig/Act,2,Gig
-Gig|Act|Red Harbor,Gig/Act/Red Harbor,3,Gig
-Gig|Act|Steel Orchard',Gig/Act/Steel Orchard',3,Gig
-Gig|Act|Amber Parade,Gig/Act/Amber Parade,3,Gig
-Gig|Act|メロディうさぎ,Gig/Act/メロディうさぎ,3,Gig
-Gig|Act|HALO,Gig/Act/HALO,3,Gig
+Gig|Act|Act One,Gig/Act/Act One,3,Gig
+Gig|Act|Act Two,Gig/Act/Act Two,3,Gig
+Gig|Act|Act Three,Gig/Act/Act Three,3,Gig
+Gig|Act|Act Alpha,Gig/Act/Act Alpha,3,Gig
+Gig|Act|Act Beta,Gig/Act/Act Beta,3,Gig
 Gig|Act|Headline Act,Gig/Act/Headline Act,3,Gig
 Gig|Act|Support Act,Gig/Act/Support Act,3,Gig
-Gig|Act|No Photo Act,Gig/Act/No Photo Act,3,Gig
 Gig|Act|Main Act,Gig/Act/Main Act,3,Gig
+Gig|Act|No Photo Act,Gig/Act/No Photo Act,3,Gig
 Street,Street,1,Street
 Street|Alley,Street/Alley,2,Street
 Street|Crowd,Street/Crowd,2,Street

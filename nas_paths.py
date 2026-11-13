@@ -10,8 +10,10 @@ from __future__ import annotations
 import json, os, shutil, subprocess, sys, threading, time, uuid
 from datetime import datetime
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = app_home.home()
 
 DEFAULT_PHOTOS = Path("/Volumes/Photos")
 DEFAULT_IMPORTS = DEFAULT_PHOTOS / "Camera Imports"

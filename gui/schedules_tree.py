@@ -10,10 +10,13 @@ import json, os, re, time
 from copy import deepcopy
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = app_home.home()
 DRAFTS_DIR = HOME / "gui" / "schedule-drafts"
 MERGED_DIR = HOME / "schedules"
 JOBS_DIR = HOME / "gui" / "jobs"

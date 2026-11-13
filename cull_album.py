@@ -2,7 +2,8 @@
 """Per-shoot cull shortlist albums in Capture One (albums only; no image, keyword, star or colour changes).
 usage: venv/bin/python cull_album.py <shoot folder path> [--dry]
 
-Creates or refreshes, in the collection group "Trips Local AI":
+Creates or refreshes, in the collection group "Capture One Shoot Sorter"
+(or an existing "Trips Local AI" group, so a live catalog is not split):
   "<shoot> · Cull: Sharp + Burst Best"  General>Quality>Sharp AND General>Burst Best
   "<shoot> · Cull: Rank Best"           General>Rank>Best
   "<shoot> · Cull: Shortlist"           (Sharp AND Burst Best) OR Rank Best
@@ -17,14 +18,20 @@ afterwards. Keywords, ratings and colour tags on the images are not changed.
 """
 import argparse, json, subprocess, sys, tempfile
 from pathlib import Path
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(HOME))
 import scope_folder as S  # noqa: E402
 
 CFG = json.load(open(HOME / "config.json")).get("cull_album", {}) if (HOME / "config.json").exists() else {}
-GROUP = CFG.get("group", "Trips Local AI")
+if CFG.get("group"):
+    GROUP = CFG["group"]
+    LEGACY_GROUPS = []
+else:
+    GROUP = app_home.DEFAULT_CULL_GROUP
+    LEGACY_GROUPS = list(app_home.LEGACY_CULL_GROUPS)
 
 DUMP_JS = r'''
 ObjC.import('Foundation');
@@ -104,7 +111,19 @@ function run(argv){
   const plan=JSON.parse($.NSString.stringWithContentsOfFileEncodingError(argv[0],4,null).js);
   const C1=Application('Capture One'); const d=C1.currentDocument();
   const prev=d.currentCollection();
-  const GROUP=plan.group;
+  const PREFERRED=plan.group;
+  const LEGACY=plan.legacy_groups||[];
+  function groupsNamed(name){
+    return d.collections.whose({name:name})().filter(c=>c.kind()==='group');
+  }
+  let GROUP=PREFERRED;
+  let gs=groupsNamed(PREFERRED);
+  if(!gs.length){
+    for(const name of LEGACY){
+      gs=groupsNamed(name);
+      if(gs.length){ GROUP=name; break; }
+    }
+  }
   try{
     if(plan.folder){
       const want=String(plan.folder).replace(/\/+$/,'');
@@ -115,8 +134,7 @@ function run(argv){
       else if(named.length===1) d.currentCollection=named[0];
       else throw new Error('catalog folder not found for '+want+' when filling cull albums');
     }
-    let gs=d.collections.whose({name:GROUP})().filter(c=>c.kind()==='group');
-    if(!gs.length){ d.collections.push(C1.Collection({kind:'group', name:GROUP})); gs=d.collections.whose({name:GROUP})().filter(c=>c.kind()==='group'); }
+    if(!gs.length){ d.collections.push(C1.Collection({kind:'group', name:PREFERRED})); gs=groupsNamed(PREFERRED); GROUP=PREFERRED; }
     if(!gs.length) throw new Error('could not create group '+GROUP);
     const g=gs[0];
     const folderCol=d.currentCollection();
@@ -208,7 +226,7 @@ def main():
     frames = [f for f in (dump.get("frames") or [])
               if not Path(str(f.get("path") or "")).name.lower().startswith("_schedule")]
     groups = S.cull_groups(frames)
-    plan = {"group": GROUP, "folder": folder, "scope": dump.get("scope"),
+    plan = {"group": GROUP, "legacy_groups": LEGACY_GROUPS, "folder": folder, "scope": dump.get("scope"),
             "albums": [{"name": f"{shoot} · {suffix}", "ids": ids} for suffix, ids in groups.items()]}
     json.dump(plan, open(plan_path, "w"), indent=1)
     osascript_js(FILL_JS, [str(plan_path), str(result_path)], timeout=900)

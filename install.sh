@@ -1,19 +1,26 @@
 #!/bin/bash
-# Install Trips Local AI for Capture One into ~/localai on macOS.
-# Safe to re-run: existing config, token, models, venv and a running
-# control panel are left alone.
+# Install Capture One Shoot Sorter into ~/shoot-sorter-c1 on macOS.
+# If ~/localai already exists, that folder is kept and reused so a live
+# install is not moved. Safe to re-run: existing config, token, models,
+# venv and a running control panel are left alone.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-DEST="${LOCALAI_HOME:-$HOME/localai}"
-SCRIPTS_DIR="${LOCALAI_SCRIPTS_DIR:-$HOME/Library/Scripts/Capture One Scripts/Trip Local AI}"
+DEFAULT_HOME="$HOME/shoot-sorter-c1"
+LEGACY_HOME="$HOME/localai"
 LAUNCH_AGENTS_DIR="${LOCALAI_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
 EXIFTOOL_VER="13.61"
 UV_VER="0.13.7"
 OLLAMA_VER="0.40.15"
 PYTHON_VER="3.12"
-GUI_LABEL="com.trips.localai.gui"
-LEGACY_GUI_LABEL="com.grok.localai.gui"
+NEW_GUI_LABEL="com.shootsorter.c1.gui"
+LEGACY_GUI_LABELS=("com.trips.localai.gui" "com.grok.localai.gui")
+NEW_SCRIPTS_DIR="$HOME/Library/Scripts/Capture One Scripts/Capture One Shoot Sorter"
+NEW_DOCK_APP="Capture One Shoot Sorter.app"
+
+DEST=""
+SCRIPTS_DIR=""
+GUI_LABEL=""
 
 DRY_RUN=0
 SKIP_MODELS=0
@@ -27,7 +34,8 @@ usage() {
   cat <<EOF
 Usage: ./install.sh [options]
 
-Installs Trips Local AI into ${LOCALAI_HOME:-~/localai} on an Apple-silicon Mac.
+Installs Capture One Shoot Sorter into ~/shoot-sorter-c1 on an Apple-silicon Mac.
+If ~/localai already exists, that folder is kept and reused.
 Safe to re-run. Never overwrites an existing config.json or GUI token,
 and never prints secrets.
 
@@ -44,7 +52,9 @@ Options:
   -h, --help                Show this help
 
 Environment:
-  LOCALAI_HOME              Install prefix (default: ~/localai)
+  LOCALAI_HOME              Install prefix (default: ~/shoot-sorter-c1,
+                            or ~/localai if that folder already exists)
+  SHOOT_SORTER_C1_HOME      Same as LOCALAI_HOME (LOCALAI_HOME wins if both set)
   LOCALAI_SCRIPTS_DIR       Capture One Scripts folder
   LOCALAI_LAUNCH_AGENTS_DIR LaunchAgents folder
 EOF
@@ -65,6 +75,75 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
+resolve_dest() {
+  if [[ -n "${LOCALAI_HOME:-}" ]]; then
+    DEST="$LOCALAI_HOME"
+  elif [[ -n "${SHOOT_SORTER_C1_HOME:-}" ]]; then
+    DEST="$SHOOT_SORTER_C1_HOME"
+  elif [[ -d "$LEGACY_HOME" ]]; then
+    DEST="$LEGACY_HOME"
+  else
+    DEST="$DEFAULT_HOME"
+  fi
+}
+
+resolve_gui_label() {
+  local label="" loaded="" f
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    local uid_n
+    uid_n="$(id -u)"
+    if launchctl print "gui/${uid_n}/${NEW_GUI_LABEL}" >/dev/null 2>&1; then
+      loaded="$NEW_GUI_LABEL"
+    else
+      for label in "${LEGACY_GUI_LABELS[@]}"; do
+        if launchctl print "gui/${uid_n}/${label}" >/dev/null 2>&1; then
+          loaded="$label"
+          break
+        fi
+      done
+    fi
+  fi
+  if [[ -n "$loaded" ]]; then
+    GUI_LABEL="$loaded"
+    return
+  fi
+  if [[ -f "$LAUNCH_AGENTS_DIR/${NEW_GUI_LABEL}.plist" ]]; then
+    GUI_LABEL="$NEW_GUI_LABEL"
+    return
+  fi
+  for label in "${LEGACY_GUI_LABELS[@]}"; do
+    if [[ -f "$LAUNCH_AGENTS_DIR/${label}.plist" ]]; then
+      GUI_LABEL="$label"
+      return
+    fi
+  done
+  GUI_LABEL="$NEW_GUI_LABEL"
+}
+
+resolve_scripts_dir() {
+  local d
+  if [[ -n "${LOCALAI_SCRIPTS_DIR:-}" ]]; then
+    SCRIPTS_DIR="$LOCALAI_SCRIPTS_DIR"
+    return
+  fi
+  for d in \
+    "$NEW_SCRIPTS_DIR" \
+    "$HOME/Library/Scripts/Capture One Scripts/Trips Local AI" \
+    "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI" \
+    "$HOME/Library/Scripts/Capture One Scripts/Grok Local AI"
+  do
+    if [[ -d "$d" ]]; then
+      SCRIPTS_DIR="$d"
+      return
+    fi
+  done
+  SCRIPTS_DIR="$NEW_SCRIPTS_DIR"
+}
+
+resolve_dest
+resolve_gui_label
+resolve_scripts_dir
+
 say() { printf '\n==> %s\n' "$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -77,7 +156,7 @@ run() {
 }
 
 do_uninstall() {
-  echo "Removing Trips Local AI."
+  echo "Removing Capture One Shoot Sorter."
   echo "Photos and the Capture One catalog are not touched."
   if [[ "$DRY_RUN" -eq 1 ]]; then
     echo "[dry-run] would unload LaunchAgents, remove Scripts menu, Dock app and $DEST"
@@ -85,13 +164,22 @@ do_uninstall() {
   fi
   if [[ "$(uname -s)" == "Darwin" ]]; then
     UID_N="$(id -u)"
-    launchctl bootout "gui/${UID_N}/${GUI_LABEL}" 2>/dev/null || true
-    launchctl bootout "gui/${UID_N}/${LEGACY_GUI_LABEL}" 2>/dev/null || true
+    launchctl bootout "gui/${UID_N}/${NEW_GUI_LABEL}" 2>/dev/null || true
+    local label
+    for label in "${LEGACY_GUI_LABELS[@]}"; do
+      launchctl bootout "gui/${UID_N}/${label}" 2>/dev/null || true
+    done
   fi
-  rm -f "$HOME/Library/LaunchAgents/${GUI_LABEL}.plist"
-  rm -f "$HOME/Library/LaunchAgents/${LEGACY_GUI_LABEL}.plist"
+  rm -f "$HOME/Library/LaunchAgents/${NEW_GUI_LABEL}.plist"
+  local label
+  for label in "${LEGACY_GUI_LABELS[@]}"; do
+    rm -f "$HOME/Library/LaunchAgents/${label}.plist"
+  done
+  rm -rf "$HOME/Library/Scripts/Capture One Scripts/Capture One Shoot Sorter"
+  rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trips Local AI"
   rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"
   rm -rf "$HOME/Library/Scripts/Capture One Scripts/Grok Local AI"
+  rm -rf "$HOME/Applications/Capture One Shoot Sorter.app"
   rm -rf "$HOME/Applications/Trips Local AI.app"
   rm -rf "$HOME/Applications/Trip Local AI.app"
   rm -rf "$HOME/Applications/Grok Local AI.app"
@@ -117,7 +205,7 @@ if [[ "$ARCH" != "arm64" ]]; then
   cat >&2 <<EOF
 Apple silicon (arm64) is required. This Mac is $ARCH.
 
-Trips Local AI is not supported on Intel Macs, and it will not just run
+Capture One Shoot Sorter is not supported on Intel Macs, and it will not just run
 slower. There is no MLX in this stack, Apple Vision and Ollama could
 theoretically run on Intel, and the Python code falls back from MPS to
 CPU when no Apple GPU is present — but the pinned PyTorch 2.15 wheels
@@ -316,7 +404,10 @@ else
 fi
 
 pull_models() {
-  local default_home="$HOME/localai"
+  local default_home="$DEFAULT_HOME"
+  if [[ -d "$LEGACY_HOME" ]]; then
+    default_home="$LEGACY_HOME"
+  fi
   if [[ "$SKIP_MODELS" -eq 1 ]]; then
     echo "Skipping model downloads"
     return 0
@@ -340,7 +431,7 @@ pull_models() {
   export OLLAMA_MODELS="$DEST/models"
   export OLLAMA_HOST=127.0.0.1:11434
   if [[ -x "$DEST/start-ollama.sh" ]]; then
-    # start-ollama.sh uses ~/localai unless LOCALAI_HOME is set
+    # start-ollama.sh uses the resolved runtime folder unless LOCALAI_HOME is set
     LOCALAI_HOME="$DEST" "$DEST/start-ollama.sh" >/dev/null || true
   fi
   local n=0
@@ -386,7 +477,7 @@ pull_models() {
 pull_models
 
 # --- Capture One Scripts menu ---
-say "Installing Capture One Scripts menu: Trip Local AI"
+say "Installing Capture One Scripts menu: $(basename "$SCRIPTS_DIR")"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] compile or copy scripts into $SCRIPTS_DIR"
 else
@@ -442,20 +533,22 @@ elif [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $LAUNCH_AGENTS_DIR/$GUI_LABEL.plist (load only if not already running)"
 else
   mkdir -p "$LAUNCH_AGENTS_DIR"
-  PLIST_SRC="$ROOT/gui/com.trips.localai.gui.plist"
+  PLIST_SRC="$ROOT/gui/com.shootsorter.c1.gui.plist"
+  if [[ ! -f "$PLIST_SRC" ]]; then
+    PLIST_SRC="$DEST/gui/com.shootsorter.c1.gui.plist"
+  fi
+  if [[ ! -f "$PLIST_SRC" ]]; then
+    PLIST_SRC="$ROOT/gui/com.trips.localai.gui.plist"
+  fi
   if [[ ! -f "$PLIST_SRC" ]]; then
     PLIST_SRC="$DEST/gui/com.trips.localai.gui.plist"
   fi
-  if [[ ! -f "$PLIST_SRC" ]]; then
-    PLIST_SRC="$ROOT/gui/${LEGACY_GUI_LABEL}.plist"
-  fi
-  if [[ ! -f "$PLIST_SRC" ]]; then
-    PLIST_SRC="$DEST/gui/${LEGACY_GUI_LABEL}.plist"
-  fi
   if [[ -f "$PLIST_SRC" ]]; then
-    # Fill __HOME__ and point program paths at DEST.
-    sed -e "s|__HOME__|$HOME|g" \
+    # Fill __DEST__ / __HOME__ and point leftover legacy paths at DEST.
+    sed -e "s|__DEST__|$DEST|g" \
+        -e "s|__HOME__|$HOME|g" \
         -e "s|$HOME/localai|$DEST|g" \
+        -e "s|$HOME/shoot-sorter-c1|$DEST|g" \
         "$PLIST_SRC" > "$LAUNCH_AGENTS_DIR/$GUI_LABEL.plist"
     if command -v plutil >/dev/null 2>&1; then
       plutil -replace Label -string "$GUI_LABEL" "$LAUNCH_AGENTS_DIR/$GUI_LABEL.plist" 2>/dev/null || true
@@ -464,8 +557,18 @@ else
     REAL_AGENTS="$HOME/Library/LaunchAgents"
     if [[ "$OS" == "Darwin" && "$LAUNCH_AGENTS_DIR" == "$REAL_AGENTS" ]]; then
       UID_N="$(id -u)"
-      if launchctl print "gui/${UID_N}/${GUI_LABEL}" >/dev/null 2>&1 \
-         || launchctl print "gui/${UID_N}/${LEGACY_GUI_LABEL}" >/dev/null 2>&1; then
+      already=0
+      if launchctl print "gui/${UID_N}/${GUI_LABEL}" >/dev/null 2>&1; then
+        already=1
+      else
+        for label in "${LEGACY_GUI_LABELS[@]}"; do
+          if launchctl print "gui/${UID_N}/${label}" >/dev/null 2>&1; then
+            already=1
+            break
+          fi
+        done
+      fi
+      if [[ "$already" -eq 1 ]]; then
         echo "Control panel LaunchAgent is already loaded; leaving it running."
         echo "To refresh after an update, use: $DEST/gui/reload_when_idle.py"
       else
@@ -481,15 +584,16 @@ fi
 if [[ "$SKIP_DOCK" -eq 1 ]]; then
   echo "Skipping Dock shortcut"
 elif [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "[dry-run] install ~/Applications/Trips Local AI.app and add it to the Dock if missing"
+  echo "[dry-run] install ~/Applications/Capture One Shoot Sorter.app and add it to the Dock if missing"
 else
   mkdir -p "$DEST/gui/macos"
   if [[ -d "$ROOT/gui/macos" ]]; then
     rsync -a "$ROOT/gui/macos/" "$DEST/gui/macos/"
   fi
   if [[ "$OS" == "Darwin" && -x "$DEST/gui/macos/install-dock-app.sh" ]]; then
-    # Do not bounce the Dock on a re-run when the app is already present.
-    if [[ -d "$HOME/Applications/Trips Local AI.app" ]]; then
+    # Do not bounce the Dock on a re-run when the new app is already present.
+    # If only a previous-name app is present, update the Dock tile.
+    if [[ -d "$HOME/Applications/Capture One Shoot Sorter.app" ]]; then
       LOCALAI_SKIP_DOCK_RESTART=1 "$DEST/gui/macos/install-dock-app.sh" || \
         echo "Warning: Dock shortcut refresh failed (the panel still works at http://127.0.0.1:8765/)"
     else
@@ -532,7 +636,8 @@ Next steps (one-time):
      Window → Keyword Library: create or import a library named exactly
      "Trip Keywords", then import:
        $DEST/keywords/trip-keyword-library.txt
-     Scripts → Trip Local AI should list the tagging actions
+     Scripts → Capture One Shoot Sorter should list the tagging actions
+     (an existing install may still use the previous Scripts menu name)
      (Draft Captions is for export folders only).
 
   4. Start the local model server if it is not already running:
@@ -540,7 +645,7 @@ Next steps (one-time):
      It only listens on 127.0.0.1. Nothing is exposed to the network.
 
   5. Open the control panel: http://127.0.0.1:8765/
-     or the "Trips Local AI" Dock shortcut (signs you in locally).
+     or the "Capture One Shoot Sorter" Dock shortcut (signs you in locally).
      The login token is stored at $DEST/gui/auth.token (never share it).
      Settings → Locations sets the NAS paths; the Training tab can queue
      a rank-training job (NAS read-only, never writes to Capture One).

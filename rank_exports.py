@@ -15,8 +15,11 @@ import csv, itertools, json, math, os, re, sqlite3, subprocess
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = app_home.home()
 IDX = HOME / "index" / "catalog.sqlite"
 OUT = HOME / "out"
 PHOTOS = Path("/Volumes/Photos")

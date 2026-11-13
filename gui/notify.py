@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-"""Job finish/fail notifications for Trips Local AI.
-Config: ~/localai/gui/notify.json (untracked). See notify.example.json.
+"""Job finish/fail notifications for Capture One Shoot Sorter.
+Config: <runtime>/gui/notify.json (untracked). See notify.example.json.
 Telegram: needs a Bot API token + chat_id (the inbound Telegram bridge cannot send).
 Email: optional local sendmail/postfix fallback when enabled.
 """
 from __future__ import annotations
 import json, subprocess, urllib.error, urllib.request, urllib.parse
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 
-GUI = Path.home() / "localai" / "gui"
+GUI = app_home.home() / "gui"
 CFG = GUI / "notify.json"
 EXAMPLE = GUI / "notify.example.json"
 
@@ -54,7 +57,7 @@ def send_test() -> dict:
     token, chat = (tg.get("bot_token") or "").strip(), str(tg.get("chat_id") or "").strip()
     if not token or not chat:
         return {"ok": False, "error": f"Telegram is not set up: put bot_token and chat_id in {CFG} (see notify.example.json)"}
-    text = ("Trips Local AI: test message from the control panel. "
+    text = ("Capture One Shoot Sorter: test message from the control panel. "
             f"Job alerts are {'on' if c.get('enabled') and tg.get('enabled') else 'off'} (Settings > Notifications).")
     try:
         r = _send_telegram(token, chat, text)
@@ -87,7 +90,7 @@ def notify_job(job: dict):
     passes = ", ".join(job.get("passes") or [])
     err = job.get("error") or ""
     lines = [
-        f"Trips Local AI — job {status}",
+        f"Capture One Shoot Sorter — job {status}",
         f"Shoot: {name}",
         f"Passes: {passes or '—'}",
         f"Id: {job.get('id')}",
@@ -125,7 +128,7 @@ def notify_job(job: dict):
     em = c.get("email") or {}
     if em.get("enabled") and em.get("to"):
         try:
-            out["email"] = _send_email(em["to"], f"Trips Local AI: {status} — {name}", text, em.get("from") or "trips-local-ai@localhost")
+            out["email"] = _send_email(em["to"], f"Capture One Shoot Sorter: {status} — {name}", text, em.get("from") or "shootsorter-c1@localhost")
         except Exception as e:
             out["email_error"] = str(e)
     if not out:

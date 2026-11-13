@@ -6,7 +6,9 @@ Snapshot before (whole collection: stars/colours), apply in chunks of 200 via ap
 Rejected, skipped and unreviewed frames are never touched. Undo: out/<shoot>/review-apply-*-before.json."""
 import argparse, json, re, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"; sys.path.insert(0, str(HOME))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
+HOME = app_home.home(); sys.path.insert(0, str(HOME))
 OUT = HOME / "out"
 
 def snap(path, folder=None):

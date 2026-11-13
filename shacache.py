@@ -2,7 +2,10 @@
 A changed size or mtime forces a full re-hash. Originals are only ever opened read-only."""
 import hashlib, sqlite3
 from pathlib import Path
-DB = Path.home() / "localai" / "index" / "catalog.sqlite"
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
+DB = app_home.home() / "index" / "catalog.sqlite"
 
 def _hash(p):
     h = hashlib.sha256()

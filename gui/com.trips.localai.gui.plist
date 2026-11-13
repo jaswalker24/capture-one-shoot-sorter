@@ -6,25 +6,27 @@
   <string>com.trips.localai.gui</string>
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/localai/venv/bin/python</string>
-    <string>__HOME__/localai/gui/server.py</string>
+    <string>__DEST__/venv/bin/python</string>
+    <string>__DEST__/gui/server.py</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>__HOME__/localai</string>
+  <string>__DEST__</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>__HOME__/localai/logs/gui/server.out.log</string>
+  <string>__DEST__/logs/gui/server.out.log</string>
   <key>StandardErrorPath</key>
-  <string>__HOME__/localai/logs/gui/server.err.log</string>
+  <string>__DEST__/logs/gui/server.err.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>__HOME__/localai/venv/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>__DEST__/venv/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>HOME</key>
     <string>__HOME__</string>
+    <key>LOCALAI_HOME</key>
+    <string>__DEST__</string>
     <key>LOCALAI_GUI_HOST</key>
     <string>0.0.0.0</string>
     <key>LOCALAI_GUI_PORT</key>

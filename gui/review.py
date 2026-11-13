@@ -1,4 +1,4 @@
-"""Needs-review queues for the Trips Local AI panel.
+"""Needs-review queues for the Capture One Shoot Sorter panel.
 
 kind="numbers" (default): unsure race-number proposals.
 kind="focus": AF focus check frames flagged General/Focus/Missed by afpoints.py (never auto-applied).
@@ -11,8 +11,11 @@ Unreviewed or rejected rows are never applied.
 from __future__ import annotations
 import json, os, re, subprocess, threading, time
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 OUT = HOME / "out"
 CACHE = HOME / "cache"
 THUMBS = CACHE / "_review"

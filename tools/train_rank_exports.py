@@ -12,8 +12,10 @@ usage:
 from __future__ import annotations
 import argparse, json, os, shutil, subprocess, sys, time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = app_home.home()
 sys.path.insert(0, str(HOME))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import rank_exports as R

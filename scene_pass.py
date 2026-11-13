@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generalised scene / subject keyword pass for Trips Local AI.
+"""Generalised scene / subject keyword pass for Capture One Shoot Sorter.
 
 Multi-label SigLIP (local, no caption model). Proposes General/Scene/* keywords
 with per-label thresholds, a cap per frame, and conservative defaults (precision
@@ -13,8 +13,10 @@ from __future__ import annotations
 import argparse, csv, json, os, sys, time
 from collections import Counter
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 
 # Heavy imports (tagger, torch/SigLIP, preview cache) are lazy so unit tests can
 # import the vocabulary and selection logic without the localai runtime.

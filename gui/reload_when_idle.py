@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wait until the Trips Local AI job queue is empty, then reload the GUI LaunchAgent.
+"""Wait until the Capture One Shoot Sorter job queue is empty, then reload the GUI LaunchAgent.
 
 Used so code changes (e.g. People path UI) go live without interrupting a running catalog job.
 Safe to leave detached: polls jobs/*.json; exits after one successful kickstart.
@@ -7,12 +7,14 @@ Safe to leave detached: polls jobs/*.json; exits after one successful kickstart.
 from __future__ import annotations
 import json, os, subprocess, sys, time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 JOBS = HOME / "gui" / "jobs"
 LOG = HOME / "logs" / "gui" / "reload-when-idle.log"
 POLL = float(os.environ.get("LOCALAI_RELOAD_POLL", "20"))
-LABELS = ("com.trips.localai.gui", "com.grok.localai.gui")
+LABELS = app_home.launchd_labels()
 
 
 def log(msg: str):
@@ -61,9 +63,10 @@ def main():
     cmd = ["launchctl", "kickstart", "-k", f"gui/{uid}/{label}"]
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode:
-        # Try the other known label if the first one is not loaded.
-        other = next((x for x in LABELS if x != label), None)
-        if other:
+        # Try the other known labels if the first one is not loaded.
+        for other in LABELS:
+            if other == label:
+                continue
             cmd2 = ["launchctl", "kickstart", "-k", f"gui/{uid}/{other}"]
             r2 = subprocess.run(cmd2, capture_output=True, text=True)
             if r2.returncode == 0:

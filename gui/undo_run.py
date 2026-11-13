@@ -3,9 +3,12 @@
 from __future__ import annotations
 import json, subprocess, time
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 from collections import defaultdict
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 OUT = HOME / "out"
 
 def collect_added_keywords(job: dict) -> dict:

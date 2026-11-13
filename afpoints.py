@@ -17,14 +17,16 @@ the existing General/Quality/* flags cover those.
 
 Usage:
   venv/bin/python afpoints.py <folder> [--annotate N] [--sample N] [--refresh-exif]
-Outputs (in ~/localai/out/<folder>/): afpoints-exif.json (cache), afpoints.csv, afpoints-proposals.json
+Outputs (in <runtime>/out/<folder>/): afpoints-exif.json (cache), afpoints.csv, afpoints-proposals.json
 Never writes to originals or the catalog.
 """
 import argparse, csv, json, math, os, subprocess, sys, time
 from collections import Counter
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 OUT = HOME / "out"
 EXIFTOOL = str(HOME / "bin" / "exiftool")
 TAGS = ["FileName", "Orientation", "Model", "FocusMode", "AFAreaMode", "NumAFPoints", "ValidAFPoints",

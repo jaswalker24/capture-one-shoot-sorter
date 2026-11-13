@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.shootsorter.c1.gui</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__DEST__/venv/bin/python</string>
+    <string>__DEST__/gui/server.py</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__DEST__</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>__DEST__/logs/gui/server.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>__DEST__/logs/gui/server.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__DEST__/venv/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>LOCALAI_HOME</key>
+    <string>__DEST__</string>
+    <key>LOCALAI_GUI_HOST</key>
+    <string>0.0.0.0</string>
+    <key>LOCALAI_GUI_PORT</key>
+    <string>8765</string>
+  </dict>
+</dict>
+</plist>

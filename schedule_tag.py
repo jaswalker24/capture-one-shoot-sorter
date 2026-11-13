@@ -5,7 +5,10 @@ import json, subprocess
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
-HOME = Path.home() / "localai"
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
+HOME = app_home.home()
 
 def _off(s):
     s = s.strip(); sign = -1 if s.startswith("-") else 1; h, m = s.lstrip("+-").split(":")

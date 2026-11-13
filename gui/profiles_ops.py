@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
-"""Profiles for Trips Local AI — supersedes flat Presets.
-Stored as JSON files in ~/localai/profiles/. Catalog profiles never include captions.
+"""Profiles for Capture One Shoot Sorter — supersedes flat Presets.
+Stored as JSON files in <runtime>/profiles/. Catalog profiles never include captions.
 """
 from __future__ import annotations
 import json, re, time, uuid
 from copy import deepcopy
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 PROFILES = HOME / "profiles"
 ORDER_FILE = PROFILES / "_order.json"
 

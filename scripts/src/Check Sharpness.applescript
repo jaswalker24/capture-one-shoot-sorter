@@ -1,6 +1,6 @@
--- Trip Local AI: Check Sharpness
+-- Capture One Shoot Sorter: Check Sharpness
 -- Acts on the selected variants in Capture One (or, for testing, on variant names passed as arguments).
--- Runs ~/localai/scripts_run.py sharpness in the background at low priority; a notification appears when done.
+-- Runs scripts_run.py in the runtime folder sharpness in the background at low priority; a notification appears when done.
 on run argv
 	set thePaths to {}
 	set useNames to false
@@ -31,13 +31,15 @@ on run argv
 	set listText to thePaths as text
 	set AppleScript's text item delimiters to ""
 	set stamp to do shell script "date +%Y%m%d-%H%M%S"
-	set listFile to (POSIX path of (path to home folder)) & "localai/logs/scripts/selection-" & stamp & "-sharpness.txt"
+	set runtimeHome to do shell script "if [ -n \"${LOCALAI_HOME:-}\" ]; then printf '%s' \"$LOCALAI_HOME\"; elif [ -n \"${SHOOT_SORTER_C1_HOME:-}\" ]; then printf '%s' \"$SHOOT_SORTER_C1_HOME\"; elif [ -d \"$HOME/localai\" ]; then printf '%s' \"$HOME/localai\"; else printf '%s' \"$HOME/shoot-sorter-c1\"; fi"
+	do shell script "mkdir -p " & quoted form of (runtimeHome & "/logs/scripts")
+	set listFile to runtimeHome & "/logs/scripts/selection-" & stamp & "-sharpness.txt"
 	set fh to open for access (POSIX file listFile) with write permission
 	set eof of fh to 0
 	write listText to fh as «class utf8»
 	close access fh
-	set logFile to (POSIX path of (path to home folder)) & "localai/logs/scripts/" & stamp & "-sharpness.log"
-	do shell script "nohup nice -n 10 $HOME/localai/venv/bin/python $HOME/localai/scripts_run.py sharpness " & quoted form of listFile & " > " & quoted form of logFile & " 2>&1 &"
+	set logFile to runtimeHome & "/logs/scripts/" & stamp & "-sharpness.log"
+	do shell script "nohup nice -n 10 " & quoted form of (runtimeHome & "/venv/bin/python") & " " & quoted form of (runtimeHome & "/scripts_run.py") & " sharpness " & quoted form of listFile & " > " & quoted form of logFile & " 2>&1 &"
 	display notification ((count of thePaths) as text) & " image(s) queued" with title "Check Sharpness"
 	return logFile
 end run

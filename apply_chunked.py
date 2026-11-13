@@ -4,7 +4,9 @@ before and a verify after. usage: venv/bin/python apply_chunked.py <proposals.js
 Undo data: out/<shoot>/<tag>-<time>-cNNN-before.json (keywords per variant before the write)."""
 import argparse, json, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"; sys.path.insert(0, str(HOME))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
+HOME = app_home.home(); sys.path.insert(0, str(HOME))
 
 def snap(path, folder=None):
     # folder-scoped (snap.js --folder): never snapshot whatever collection Capture One happens to show

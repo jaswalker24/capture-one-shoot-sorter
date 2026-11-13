@@ -8,7 +8,7 @@
   "email": {
     "enabled": false,
     "to": "you@example.com",
-    "from": "trips-local-ai@localhost",
+    "from": "shootsorter-c1@localhost",
     "use_sendmail": true
   }
 }

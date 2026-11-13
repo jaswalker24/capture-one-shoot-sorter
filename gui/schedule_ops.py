@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Schedule importer helpers for Trips Local AI control panel.
-Reuses ~/localai/schedule_tag.py for mapping; confirmed events only by default.
+"""Schedule importer helpers for the Capture One Shoot Sorter control panel.
+Reuses schedule_tag.py for mapping; confirmed events only by default.
 """
 from __future__ import annotations
 import csv, io, json, re, time
@@ -8,9 +8,12 @@ from collections import Counter
 from copy import deepcopy
 from datetime import datetime
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 from zoneinfo import ZoneInfo
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 SCHED_DIR = HOME / "schedules"
 IMPORTS = Path("/Volumes/Photos/Camera Imports")
 
@@ -192,7 +195,7 @@ def csv_to_schedule(text: str, name: str = "Imported schedule", timezone: str = 
         "source": "csv-import",
         "timezone": timezone,
         "changeover_buffer_min": buffer_min,
-        "notes": "Imported via Trips Local AI Schedule importer",
+        "notes": "Imported via Capture One Shoot Sorter Schedule importer",
         "events": events,
     }
 

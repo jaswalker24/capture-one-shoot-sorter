@@ -1354,7 +1354,7 @@ async function start() {
     u.searchParams.delete("token");
     history.replaceState({}, "", u.pathname + u.search + u.hash);
     try { $("tokenInput").value = urlToken; await doLogin(); return; }
-    catch (e) { $("loginErr").textContent = (e && e.message) || "Auto-login failed — paste token from ~/localai/gui/auth.token"; }
+    catch (e) { $("loginErr").textContent = (e && e.message) || "Auto-login failed — paste token from ~/shoot-sorter-c1/gui/auth.token (or ~/localai/gui/auth.token)"; }
   }
   try { await checkLogin(); } catch (e) {}
 }

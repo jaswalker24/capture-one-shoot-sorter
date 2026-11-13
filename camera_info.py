@@ -13,7 +13,7 @@ burst / schedule use.
 
 Usage:
   venv/bin/python camera_info.py <folder> [--sample N] [--refresh-exif] [--no-clip]
-Outputs (in ~/localai/out/<folder>/): camera-exif.json, camera.csv, camera-proposals.json
+Outputs (in <runtime>/out/<folder>/): camera-exif.json, camera.csv, camera-proposals.json
 Never writes to originals or the catalog.
 """
 from __future__ import annotations
@@ -21,8 +21,10 @@ from __future__ import annotations
 import argparse, csv, json, math, os, re, subprocess, sys, time
 from collections import Counter
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 OUT = HOME / "out"
 EXIFTOOL = str(HOME / "bin" / "exiftool")
 RAW_EXT = {".cr3", ".cr2"}

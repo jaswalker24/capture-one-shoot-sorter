@@ -4,7 +4,9 @@
 Draft Captions are NOT part of this pipeline. Usage: venv/bin/python fullrun.py <folder> [--profile motorsport] [--context ...]"""
 import argparse, json, os, re, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"; sys.path.insert(0, str(HOME))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
+HOME = app_home.home(); sys.path.insert(0, str(HOME))
 TAG = str(HOME / "tag")
 
 def log(*a): print(time.strftime("%H:%M:%S"), *a, flush=True)

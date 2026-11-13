@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Backend for the Capture One 'Trip Local AI' Scripts menu. Runs at low priority, logs to ~/localai/logs/scripts/,
+"""Backend for the Capture One Shoot Sorter Scripts menu. Runs at low priority, logs to <runtime>/logs/scripts/,
 posts a macOS notification when done. Capture One writes only via apply_c1 (additive keywords; Description only if empty)."""
 import json, os, re, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
+HOME = app_home.home()
 sys.path.insert(0, str(HOME))
 LOG = HOME / "logs" / "scripts"; LOG.mkdir(parents=True, exist_ok=True)
 CFG = json.load(open(HOME / "config.json"))

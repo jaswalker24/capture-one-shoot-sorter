@@ -1,5 +1,14 @@
 #!/bin/bash
-D="$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"
+D=""
+if [ -n "${LOCALAI_SCRIPTS_DIR:-}" ]; then
+  D="$LOCALAI_SCRIPTS_DIR"
+else
+  for cand in     "$HOME/Library/Scripts/Capture One Scripts/Capture One Shoot Sorter"     "$HOME/Library/Scripts/Capture One Scripts/Trips Local AI"     "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"     "$HOME/Library/Scripts/Capture One Scripts/Grok Local AI"
+  do
+    if [ -d "$cand" ]; then D="$cand"; break; fi
+  done
+  D="${D:-$HOME/Library/Scripts/Capture One Scripts/Capture One Shoot Sorter}"
+fi
 t() { # script name, frames...
   local s="$1"; shift
   local log=$(osascript "$D/$s.scpt" "$@" 2>&1)

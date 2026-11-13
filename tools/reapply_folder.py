@@ -11,7 +11,9 @@ usage: reapply_folder.py <folder> --profile gig --passes tagger,sharpness,afpoin
 """
 import argparse, json, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"; OUT = HOME / "out"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
+HOME = app_home.home()
 sys.path.insert(0, str(HOME))
 from jobrunner import _proposal_file  # noqa: E402
 from apply_c1 import apply_proposals  # noqa: E402

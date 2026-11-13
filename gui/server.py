@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Trips Local AI control panel — LAN web UI on port 8765.
+"""Capture One Shoot Sorter control panel — LAN web UI on port 8765.
 
 Stdlib only (no Flask/FastAPI) so it can run while a catalog job uses the venv.
-Auth: shared secret in ~/localai/gui/auth.token → cookie after POST /api/login.
+Auth: shared secret in <runtime>/gui/auth.token → cookie after POST /api/login.
 """
 from __future__ import annotations
 import hashlib, hmac, json, os, secrets, subprocess, sys, threading, time, uuid
@@ -10,8 +10,12 @@ from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+_REPO = Path(__file__).resolve().parent.parent
+if str(_REPO) not in sys.path:
+    sys.path.insert(0, str(_REPO))
+import app_home
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = app_home.home()
 OUT = HOME / "out"
 GUI = HOME / "gui"
 STATIC = GUI / "static"
@@ -21,12 +25,9 @@ AUTH_FILE = GUI / "auth.token"
 PORT = int(os.environ.get("LOCALAI_GUI_PORT", "8765"))
 HOST = os.environ.get("LOCALAI_GUI_HOST", "0.0.0.0")
 
-# nas_paths (and the rest of the tree) live in LOCALAI_HOME, or the repo root
+# nas_paths (and the rest of the tree) live in the runtime folder, or the repo root
 # when this file is run from a checkout (gui/server.py).
 sys.path.insert(0, str(HOME))
-_REPO = Path(__file__).resolve().parent.parent
-if str(_REPO) not in sys.path:
-    sys.path.insert(0, str(_REPO))
 
 def _load_roots():
     """Imports/exports folders: env, then config.json, then the historical default paths."""
@@ -680,7 +681,7 @@ def _static_content_type(path) -> str:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "TripsLocalAIGui/1.0"
+    server_version = "CaptureOneShootSorterGui/1.0"
 
     def log_message(self, fmt, *args):
         sys.stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
@@ -1439,7 +1440,7 @@ def main():
     ensure_autoqueue()
     ensure_poster_scan()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
-    print(f"Trips Local AI control panel on http://{HOST}:{PORT}", flush=True)
+    print(f"Capture One Shoot Sorter control panel on http://{HOST}:{PORT}", flush=True)
     print(f"Auth token file: {AUTH_FILE}", flush=True)
     try:
         httpd.serve_forever()

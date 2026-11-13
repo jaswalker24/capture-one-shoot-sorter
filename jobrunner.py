@@ -8,8 +8,9 @@ Does not modify fullrun.py; reuses the same CLI entrypoints (tag / apply_c1).
 from __future__ import annotations
 import json, os, re, subprocess, sys, time, traceback
 from pathlib import Path
+import app_home
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = app_home.home()
 sys.path.insert(0, str(HOME))
 TAG = str(HOME / "tag")
 SNAP_JS = HOME / "snap.js"
@@ -17,7 +18,7 @@ OUT = HOME / "out"
 def _nas_roots():
     try:
         import nas_paths as NP
-        NP.HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+        NP.HOME = app_home.home()
         return NP.imports_root(), NP.exports_root()
     except Exception:
         photos = Path("/Volumes/Photos")
@@ -44,7 +45,7 @@ PASSES = [
      "note": "General/Scene/* multi-label tags (architecture, street, concert, motorsport, temple, food, …). Local SigLIP, conservative thresholds."},
     {"id": "schedule", "label": "Tag by Schedule", "needs_index": False},
     {"id": "cull", "label": "Cull smart albums", "needs_index": False,
-     "note": "Smart albums in group 'Trips Local AI': Sharp + Burst Best, Rank Best, Shortlist (no blur). Collections only."},
+     "note": "Smart albums in group 'Capture One Shoot Sorter' (or an existing 'Trips Local AI' group): Sharp + Burst Best, Rank Best, Shortlist (no blur). Collections only."},
 ]
 PASS_BY_ID = {p["id"]: p for p in PASSES}
 DEFAULT_ORDER = ["tagger", "camera", "scene", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"]

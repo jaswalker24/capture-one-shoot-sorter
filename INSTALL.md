@@ -1,4 +1,4 @@
-# Install Trips Local AI
+# Install Capture One Shoot Sorter
 
 On-device photo tagging for Capture One. It adds keywords only. It never changes your stars or colour tags, and it never sends your photos to the cloud.
 
@@ -10,28 +10,30 @@ You need an **Apple-silicon Mac (M1 or newer)**, **macOS 14 or newer**, **Captur
 2. Open **Terminal**, go into the unzipped folder, and run:
 
 ```bash
-cd /path/to/trips-local-ai-1.1.0
+cd /path/to/capture-one-shoot-sorter-1.1.0
 ./install.sh
 ```
 
 The first run can take 10–20 minutes, mostly downloading Python packages and the local vision model.
 
-The installer is safe to re-run. It will not overwrite an existing `~/localai/config.json` or the control-panel login token, and it will not restart a control panel that is already running.
+The installer is safe to re-run. It will not overwrite an existing `config.json` or the control-panel login token, and it will not restart a control panel that is already running.
 
-3. Follow the “Next steps” the script prints (permissions, keyword library, paths). Then open the **Trips Local AI** Dock shortcut, or go to http://127.0.0.1:8765/.
+New installs go in `~/shoot-sorter-c1` and use the LaunchAgent `com.shootsorter.c1.gui`. If `~/localai` already exists, the installer keeps using that folder and the existing LaunchAgent so a live install is not moved or restarted. `LOCALAI_HOME` still overrides the path.
+
+3. Follow the “Next steps” the script prints (permissions, keyword library, paths). Then open the **Capture One Shoot Sorter** Dock shortcut, or go to http://127.0.0.1:8765/.
 
 ## What the installer does
 
-It puts everything in `~/localai` (or `$LOCALAI_HOME` if you set that):
+It puts everything in `~/shoot-sorter-c1` (or `~/localai` if that folder already exists, or `$LOCALAI_HOME` if you set that):
 
 - A Python 3.12 virtualenv and the pinned packages
 - A portable ExifTool and a standalone Ollama (listens on `127.0.0.1` only)
 - The `qwen2.5vl:3b` caption / VLM weights, plus optional ranking and face-grouping weights
 - `config.json` from the example, **only if you do not already have one**
-- A new login token at `~/localai/gui/auth.token` with mode `600`, **only if missing**. The token is never printed
-- The Capture One **Scripts → Trip Local AI** menu items
-- The `com.trips.localai.gui` Login item (LaunchAgent), loaded only if it is not already running
-- The **Trips Local AI** app in `~/Applications` and a Dock shortcut
+- A new login token at `~/shoot-sorter-c1/gui/auth.token` with mode `600`, **only if missing**. The token is never printed
+- The Capture One **Scripts → Capture One Shoot Sorter** menu items (an existing install keeps its current Scripts menu folder)
+- The `com.shootsorter.c1.gui` Login item (LaunchAgent), loaded only if it is not already running. An existing `com.trips.localai.gui` or `com.grok.localai.gui` agent is left in place
+- The **Capture One Shoot Sorter** app in `~/Applications` and a Dock shortcut
 
 Homebrew is optional. If it is already installed, the script can use it as a fallback for ExifTool when the direct download fails. Apple’s Command Line Tools (`xcode-select --install`) are useful for compiling the Scripts menu items.
 
@@ -62,8 +64,8 @@ There is no supported Intel install path with the current requirements. Use an A
 
 In **System Settings → Privacy & Security**, grant the following after the first Capture One or control-panel action prompts you (or add them by hand):
 
-- **Automation** — allow Terminal, `osascript` and `~/localai/venv/bin/python` to control **Capture One**. Keyword applies will fail without this.
-- **Full Disk Access** — give **Capture One**, Terminal and `~/localai/venv/bin/python` access if your originals live on a NAS or an external disk.
+- **Automation** — allow Terminal, `osascript` and `~/shoot-sorter-c1/venv/bin/python` to control **Capture One**. Keyword applies will fail without this.
+- **Full Disk Access** — give **Capture One**, Terminal and `~/shoot-sorter-c1/venv/bin/python` access if your originals live on a NAS or an external disk.
 
 The control panel LaunchAgent is a Python process under your account. If a job cannot see a mounted volume, add that same Python path under Full Disk Access.
 
@@ -72,7 +74,7 @@ The control panel LaunchAgent is a Python process under your account. If a job c
 The control panel’s health strip looks for your Camera Imports and Camera Exports folders.
 
 1. Mount the volume that holds those folders (they stay off this Mac).
-2. In the control panel open **Settings → Locations** and set the Camera Imports / Camera Exports (and optional Photos root and Other Exports) folders, or edit `~/localai/config.json`:
+2. In the control panel open **Settings → Locations** and set the Camera Imports / Camera Exports (and optional Photos root and Other Exports) folders, or edit `~/shoot-sorter-c1/config.json`:
 
 
 ```json
@@ -94,18 +96,18 @@ Do not commit `config.json`; it is local to the machine. You can also set these 
 1. Start the local model server if it is not already running:
 
    ```bash
-   ~/localai/start-ollama.sh
+   ~/shoot-sorter-c1/start-ollama.sh
    ```
 
-2. Open Capture One 16.8.x. In the **Keyword Library** tool, create a library named exactly **Trip Keywords** and import `~/localai/keywords/trip-keyword-library.txt`.
+2. Open Capture One 16.8.x. In the **Keyword Library** tool, create a library named exactly **Trip Keywords** and import `~/shoot-sorter-c1/keywords/trip-keyword-library.txt`.
 
-3. Confirm **Scripts → Trip Local AI** lists the actions (Tag with Local AI, Find Bursts, Rank Selection, Check Sharpness, Read Text in Frame, Tag by Schedule, and Draft Captions for export folders only).
+3. Confirm **Scripts → Capture One Shoot Sorter** lists the actions (Tag with Local AI, Find Bursts, Rank Selection, Check Sharpness, Read Text in Frame, Tag by Schedule, and Draft Captions for export folders only).
 
 4. Open http://127.0.0.1:8765/ or the Dock app. Sign-in uses the local token file; it is never sent anywhere. The **Training** tab can queue a rank-training job (export roots, optional index-missing, auto-adopt only if held-out accuracy improves). Training never writes to Capture One, stars, colours or rank keywords.
 
-5. Select 3–5 frames and run **Scripts → Trip Local AI → Tag with Local AI**. Check that keywords appeared and that stars and colour tags did not change.
+5. Select 3–5 frames and run **Scripts → Capture One Shoot Sorter → Tag with Local AI**. Check that keywords appeared and that stars and colour tags did not change.
 
-The first tagging run also downloads the SigLIP image model into `~/localai/models/hf` (about 1–2 GB). Keep the Mac awake until it finishes.
+The first tagging run also downloads the SigLIP image model into `~/shoot-sorter-c1/models/hf` (about 1–2 GB). Keep the Mac awake until it finishes.
 
 Catalog and Scripts-menu jobs never load the caption model. Draft Captions is only for export folders.
 
@@ -116,7 +118,7 @@ Download a newer release (or `git pull` in a clone), then run `./install.sh` aga
 If the control panel is already running, the installer will not restart it. To pick up GUI code after a job has finished:
 
 ```bash
-~/localai/gui/reload_when_idle.py
+~/shoot-sorter-c1/gui/reload_when_idle.py
 ```
 
 Do not unload or restart the GUI or job runner while a job is running or queued.
@@ -130,10 +132,10 @@ This removes the tool only. It does not delete your photos, Capture One catalog,
 ./install.sh --uninstall
 ```
 
-This unloads the LaunchAgent, removes the Scripts menu and Dock app, and deletes `~/localai`. Photos and the Capture One catalog are not touched. You can then remove the **Trips Local AI** tile from the Dock if it is still there.
+This unloads the LaunchAgent, removes the Scripts menu and Dock app, and deletes the runtime folder (`~/shoot-sorter-c1`, or `~/localai` if that is the folder in use). Photos and the Capture One catalog are not touched. You can then remove the **Capture One Shoot Sorter** tile from the Dock if it is still there.
 
 ## Options and layout
 
-Runtime lives in `~/localai/`. The source, this guide and `install.sh` stay in the folder you unzipped (or in a git clone). See the main [README](README.md) for commands, passes, safety notes and the control-panel tabs.
+Runtime lives in `~/shoot-sorter-c1/` (or `~/localai/` on an existing install). The source, this guide and `install.sh` stay in the folder you unzipped (or in a git clone). See the main [README](README.md) for commands, passes, safety notes and the control-panel tabs.
 
-The installer never prints or copies the GUI token. Notifications (Telegram or email) are configured in the untracked file `~/localai/gui/notify.json`; start from `gui/notify.example.json` and leave tokens out of git.
+The installer never prints or copies the GUI token. Notifications (Telegram or email) are configured in the untracked file `~/shoot-sorter-c1/gui/notify.json`; start from `gui/notify.example.json` and leave tokens out of git.

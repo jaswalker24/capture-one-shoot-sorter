@@ -1,0 +1,18 @@
+#!/bin/bash
+if [ -n "${LOCALAI_HOME:-}" ]; then
+  TOKEN_FILE="$LOCALAI_HOME/gui/auth.token"
+elif [ -n "${SHOOT_SORTER_C1_HOME:-}" ]; then
+  TOKEN_FILE="$SHOOT_SORTER_C1_HOME/gui/auth.token"
+elif [ -f "$HOME/localai/gui/auth.token" ]; then
+  TOKEN_FILE="$HOME/localai/gui/auth.token"
+else
+  TOKEN_FILE="$HOME/shoot-sorter-c1/gui/auth.token"
+fi
+BASE="http://127.0.0.1:8765/"
+if [ -f "$TOKEN_FILE" ]; then
+  TOKEN=$(tr -d '\r\n' < "$TOKEN_FILE")
+  # URL-encode minimally (token is urlsafe)
+  open "${BASE}?token=${TOKEN}"
+else
+  open "$BASE"
+fi

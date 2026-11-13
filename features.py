@@ -10,17 +10,19 @@ Local AI features (all on-device, originals read-only).
   rank       calibrated rank (sharpness+aesthetic+burst) -> General/Rank/Best|Good
   journal    markdown day summary for a folder (local LLM)
   ask        question answering over the local index (local LLM, simple RAG)
-  faces      People pass: detect + embed + cluster + match ~/localai/people library
+  faces      People pass: detect + embed + cluster + match the runtime people library
   name-person  name a cluster (writes persistent people library; use --shoot)
   scene      General/Scene/* keywords (architecture, street, concert, motorsport, …)
   camera     EXIF / Canon MakerNotes + preview clip check (General/Camera/*, Quality clip flags)
   captions   draft captions (sidecar JSON for Salamander)
-Index: ~/localai/index/catalog.sqlite (+ index/siglip/*.npy, keyed by SHA-256).
+Index: <runtime>/index/catalog.sqlite (+ index/siglip/*.npy, keyed by SHA-256).
 """
 import argparse, csv, json, math, os, re, sqlite3, subprocess, sys, time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 sys.path.insert(0, str(HOME))
 os.environ.setdefault("HF_HOME", str(HOME / "models" / "hf"))
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")

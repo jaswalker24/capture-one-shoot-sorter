@@ -1,4 +1,4 @@
-"""Keyword preview before apply (Trips Local AI panel).
+"""Keyword preview before apply (Capture One Shoot Sorter panel).
 
 build(): per-frame keywords a run would ADD, from the proposals files of the chosen passes, using the
 same confidence rules as the job runner (needs_review / errors never applied, Rank only General/Rank/*,
@@ -12,8 +12,10 @@ from __future__ import annotations
 import json, subprocess, sys, threading, time
 from collections import Counter, defaultdict
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 OUT = HOME / "out"
 sys.path.insert(0, str(HOME))
 

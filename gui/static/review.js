@@ -11,7 +11,7 @@ async function api(path, opts = {}) {
 function q() { return `shoot=${encodeURIComponent(shoot)}&kind=${KIND}`; }
 function setupKind() {
   if (KIND !== "focus") return;
-  document.title = "Missed focus review · Trips Local AI";
+  document.title = "Missed focus review · Capture One Shoot Sorter";
   document.querySelector("header h1").textContent = "Missed focus review";
   document.querySelector("header .sub").innerHTML = 'The AF focus check thinks the camera\'s AF box (red) is soft while something else is sharp. Confirm adds <b>General/Focus/Missed</b>; reject adds nothing. Only applied when you press Apply. <a href="/">Back to the control panel</a> · <a href="/review">Race numbers</a>';
   $("onlyNums").closest("label").style.display = "none";

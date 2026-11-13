@@ -4,7 +4,9 @@ Confident = needs_review is false; only proposed_keywords (never tentative_keywo
 SHA-256 of each original is re-checked before applying."""
 import argparse, hashlib, json, subprocess, sys, time
 from pathlib import Path
-HOME = Path(__import__("os").environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
+HOME = app_home.home()
 IMAGE_EXT = {".cr3", ".cr2", ".dng", ".arw", ".nef", ".raf", ".jpg", ".jpeg", ".heic", ".tif", ".tiff", ".png"}  # MP4/MOV ignored
 
 def sha256(p):

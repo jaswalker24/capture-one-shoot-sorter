@@ -3,15 +3,17 @@
 Local AI photo tagger for Capture One (Apple silicon).
 
 READ-ONLY on originals: files are opened for reading only (hash + embedded preview).
-Previews are cached under ~/localai/cache, outputs under ~/localai/out/<folder>/.
+Previews are cached under <runtime>/cache, outputs under <runtime>/out/<folder>.
 Never writes to Capture One - it only produces keyword PROPOSALS (json + csv).
 
 Profiles: motorsport | gig | street (kyoto is an alias of street)
 """
 import argparse, base64, csv, hashlib, io, json, os, re, subprocess, sys, time
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 os.environ.setdefault("HF_HOME", str(HOME / "models" / "hf"))
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 

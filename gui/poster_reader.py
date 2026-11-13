@@ -3,7 +3,7 @@
 
 Apple Vision OCR (already used by the catalog OCR pass) is the text source.
 A deterministic parser turns the lines into acts, times, doors and notes.
-Results stay in ~/localai/gui/poster-drafts until the user Confirms; nothing
+Results stay in <runtime>/gui/poster-drafts until the user Confirms; nothing
 is written into the Schedules tree on scan or read. Posters are never moved,
 renamed or trashed. The poster never applies keywords.
 """
@@ -12,10 +12,13 @@ from __future__ import annotations
 import hashlib, json, os, re, time
 from datetime import datetime
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 
 import schedules_tree as ST
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = app_home.home()
 DRAFTS_DIR = HOME / "gui" / "poster-drafts"
 THUMBS_DIR = HOME / "gui" / "poster-thumbs"
 

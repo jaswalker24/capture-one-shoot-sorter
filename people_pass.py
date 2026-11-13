@@ -5,7 +5,7 @@ All on-device. Produces:
   out/<shoot>/people-proposals.json   Capture One additive keywords People/<Name>
   out/<shoot>/people/clusters.json    anonymous + named clusters for the GUI
   out/<shoot>/people/person_XXX.jpg   contact sheets
-  ~/localai/people/library.json       persistent named people (centroids)
+  <runtime>/people/library.json       persistent named people (centroids)
 
 Never writes ratings/colours. MP4s ignored via tagger.list_images. Captions unused.
 Low-confidence matches go to needs_review (tentative_keywords only).
@@ -14,11 +14,14 @@ from __future__ import annotations
 import json, math, os, time, uuid
 from collections import Counter, defaultdict
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import app_home
 
 import numpy as np
 from PIL import Image
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 PEOPLE_DIR = HOME / "people"
 LIB_PATH = PEOPLE_DIR / "library.json"
 OUT = HOME / "out"
@@ -555,7 +558,7 @@ def allowed_reveal_roots() -> list[Path]:
 
 
 def is_allowed_reveal_path(path: str | Path) -> Path:
-    """Resolve and ensure path is under ~/localai/out or ~/localai/people (no escape)."""
+    """Resolve and ensure path is under <runtime>/out or <runtime>/people (no escape)."""
     raw = Path(path).expanduser()
     try:
         resolved = raw.resolve(strict=False)
@@ -573,7 +576,7 @@ def is_allowed_reveal_path(path: str | Path) -> Path:
         except ValueError:
             continue
     if not allowed:
-        raise ValueError("path not under ~/localai/out or ~/localai/people")
+        raise ValueError("path not under the runtime out or people folders")
     if not resolved.exists():
         raise FileNotFoundError(str(resolved))
     return resolved

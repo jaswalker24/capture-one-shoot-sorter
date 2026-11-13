@@ -1,4 +1,4 @@
-"""Auto-queue new shoots (Trips Local AI panel). OFF by default.
+"""Auto-queue new shoots (Capture One Shoot Sorter panel). OFF by default.
 
 Every ~30 minutes (in step with Capture One's 30-minute referencing of new imports) look in
 [03] Photos/Camera Imports/<year>/ for YYYY-MM-DD… folders newer than the last-run cutoff.
@@ -27,15 +27,18 @@ import json, re, subprocess, threading, time
 from datetime import datetime
 import os
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import app_home
 
-HOME = Path.home() / "localai"
+HOME = app_home.home()
 GUI = HOME / "gui"
 CFG = GUI / "autoqueue.json"
 STATE = GUI / "autoqueue-state.json"
 def _imports_root():
     try:
         import nas_paths as NP
-        NP.HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+        NP.HOME = app_home.home()
         return NP.imports_root()
     except Exception:
         return Path("/Volumes/Photos/Camera Imports")

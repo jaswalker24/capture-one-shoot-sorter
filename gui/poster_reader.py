@@ -40,7 +40,7 @@ SKIP_LINE_RE = re.compile(
     r"schedule|スケジュール|出演者|出演|acts?|line[- ]?up|出演アーティスト)$",
     re.I,
 )
-WEEKDAY_PART = r"[（(]?(?:月|火|水|木|金|土|日|mon|tue|wed|thu|fri|sat|sun)[）)]?"
+WEEKDAY_PART = r"[（(]?(?:月|火|水|木|金|土|日|mon|tue|wed|thu|fri|sat|sun|[a-z])[）)]?"
 DATE_TOKEN_RE = re.compile(
     r"(?:"
     r"\d{4}[.\/年\-]\s*(?:0?[1-9]|1[0-2])[.\/月]\s*(?:0?[1-9]|[12]\d|3[01])日?"
@@ -69,16 +69,31 @@ SALE_RE = re.compile(
 )
 # Broader admission/ticket words used when the line is not a leading set-time row
 SALE_SOFT_RE = re.compile(r"(受付|予約|当日|先行|sale|ticket|presale|lottery)", re.I)
-PRICE_RE = re.compile(r"(料金|入場料|チケット代|\d+\s*円|¥\s*\d|yen\b|price\s*:)", re.I)
+PRICE_RE = re.compile(
+    r"(料金|入場料|チケット代|\d+\s*円|¥\s*\d|yen\b|price\s*:|"
+    r"(?:adv|door)\s*[·•・,.]?\s*\d|[+＋]?\s*idr?[i1]nk|[+＋]?\s*1?\s*drink\b)",
+    re.I,
+)
 PARALLEL_RE = re.compile(
     r"[（(]\s*(?:並行[A-Da-d0-9０-９]*|終演後|物販|cheki|チェキ)[^）)]*[）)]"
 )
 MERCH_LINE_RE = re.compile(
-    r"(終演後\s*物販|終演後物販|物販のみ|after[-\s]?show\s*(?:sale|merch)|"
-    r"merch(?:andise)?\s*sale)",
+    r"(終演後\s*物販|終演後物販|中間物販|並行物販|物販のみ|"
+    r"after[-\s]?show\s*(?:sale|merch)|merch(?:andise)?\s*sale)",
     re.I,
 )
 ADJUST_RE = re.compile(r"^調整時間$")
+CHANGEOVER_RE = re.compile(r"^(調整時間|転換リハ|転換|changeover(?:\s*reh(?:earsal)?)?)$", re.I)
+DOORS_TIME_RE = re.compile(
+    r"(?:開場|open(?:ing)?|doors?)\s*[/.:：]?\s*(\d{1,2}:\d{2})"
+    r"|(\d{1,2}:\d{2})\s*(?:開場|open(?:ing)?|doors?)",
+    re.I,
+)
+START_TIME_RE = re.compile(
+    r"(?:開演|start(?:s)?)\s*[/.:：]?\s*(\d{1,2}:\d{2})"
+    r"|(\d{1,2}:\d{2})\s*(?:開演|start(?:s)?)",
+    re.I,
+)
 
 _FW_DIGITS = str.maketrans("０１２３４５６７８９：．，", "0123456789:.,")
 
@@ -411,6 +426,8 @@ def _is_skip_line(text: str) -> bool:
 
 def _clean_act_name(name: str) -> str:
     name = PARALLEL_RE.sub(" ", name or "")
+    name = re.sub(r"(?<=\w)@(?=\w)", " ", name)
+    name = name.replace("®", "").replace("™", "").replace("©", "")
     # trailing OCR junk from icons / catalogue marks, e.g. 001▶X, 0o1▶X, ※1▶X, 以
     name = re.sub(r"\s*※\S*$", "", name)
     name = re.sub(r"\s+[0oO]{1,2}[0-9iIlDX]{0,4}[▶■].*$", "", name)
@@ -418,7 +435,9 @@ def _clean_act_name(name: str) -> str:
     name = re.sub(r"\s+[0oO]{1,2}[0-9iIl]{1,3}[DX]*\s*$", "", name)
     name = re.sub(r"\s+[0oO]?\d{2,}[A-Za-z0-9]*$", "", name)
     name = re.sub(r"\s+[▶■区以回]+\S*$", "", name)
-    name = _clean_label(name)
+    # keep internal : and - (Station Four, Copper Crown); only collapse other punctuation
+    name = re.sub(r"[\s/|,;·・]+", " ", name).strip(" /|,;·・")
+    name = re.sub(r"\s+", " ", name).strip().strip("-:：")
     return name
 
 
@@ -429,6 +448,262 @@ def _other_item(kind: str, text: str, *, act: str = "", start: str = "", end: st
         "act": (act or "").strip(),
         "start": start or "",
         "end": end or "",
+    }
+
+
+
+def _extract_doors_and_start(text: str) -> tuple[str | None, str | None]:
+    t = normalize_text(text)
+    def _g(m):
+        return ST.parse_time(m.group(1) or m.group(2))
+    d = DOORS_TIME_RE.search(t)
+    s = START_TIME_RE.search(t)
+    return ( _g(d) if d else None, _g(s) if s else None )
+
+
+def _is_junk_label(name: str) -> bool:
+    n = _clean_act_name(name)
+    if not n:
+        return True
+    if re.fullmatch(r"[\W_ł$]+", n):
+        return True
+    if len(n) <= 2 and not re.search(r"[\u3040-\u9fffA-Za-z]", n):
+        return True
+    if re.search(r"\$\d|ł", n) and len(n) < 24:
+        return True
+    return False
+
+
+def _is_header_noise(name: str) -> bool:
+    n = _clean_act_name(name)
+    return bool(re.fullmatch(
+        r"(time\s*table|timetable|presents?|idol|band|-?\s*act\s*-?|"
+        r"ol|open|start|ticket|tickets|shibuya|cyclone|venue)",
+        n, re.I,
+    ))
+
+
+def _is_weak_name(text: str) -> bool:
+    """Merch, prices, sale copy or OCR junk — not an act name."""
+    n = _clean_act_name(text)
+    if _is_junk_label(n) or _is_header_noise(n):
+        return True
+    if MERCH_LINE_RE.search(n or text) or SALE_RE.search(n or text) or PRICE_RE.search(n or text):
+        return True
+    return False
+
+
+def _name_right_of_time(frags: list[dict], time_frag: dict, *, y_tol: float = 0.022, allow_weak: bool = False) -> dict | None:
+    """Pick the leftmost real label to the right of a timetable time, same row.
+
+    Merch windows and price fragments further right must not steal the slot.
+    """
+    ty, tx = time_frag["y"], time_frag["x"]
+    candidates = []
+    for g in frags:
+        if g is time_frag:
+            continue
+        if g.get("is_time_slot") or g.get("used"):
+            continue
+        if g["x"] <= tx + 0.01:
+            continue
+        dy = abs(g["y"] - ty)
+        if dy > y_tol:
+            continue
+        # a non-leading time is a merch / parallel annotation, not a name
+        if g.get("times") and not g.get("is_time_slot"):
+            continue
+        if (not allow_weak) and _is_weak_name(g.get("text") or ""):
+            continue
+        candidates.append((g["x"], dy, g))
+    if not candidates:
+        return None
+    # Same-column names share nearly the same x, so x-first sorting
+    # would pick a neighbour row. Cluster around the closest y first,
+    # then take the leftmost label on that row.
+    best_dy = min(dy for _x, dy, _g in candidates)
+    row = [(x, dy, g) for x, dy, g in candidates if dy <= best_dy + 0.01]
+    row.sort()
+    return row[0][2]
+
+
+def _parse_spatial(raw: list[dict], *, date_str: str, event_name: str,
+                   venue_name: str, tz: str) -> dict:
+    """Pair timetable times with the name on the same row to their right.
+
+    Used when OCR boxes have x/y. Left-column lineup, ticket prices and
+    merch windows are not treated as set times.
+    """
+    other: list[dict] = []
+    doors = None
+    show_start = None
+    notes_bits = []
+    frags = []
+
+    for rec in raw:
+        original = rec.get("text") or ""
+        text_line = normalize_text(original)
+        x = float(rec.get("x") or 0)
+        y = float(rec.get("y") or 0)
+        if not text_line:
+            continue
+
+        d, s = _extract_doors_and_start(text_line)
+        if d and not doors:
+            doors = d
+        if s and not show_start:
+            show_start = s
+
+        if _is_skip_line(text_line):
+            continue
+
+        stripped, clauses = split_parallel_clauses(text_line)
+        for cl in clauses:
+            times_cl = extract_times(cl)
+            st = times_cl[0][0] if times_cl else ""
+            en = times_cl[0][1] if times_cl else ""
+            other.append(_other_item("parallel", cl, start=st or "", end=en or ""))
+
+        work = (stripped or "").strip()
+        # Garbled merch OCR such as "($1T RE 14:20-15:20łł" — not a leading set time
+        leading = bool(work and re.match(r"^\d{1,2}:\d{2}", mask_dates(work).strip()))
+        if (not work) or (re.search(r"\$\d", text_line) and not leading):
+            if extract_times(text_line) and not leading:
+                times_cl = extract_times(text_line)
+                st = times_cl[0][0] if times_cl else ""
+                en = times_cl[0][1] if times_cl else ""
+                other.append(_other_item("merch", text_line, start=st or "", end=en or ""))
+            if not work:
+                continue
+
+        times = extract_times(work)
+        # A fragment is a "time slot" if it is (or starts with) a set time
+        is_time_slot = bool(times and re.match(r"^\d{1,2}:\d{2}", mask_dates(work).strip()))
+        frags.append({
+            "text": work,
+            "orig": text_line,
+            "x": x, "y": y,
+            "times": times,
+            "is_time_slot": is_time_slot,
+        })
+
+    acts: list[dict] = []
+
+    def add_named(name: str, start: str, end: str, *, source_text: str = ""):
+        nonlocal doors
+        name = _clean_act_name(name)
+        if not name or _is_junk_label(name) or _is_header_noise(name):
+            return
+        if event_name and _names_match(name, event_name):
+            return
+        if CHANGEOVER_RE.match(name):
+            other.append(_other_item("break", source_text or f"{start}–{end} {name}",
+                                     act=name, start=start or "", end=end or ""))
+            return
+        if MERCH_LINE_RE.search(name) or SALE_RE.search(name):
+            kind = "merch" if MERCH_LINE_RE.search(name) else "sale"
+            other.append(_other_item(kind, source_text or f"{start}–{end} {name}",
+                                     act=name, start=start or "", end=end or ""))
+            return
+        if PRICE_RE.search(name):
+            other.append(_other_item("price", source_text or name, start=start or "", end=end or ""))
+            return
+        acts.append({"act": name, "start": start or "", "end": end or "", "doors": "", "notes": ""})
+
+    # Each timetable time picks the name on the same row to its right,
+    # or the label already on the time fragment (Example Hall style).
+    for f in frags:
+        if not f["is_time_slot"]:
+            continue
+        for st, en, label in f["times"]:
+            # doors/start already captured; skip using OPEN/START as an act
+            if DOORS_RE.search(f["text"]) or SHOW_START_RE.search(f["text"]):
+                leftover = _clean_act_name(SHOW_START_RE.sub("", DOORS_RE.sub("", label or f["text"])))
+                if not leftover or leftover.lower() in {"open", "start", "doors", "opening"}:
+                    continue
+            name = "" if _is_junk_label(label or "") else _clean_act_name(label or "")
+            # Same-fragment leftover wins: act, changeover or merch already
+            # on this line (Example Hall). Don't look right and steal a neighbour.
+            if name and not _is_header_noise(name):
+                add_named(name, st, en, source_text=f["text"])
+                continue
+            # Look right on the same row
+            right = _name_right_of_time(frags, f)
+            if right:
+                right["used"] = True
+                add_named(right["text"], st, en, source_text=f"{f['text']} {right['text']}")
+            elif name:
+                add_named(name, st, en, source_text=f["text"])
+            elif MERCH_LINE_RE.search(f["text"]) or SALE_RE.search(f["text"]):
+                kind = "merch" if MERCH_LINE_RE.search(f["text"]) else "sale"
+                other.append(_other_item(kind, f["text"], start=st or "", end=en or ""))
+            else:
+                # merch / sale label to the right of a bare timetable slot
+                # (e.g. 16:10-17:10 中間物販, 21:00-22:00 終演後物販)
+                label = _name_right_of_time(frags, f, allow_weak=True)
+                if label and (MERCH_LINE_RE.search(label["text"]) or SALE_RE.search(label["text"])):
+                    label["used"] = True
+                    kind = "merch" if MERCH_LINE_RE.search(label["text"]) else "sale"
+                    nm = _clean_act_name(label["text"])
+                    other.append(_other_item(
+                        kind, f"{f['text']} {label['text']}", act=nm,
+                        start=st or "", end=en or "",
+                    ))
+
+    # leftover left-column sale / price / merch copy (not used as a slot label)
+    for f in frags:
+        if f.get("is_time_slot") or f.get("used"):
+            continue
+        work = f["text"]
+        if PRICE_RE.search(work) or is_sale_line(work, event_date=date_str, has_leading_set=False):
+            kind = "price" if PRICE_RE.search(work) else "sale"
+            if MERCH_LINE_RE.search(work):
+                kind = "merch"
+            other.append(_other_item(kind, work))
+            f["used"] = True
+
+    # infer missing ends (should be rare; two-column timetable times already have ends)
+    timed = [r for r in acts if r.get("start")]
+    for i, row in enumerate(timed):
+        if row.get("end"):
+            continue
+        if i + 1 < len(timed) and timed[i + 1].get("start"):
+            nxt = timed[i + 1]["start"]
+            if nxt != row["start"]:
+                row["end"] = nxt
+                row["notes"] = "end inferred from next start"
+
+    if doors and acts:
+        acts[0]["doors"] = doors
+
+    used_idx = set()
+    for row in acts:
+        for i, item in enumerate(other):
+            if i in used_idx or item.get("act") or item.get("kind") != "parallel":
+                continue
+            item["act"] = row["act"]
+            if row["act"] and row["act"] not in (item.get("text") or ""):
+                item["text"] = f"{row['act']} {item['text']}".strip()
+            used_idx.add(i)
+            break
+
+    return {
+        "meta": {
+            "date": date_str,
+            "event": event_name,
+            "venue": venue_name,
+            "timezone": tz,
+            "changeover_buffer_min": 3,
+            "event_type": "gig",
+            "source": "poster",
+            "doors": doors or "",
+            "start": show_start or "",
+        },
+        "rows": acts,
+        "other": other,
+        "doors": doors or "",
+        "start": show_start or "",
+        "notes": notes_bits,
     }
 
 
@@ -450,10 +725,19 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
     event_name = (event or "").strip()
     venue_name = (venue or "").strip()
     tz = timezone or (ST.default_timezone(date_str) if date_str else "Europe/London")
+    # Use spatial pairing only when OCR boxes actually spread in x.
+    # String-only tests (and Vision lines without boxes) stay sequential.
+    # Synthetic string rows are stamped at x=0, so they must not take this path.
+    xs = [float(r["x"]) for r in raw
+          if isinstance(r.get("x"), (int, float)) and isinstance(r.get("y"), (int, float))]
+    if len(xs) >= 2 and (max(xs) - min(xs)) > 0.05:
+        return _parse_spatial(raw, date_str=date_str, event_name=event_name,
+                              venue_name=venue_name, tz=tz)
     doors = None
     notes_bits = []
     acts: list[dict] = []
     other: list[dict] = []
+    show_start = None
 
     pending_time = None  # (start, end) waiting for an act name on a nearby line
     pending_name = None
@@ -466,9 +750,9 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
             return
         if SKIP_LINE_RE.match(name) or is_date_only_line(name):
             return
-        if ADJUST_RE.match(name) or MERCH_LINE_RE.search(name) or SALE_RE.search(name):
+        if CHANGEOVER_RE.match(name) or MERCH_LINE_RE.search(name) or SALE_RE.search(name):
             other.append(_other_item(
-                "break" if ADJUST_RE.match(name) else "sale",
+                "break" if CHANGEOVER_RE.match(name) else ("merch" if MERCH_LINE_RE.search(name) else "sale"),
                 f"{start or ''}–{end or ''} {name}".strip(" –"),
                 act=name, start=start or "", end=end or "",
             ))
@@ -488,6 +772,11 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
         text_line = normalize_text(original)
         if not text_line:
             continue
+        d, s = _extract_doors_and_start(text_line)
+        if d and not doors:
+            doors = d
+        if s and not show_start:
+            show_start = s
         if _is_skip_line(text_line):
             continue
 
@@ -506,7 +795,10 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
             en = times_cl[0][1] if times_cl else ""
             other.append(_other_item("parallel", cl, start=st or "", end=en or ""))
 
-        work = stripped or text_line
+        work = (stripped or "").strip()
+        if not work:
+            # a lone （並行物販 …） / （終演後物販） clause — keep pending act names
+            continue
         times = extract_times(work)
         has_leading_set = bool(times and re.match(r"^\d{1,2}:\d{2}", mask_dates(work).strip()))
         if is_sale_line(work, event_date=date_str, has_leading_set=has_leading_set) and not has_leading_set:
@@ -527,7 +819,7 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
             continue
 
         # merch or adjustment on an otherwise timed row (e.g. 21:35-22:35 終演後物販)
-        if times and (MERCH_LINE_RE.search(work) or (times[0][2] and (MERCH_LINE_RE.search(times[0][2]) or ADJUST_RE.match(_clean_act_name(times[0][2]) or "")))):
+        if times and (MERCH_LINE_RE.search(work) or (times[0][2] and (MERCH_LINE_RE.search(times[0][2]) or CHANGEOVER_RE.match(_clean_act_name(times[0][2]) or "")))):
             for st, en, lab in times:
                 name = _clean_act_name(lab)
                 kind = "break" if ADJUST_RE.match(name or "") else "merch"
@@ -667,10 +959,12 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
             "event_type": "gig",
             "source": "poster",
             "doors": doors or "",
+            "start": show_start or "",
         },
         "rows": acts,
         "other": other,
         "doors": doors or "",
+        "start": show_start or "",
         "notes": notes_bits,
     }
 

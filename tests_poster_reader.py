@@ -597,6 +597,79 @@ class SaleTimesExcluded(unittest.TestCase):
         self.assertEqual(names.count("ハナノカゼ"), 1)
         self.assertGreaterEqual(len(acts), 30)
         self.assertLess(len(acts), 50)  # used to be 81 with sale times doubled in
+        self.assertEqual(len(acts), 38)
+        self.assertEqual([a for a in acts if a[0] == "ソラノウタ"][0],
+                         ("ソラノウタ", "17:50", "18:05"))
+
+
+    def test_mix_metal_fes_fixture_uses_spatial_timetable(self):
+        fix_path = ROOT / "tests" / "fixtures" / "mix_metal_fes_2026-11-21_ocr.json"
+        fix = json.loads(fix_path.read_text(encoding="utf-8"))
+        p = PR.parse_ocr_lines(fix["lines"], date=fix["date"], event=fix["event"])
+        acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
+        self.assertEqual(p["doors"], "11:30")
+        self.assertEqual(p.get("start") or p["meta"].get("start"), "12:00")
+        self.assertEqual(p["meta"]["timezone"], "Asia/Tokyo")
+        self.assertEqual(acts, [
+            ("Northline", "12:00", "12:25"),
+            ("Riverlight", "12:45", "13:10"),
+            ("Red Harbor", "13:15", "13:35"),
+            ("Steel Orchard", "13:35", "13:55"),
+            ("Night Parade", "14:15", "14:40"),
+            ("Glass Harbor", "15:00", "15:25"),
+            ("Copper Crown", "15:30", "15:50"),
+            ("Station Four", "15:50", "16:10"),
+            ("Evening Current", "17:10", "17:40"),
+            ("Late Radio", "18:00", "18:35"),
+            ("Silver Choir", "18:55", "19:25"),
+            ("Amber Parade", "19:30", "20:00"),
+            ("Iron Lantern", "20:20", "21:00"),
+        ])
+        names = [a for a, *_ in acts]
+        # changeovers and merch windows are not acts
+        for banned in ("転換", "転換リハ", "中間物販", "終演後物販", "+ IDRINK 600", "IDRINK"):
+            self.assertNotIn(banned, names)
+        self.assertFalse(any("IDRINK" in a or "TICKET" in a or "ADV" in a for a in names))
+        # left-column billed lineup must not steal a slot as a second Silver Choir (BAND SET)
+        self.assertEqual(names.count("Silver Choir"), 1)
+        self.assertFalse(any("BAND SET" in a for a in names))
+        # date token is not a time
+        self.assertFalse(any(r["start"] == "11:21" or str(r["act"]).startswith("2026") for r in p["rows"]))
+        other_text = " ".join(o["text"] for o in p["other"])
+        self.assertIn("転換リハ", other_text)
+        self.assertIn("中間物販", other_text)
+        self.assertIn("終演後物販", other_text)
+        self.assertTrue(any(o.get("start") == "16:10" and o.get("end") == "17:10" for o in p["other"]))
+        self.assertTrue(any(o.get("start") == "21:00" and o.get("end") == "22:00" for o in p["other"]))
+        self.assertTrue(any(o.get("kind") == "price" and "IDRINK" in (o.get("text") or "").upper() for o in p["other"]))
+
+    def test_changeover_and_at_sign_in_sequential_parse(self):
+        text = [
+            "OPEN 11:30 / START 12:00",
+            "12:00-12:25 Northline",
+            "12:25-12:45 転換リハ",
+            "12:45-13:10 Riverlight",
+            "13:10-13:15 転換",
+            "19:30-20:00 Amber@Parade",
+            "21:00-22:00 終演後物販",
+        ]
+        p = PR.parse_ocr_lines(text, date="2026-11-21", event="Sample Festival")
+        acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
+        self.assertEqual(acts, [
+            ("Northline", "12:00", "12:25"),
+            ("Riverlight", "12:45", "13:10"),
+            ("Amber Parade", "19:30", "20:00"),
+        ])
+        self.assertEqual(p["doors"], "11:30")
+        self.assertEqual(p.get("start") or p["meta"].get("start"), "12:00")
+        names = [a for a, *_ in acts]
+        self.assertNotIn("転換リハ", names)
+        self.assertNotIn("転換", names)
+        self.assertNotIn("終演後物販", names)
+        other_text = " ".join(o["text"] for o in p["other"])
+        self.assertIn("転換リハ", other_text)
+        self.assertIn("終演後物販", other_text)
+
 
     def test_reparse_draft_is_local_only(self):
         with tempfile.TemporaryDirectory() as d:

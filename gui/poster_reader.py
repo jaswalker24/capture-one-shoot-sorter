@@ -15,7 +15,7 @@ from pathlib import Path
 
 import schedules_tree as ST
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 DRAFTS_DIR = HOME / "gui" / "poster-drafts"
 THUMBS_DIR = HOME / "gui" / "poster-thumbs"
 

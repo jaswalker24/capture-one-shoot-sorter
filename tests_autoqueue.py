@@ -23,7 +23,7 @@ class AutoqueueCutoff(unittest.TestCase):
         self.hist = self.gui / "history"
         for d in (self.imports / "2026", self.gui, self.jobs, self.hist):
             d.mkdir(parents=True)
-        # Point the module at the temp tree (never the live ~/localai files)
+        # Point the module at the temp tree (never the live ~/localai-lr files)
         self._orig = {k: getattr(AQ, k) for k in
                       ("CFG", "STATE", "IMPORTS", "GUI", "HISTORY_DIRS", "HOME")}
         AQ.GUI = self.gui
@@ -121,36 +121,27 @@ class AutoqueueCutoff(unittest.TestCase):
         names = {p["folder"] for p in AQ.preview(lambda: {str(b)})}
         self.assertEqual(names, set())
 
-    def test_poll_requires_stable_and_c1(self):
+    def test_poll_requires_stable(self):
         self._cfg(enabled=True, cutoff="2026-11-10T08:00", poll_min=1, stable_min=20)
-        f = self._folder("2026-11-12", _ts("2026-11-12T10:00"))
-        # freeze file mtimes in the past so "newest" can be old once the signature is stable
+        t0 = _ts("2026-11-12T11:00")
+        f = self._folder("2026-11-12", t0)
+        # File mtimes match t0, so "newest" is only old enough after stable_min has passed
         for p in f.iterdir():
-            os.utime(p, (_ts("2026-11-12T10:00"), _ts("2026-11-12T10:00")))
+            os.utime(p, (t0, t0))
         queued = []
         def enqueue(folder, cfg):
             queued.append(folder.name); return "job-1"
-        c1 = {"on": False}
-        t0 = _ts("2026-11-12T11:00")
-        r1 = AQ.poll(enqueue, lambda: set(), lambda: None, force=True, now=t0)
+        r1 = AQ.poll(enqueue, lambda: set(), None, force=True, now=t0)
         self.assertEqual(r1.get("queued"), [])
         self.assertEqual(queued, [])
-        # second look, still not 20 min old and C1 off
-        r2 = AQ.poll(enqueue, lambda: set(), lambda: None, force=True, now=t0 + 60)
+        # second look, signature matches but files are only 1 minute old
+        r2 = AQ.poll(enqueue, lambda: set(), None, force=True, now=t0 + 60)
         self.assertEqual(r2.get("queued"), [])
-        # 21 minutes later, stable, but C1 still false
-        r3 = AQ.poll(enqueue, lambda: set(), lambda: False, force=True, now=t0 + 21 * 60)
-        # monkeypatch C1
-        # The poll above already ran with c1 false. Do it with a stub.
         self.assertEqual(queued, [])
-        orig = AQ.c1_import_status
-        AQ.c1_import_status = lambda folder: False
-        r3 = AQ.poll(enqueue, lambda: set(), lambda: None, force=True, now=t0 + 22 * 60)
-        self.assertEqual(queued, [])
-        AQ.c1_import_status = lambda folder: True
-        r4 = AQ.poll(enqueue, lambda: set(), lambda: None, force=True, now=t0 + 23 * 60)
+        # 21 minutes later, signature unchanged and files old enough -> queue
+        r3 = AQ.poll(enqueue, lambda: set(), None, force=True, now=t0 + 21 * 60)
         self.assertEqual(queued, ["2026-11-12"])
-        AQ.c1_import_status = orig
+        self.assertEqual(r3.get("queued"), ["2026-11-12"])
 
     def test_poll_off_does_nothing(self):
         self._cfg(enabled=False, cutoff="2026-11-10T08:00")

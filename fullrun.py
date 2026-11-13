@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Full-folder pipeline (resumable): tagger -> index -> sharpness/bursts/rank (calibrated, General/Rank/Best|Good) -> OCR
--> additive apply -> Cull smart albums -> verification.
+-> additive XMP apply -> Cull keywords -> verification.
 Draft Captions are NOT part of this pipeline. Usage: venv/bin/python fullrun.py <folder> [--profile motorsport] [--context ...]"""
-import argparse, json, os, re, subprocess, sys, time
+import argparse, os, json, os, re, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"; sys.path.insert(0, str(HOME))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr")); sys.path.insert(0, str(HOME))
 TAG = str(HOME / "tag")
 
 def log(*a): print(time.strftime("%H:%M:%S"), *a, flush=True)
@@ -25,10 +25,10 @@ def run(cmd, env=None):
     return tail
 
 def snap(path, folder=None):
-    # folder-scoped (snap.js --folder): never snapshot whatever collection Capture One happens to show
-    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)] + (["--folder", str(folder)] if folder else []),
-                   check=True, capture_output=True)
-    return json.load(open(path))
+    from apply_xmp import write_snap
+    if not folder:
+        raise ValueError("snap requires a folder (XMP sidecars are read from disk, not a catalog)")
+    return write_snap(path, folder)
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("folder"); ap.add_argument("--profile", default="motorsport")
@@ -52,7 +52,7 @@ def main():
         step(f, lambda f=f: run([TAG, f, str(folder)] + (["--top", "50"] if f == "rank" else [])))
     step("ocr", lambda: run([TAG, "ocr", str(folder), "--resume"]))
     if not a.no_apply:
-        from apply_c1 import apply_proposals
+        from apply_xmp import apply_proposals
         srcs = {"tagger": f"{a.profile}-proposals-full", "camera": "camera-proposals", "scene": "scene-proposals", "sharpness": "sharpness-proposals", "bursts": "bursts-proposals",
                 "rank": "rank-proposals", "ocr": "ocr-proposals"}
         srcs = {k: v for k, v in srcs.items() if (out / f"{v}.json").exists()}

@@ -17,7 +17,7 @@
       "imports_root": true
     }
   },
-  "keyword_library": "Trip Keywords",
+  "xmp_backup": true,
   "thresholds": {
     "label_min": 0.55,
     "colour_min": 0.45,

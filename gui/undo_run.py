@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Build undo plan from a job's apply result files; dry-run or apply via undo_c1.js."""
+"""Build undo plan from a job's apply result files; dry-run or apply via apply_xmp."""
 from __future__ import annotations
-import json, subprocess, time
+import os
+import json, time
 from pathlib import Path
 from collections import defaultdict
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 OUT = HOME / "out"
 
 def collect_added_keywords(job: dict) -> dict:
@@ -70,17 +71,6 @@ def collect_added_keywords(job: dict) -> dict:
 
 
 
-def _keyword_library():
-    try:
-        import sys as _sys
-        _sys.path.insert(0, str(HOME))
-        import apply_c1 as _AC
-        _AC.HOME = HOME
-        return _AC.keyword_library()
-    except Exception:
-        return "Trip Keywords"
-
-
 def run_undo(job: dict, apply: bool = False, prefix: str | None = None):
     plan_data = collect_added_keywords(job)
     if not plan_data["items"]:
@@ -88,18 +78,17 @@ def run_undo(job: dict, apply: bool = False, prefix: str | None = None):
     stamp = time.strftime("%Y%m%d-%H%M%S")
     prefix = prefix or str(HOME / "out" / plan_data["folder_name"] / f"undo-{job.get('id','job')}-{stamp}")
     plan_path = prefix + "-plan.json"
-    result_path = prefix + "-result.json"
-    json.dump({"library": _keyword_library(), "items": plan_data["items"], "job_id": job.get("id"),
-               "sources": plan_data["sources"],
-               # folder scope: undo_c1.js selects this folder and matches by image path (never by name alone)
-               "scope_folder": job.get("folder") or plan_data.get("folder")}, open(plan_path, "w"), indent=1)
-    cmd = ["osascript", "-l", "JavaScript", str(HOME / "undo_c1.js"), plan_path, result_path] + ([] if apply else ["dry"])
-    p = subprocess.run(cmd, capture_output=True, text=True)
-    if p.returncode:
-        return {"ok": False, "error": p.stderr[:500] or p.stdout[:500], "plan": plan_data, "plan_path": plan_path}
-    res = json.load(open(result_path))
-    # verify no rating/colour drift in failures
+    plan = {"items": plan_data["items"], "job_id": job.get("id"),
+            "sources": plan_data["sources"],
+            "scope_folder": job.get("folder") or plan_data.get("folder"),
+            "folder": job.get("folder") or plan_data.get("folder")}
+    Path(plan_path).parent.mkdir(parents=True, exist_ok=True)
+    json.dump(plan, open(plan_path, "w"), indent=1)
+    import sys as _sys
+    _sys.path.insert(0, str(HOME))
+    import apply_xmp as AX
+    res = AX.undo_plan(plan, apply=apply, prefix=prefix)
     return {"ok": True, "dry_run": not apply, "plan": plan_data, "plan_path": plan_path,
-            "result_path": result_path, "removed": len(res.get("removed") or []),
+            "result_path": prefix + "-result.json", "removed": len(res.get("removed") or []),
             "skipped": len(res.get("skipped") or []), "failures": res.get("failures") or [],
             "result": res}

@@ -3,32 +3,34 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.trips.localai.gui</string>
+  <string>com.trips.localai-lr.gui</string>
   <key>ProgramArguments</key>
   <array>
-    <string>__HOME__/localai/venv/bin/python</string>
-    <string>__HOME__/localai/gui/server.py</string>
+    <string>__HOME__/localai-lr/venv/bin/python</string>
+    <string>__HOME__/localai-lr/gui/server.py</string>
   </array>
   <key>WorkingDirectory</key>
-  <string>__HOME__/localai</string>
+  <string>__HOME__/localai-lr</string>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>__HOME__/localai/logs/gui/server.out.log</string>
+  <string>__HOME__/localai-lr/logs/gui/server.out.log</string>
   <key>StandardErrorPath</key>
-  <string>__HOME__/localai/logs/gui/server.err.log</string>
+  <string>__HOME__/localai-lr/logs/gui/server.err.log</string>
   <key>EnvironmentVariables</key>
   <dict>
     <key>PATH</key>
-    <string>__HOME__/localai/venv/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <string>__HOME__/localai-lr/venv/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>HOME</key>
     <string>__HOME__</string>
+    <key>LOCALAI_HOME</key>
+    <string>__HOME__/localai-lr</string>
     <key>LOCALAI_GUI_HOST</key>
     <string>0.0.0.0</string>
     <key>LOCALAI_GUI_PORT</key>
-    <string>8765</string>
+    <string>8766</string>
   </dict>
 </dict>
 </plist>

@@ -10,17 +10,17 @@ Local AI features (all on-device, originals read-only).
   rank       calibrated rank (sharpness+aesthetic+burst) -> General/Rank/Best|Good
   journal    markdown day summary for a folder (local LLM)
   ask        question answering over the local index (local LLM, simple RAG)
-  faces      People pass: detect + embed + cluster + match ~/localai/people library
+  faces      People pass: detect + embed + cluster + match ~/localai-lr/people library
   name-person  name a cluster (writes persistent people library; use --shoot)
   scene      General/Scene/* keywords (architecture, street, concert, motorsport, …)
   camera     EXIF / Canon MakerNotes + preview clip check (General/Camera/*, Quality clip flags)
   captions   draft captions (sidecar JSON for Salamander)
-Index: ~/localai/index/catalog.sqlite (+ index/siglip/*.npy, keyed by SHA-256).
+Index: ~/localai-lr/index/catalog.sqlite (+ index/siglip/*.npy, keyed by SHA-256).
 """
-import argparse, csv, json, math, os, re, sqlite3, subprocess, sys, time
+import argparse, os, csv, json, math, os, re, sqlite3, subprocess, sys, time
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 sys.path.insert(0, str(HOME))
 os.environ.setdefault("HF_HOME", str(HOME / "models" / "hf"))
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
@@ -355,7 +355,7 @@ def cmd_ocr(args):
         old.update({r["sha256"]: r for r in recs})
         json.dump(list(old.values()), open(f, "w"), ensure_ascii=False, indent=1)
         print("sidecar:", f)
-        # apply_c1 proposals: write text into IPTC Description ONLY where it is empty (checked at apply time)
+        # proposals: captions stay export-only; the XMP writer never writes descriptions
         props = []
         for r in recs:
             good = [l["text"] for l in r["lines"] if l["conf"] >= 0.5 and len(l["text"]) >= 2][:12]
@@ -391,7 +391,7 @@ def quality_rows(c, folder, shas=None):
     return out
 
 def write_proposals(folder_path, name, recs):
-    """apply_c1-compatible proposals file"""
+    """apply_xmp-compatible proposals file"""
     d = OUT / Path(folder_path).name; d.mkdir(parents=True, exist_ok=True)
     f = d / f"{name}-proposals.json"
     json.dump({"folder": str(folder_path), "profile": name, "images": recs}, open(f, "w"), indent=1)

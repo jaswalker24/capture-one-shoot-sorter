@@ -15,7 +15,6 @@ sys.path.insert(0, str(ROOT / "gui"))
 
 import rank_exports as R
 import train_rank_exports as TR
-import apply_c1 as AC
 import jobrunner as JR
 
 
@@ -91,25 +90,6 @@ class RankConfig(unittest.TestCase):
         self.assertEqual(rank2["previous_weights"]["aes"], 0.45)
         self.assertFalse(rank2["adopted"])
 
-
-class KeywordLibrary(unittest.TestCase):
-    def setUp(self):
-        self.tmp = Path(tempfile.mkdtemp(prefix="kwlib-"))
-        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.prev = AC.HOME
-        AC.HOME = self.tmp
-        self.addCleanup(lambda: setattr(AC, "HOME", self.prev))
-
-    def test_default_is_trip_keywords(self):
-        self.assertEqual(AC.keyword_library(), "Trip Keywords")
-
-    def test_config_override(self):
-        (self.tmp / "config.json").write_text(json.dumps({"keyword_library": "Grok Keywords"}))
-        self.assertEqual(AC.keyword_library(), "Grok Keywords")
-
-    def test_explicit_name_wins(self):
-        (self.tmp / "config.json").write_text(json.dumps({"keyword_library": "Grok Keywords"}))
-        self.assertEqual(AC.keyword_library("Trip Keywords"), "Trip Keywords")
 
 
 class TrainJob(unittest.TestCase):

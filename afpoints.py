@@ -20,11 +20,11 @@ Usage:
 Outputs (in ~/localai/out/<folder>/): afpoints-exif.json (cache), afpoints.csv, afpoints-proposals.json
 Never writes to originals or the catalog.
 """
-import argparse, csv, json, math, os, subprocess, sys, time
+import argparse, os, csv, json, math, os, subprocess, sys, time
 from collections import Counter
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 OUT = HOME / "out"
 EXIFTOOL = str(HOME / "bin" / "exiftool")
 TAGS = ["FileName", "Orientation", "Model", "FocusMode", "AFAreaMode", "NumAFPoints", "ValidAFPoints",

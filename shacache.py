@@ -1,8 +1,9 @@
 """SHA-256 of originals, cached in index/catalog.sqlite path_cache keyed by (path, size, mtime).
 A changed size or mtime forces a full re-hash. Originals are only ever opened read-only."""
+import os
 import hashlib, sqlite3
 from pathlib import Path
-DB = Path.home() / "localai" / "index" / "catalog.sqlite"
+DB = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr")) / "index" / "catalog.sqlite"
 
 def _hash(p):
     h = hashlib.sha256()

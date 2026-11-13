@@ -1,19 +1,18 @@
 #!/bin/bash
-# Install Trips Local AI for Capture One into ~/localai on macOS.
+# Install Trips Local AI for Lightroom into ~/localai-lr on macOS.
 # Safe to re-run: existing config, token, models, venv and a running
-# control panel are left alone.
+# control panel are left alone. This edition is separate from the
+# Capture One install in ~/localai; this script never touches that tree.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-DEST="${LOCALAI_HOME:-$HOME/localai}"
-SCRIPTS_DIR="${LOCALAI_SCRIPTS_DIR:-$HOME/Library/Scripts/Capture One Scripts/Trip Local AI}"
+DEST="${LOCALAI_HOME:-$HOME/localai-lr}"
 LAUNCH_AGENTS_DIR="${LOCALAI_LAUNCH_AGENTS_DIR:-$HOME/Library/LaunchAgents}"
 EXIFTOOL_VER="13.61"
 UV_VER="0.13.7"
 OLLAMA_VER="0.40.15"
 PYTHON_VER="3.12"
-GUI_LABEL="com.trips.localai.gui"
-LEGACY_GUI_LABEL="com.grok.localai.gui"
+GUI_LABEL="com.trips.localai-lr.gui"
 
 DRY_RUN=0
 SKIP_MODELS=0
@@ -27,9 +26,9 @@ usage() {
   cat <<EOF
 Usage: ./install.sh [options]
 
-Installs Trips Local AI into ${LOCALAI_HOME:-~/localai} on an Apple-silicon Mac.
+Installs Trips Local AI for Lightroom into ${LOCALAI_HOME:-~/localai-lr} on an Apple-silicon Mac.
 Safe to re-run. Never overwrites an existing config.json or GUI token,
-and never prints secrets.
+never prints secrets, and never touches a Capture One install in ~/localai.
 
 Options:
   --dry-run                 Print what would happen; change nothing
@@ -38,14 +37,14 @@ Options:
   --skip-dock               Do not install or refresh the Dock shortcut
   --skip-launch-agents      Write no LaunchAgent and do not load one
   --with-translation-model  Also pull qwen3:8b (OCR translation, ~5 GB)
-  --uninstall               Remove the LaunchAgent, Scripts menu, Dock app
-                            and the runtime folder. Photos and the Capture
-                            One catalog are not touched.
+  --uninstall               Remove this edition's LaunchAgent, Dock app
+                            and the runtime folder. Photos, Lightroom
+                            catalogues and any Capture One install in
+                            ~/localai are not touched.
   -h, --help                Show this help
 
 Environment:
-  LOCALAI_HOME              Install prefix (default: ~/localai)
-  LOCALAI_SCRIPTS_DIR       Capture One Scripts folder
+  LOCALAI_HOME              Install prefix (default: ~/localai-lr)
   LOCALAI_LAUNCH_AGENTS_DIR LaunchAgents folder
 EOF
 }
@@ -77,24 +76,18 @@ run() {
 }
 
 do_uninstall() {
-  echo "Removing Trips Local AI."
-  echo "Photos and the Capture One catalog are not touched."
+  echo "Removing Trips Local AI for Lightroom."
+  echo "Photos, Lightroom catalogues and any Capture One install are not touched."
   if [[ "$DRY_RUN" -eq 1 ]]; then
-    echo "[dry-run] would unload LaunchAgents, remove Scripts menu, Dock app and $DEST"
+    echo "[dry-run] would unload $GUI_LABEL, remove the Lightroom Dock app and $DEST"
     exit 0
   fi
   if [[ "$(uname -s)" == "Darwin" ]]; then
     UID_N="$(id -u)"
     launchctl bootout "gui/${UID_N}/${GUI_LABEL}" 2>/dev/null || true
-    launchctl bootout "gui/${UID_N}/${LEGACY_GUI_LABEL}" 2>/dev/null || true
   fi
   rm -f "$HOME/Library/LaunchAgents/${GUI_LABEL}.plist"
-  rm -f "$HOME/Library/LaunchAgents/${LEGACY_GUI_LABEL}.plist"
-  rm -rf "$HOME/Library/Scripts/Capture One Scripts/Trip Local AI"
-  rm -rf "$HOME/Library/Scripts/Capture One Scripts/Grok Local AI"
-  rm -rf "$HOME/Applications/Trips Local AI.app"
-  rm -rf "$HOME/Applications/Trip Local AI.app"
-  rm -rf "$HOME/Applications/Grok Local AI.app"
+  rm -rf "$HOME/Applications/Trips Local AI for Lightroom.app"
   rm -rf "$DEST"
   echo "Removed. You can delete the Dock tile if it is still there."
   exit 0
@@ -183,10 +176,10 @@ if [[ "$OS" == "Darwin" ]]; then
   if xcode-select -p >/dev/null 2>&1; then
     echo "Command Line Tools: $(xcode-select -p)"
   else
-    echo "Command Line Tools are not installed. Some steps (compiling Scripts menu items) need them."
+    echo "Command Line Tools are not installed. Some optional compile steps may need them."
     echo "Run: xcode-select --install"
     if [[ "$DRY_RUN" -eq 0 && "$OS_OK" -eq 1 ]]; then
-      echo "Continuing; Scripts menu items will fall back to precompiled copies if needed."
+      echo "Continuing without Command Line Tools."
     fi
   fi
 fi
@@ -316,7 +309,7 @@ else
 fi
 
 pull_models() {
-  local default_home="$HOME/localai"
+  local default_home="$HOME/localai-lr"
   if [[ "$SKIP_MODELS" -eq 1 ]]; then
     echo "Skipping model downloads"
     return 0
@@ -340,7 +333,7 @@ pull_models() {
   export OLLAMA_MODELS="$DEST/models"
   export OLLAMA_HOST=127.0.0.1:11434
   if [[ -x "$DEST/start-ollama.sh" ]]; then
-    # start-ollama.sh uses ~/localai unless LOCALAI_HOME is set
+    # start-ollama.sh uses ~/localai-lr unless LOCALAI_HOME is set
     LOCALAI_HOME="$DEST" "$DEST/start-ollama.sh" >/dev/null || true
   fi
   local n=0
@@ -385,24 +378,9 @@ pull_models() {
 }
 pull_models
 
-# --- Capture One Scripts menu ---
-say "Installing Capture One Scripts menu: Trip Local AI"
-if [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "[dry-run] compile or copy scripts into $SCRIPTS_DIR"
-else
-  mkdir -p "$SCRIPTS_DIR"
-  if have osacompile; then
-    for src in "$DEST/scripts/src/"*.applescript; do
-      [[ -f "$src" ]] || continue
-      base="$(basename "$src" .applescript)"
-      osacompile -o "$SCRIPTS_DIR/$base.scpt" "$src"
-    done
-  elif [[ -d "$ROOT/scripts/compiled" ]]; then
-    rsync -a "$ROOT/scripts/compiled/" "$SCRIPTS_DIR/"
-  fi
-fi
+# This edition has no Capture One Scripts menu.
 
-# --- Keyword library (rebuild text/csv; import into Capture One is manual) ---
+# --- Keyword library (optional import into Lightroom is manual) ---
 say "Keyword library"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] $DEST/venv/bin/python $DEST/keywords/build_library.py"
@@ -442,20 +420,14 @@ elif [[ "$DRY_RUN" -eq 1 ]]; then
   echo "[dry-run] write $LAUNCH_AGENTS_DIR/$GUI_LABEL.plist (load only if not already running)"
 else
   mkdir -p "$LAUNCH_AGENTS_DIR"
-  PLIST_SRC="$ROOT/gui/com.trips.localai.gui.plist"
+  PLIST_SRC="$ROOT/gui/com.trips.localai-lr.gui.plist"
   if [[ ! -f "$PLIST_SRC" ]]; then
-    PLIST_SRC="$DEST/gui/com.trips.localai.gui.plist"
-  fi
-  if [[ ! -f "$PLIST_SRC" ]]; then
-    PLIST_SRC="$ROOT/gui/${LEGACY_GUI_LABEL}.plist"
-  fi
-  if [[ ! -f "$PLIST_SRC" ]]; then
-    PLIST_SRC="$DEST/gui/${LEGACY_GUI_LABEL}.plist"
+    PLIST_SRC="$DEST/gui/com.trips.localai-lr.gui.plist"
   fi
   if [[ -f "$PLIST_SRC" ]]; then
     # Fill __HOME__ and point program paths at DEST.
     sed -e "s|__HOME__|$HOME|g" \
-        -e "s|$HOME/localai|$DEST|g" \
+        -e "s|$HOME/localai-lr|$DEST|g" \
         "$PLIST_SRC" > "$LAUNCH_AGENTS_DIR/$GUI_LABEL.plist"
     if command -v plutil >/dev/null 2>&1; then
       plutil -replace Label -string "$GUI_LABEL" "$LAUNCH_AGENTS_DIR/$GUI_LABEL.plist" 2>/dev/null || true
@@ -464,8 +436,7 @@ else
     REAL_AGENTS="$HOME/Library/LaunchAgents"
     if [[ "$OS" == "Darwin" && "$LAUNCH_AGENTS_DIR" == "$REAL_AGENTS" ]]; then
       UID_N="$(id -u)"
-      if launchctl print "gui/${UID_N}/${GUI_LABEL}" >/dev/null 2>&1 \
-         || launchctl print "gui/${UID_N}/${LEGACY_GUI_LABEL}" >/dev/null 2>&1; then
+      if launchctl print "gui/${UID_N}/${GUI_LABEL}" >/dev/null 2>&1; then
         echo "Control panel LaunchAgent is already loaded; leaving it running."
         echo "To refresh after an update, use: $DEST/gui/reload_when_idle.py"
       else
@@ -481,7 +452,7 @@ fi
 if [[ "$SKIP_DOCK" -eq 1 ]]; then
   echo "Skipping Dock shortcut"
 elif [[ "$DRY_RUN" -eq 1 ]]; then
-  echo "[dry-run] install ~/Applications/Trips Local AI.app and add it to the Dock if missing"
+  echo "[dry-run] install ~/Applications/Trips Local AI for Lightroom.app and add it to the Dock if missing"
 else
   mkdir -p "$DEST/gui/macos"
   if [[ -d "$ROOT/gui/macos" ]]; then
@@ -489,12 +460,12 @@ else
   fi
   if [[ "$OS" == "Darwin" && -x "$DEST/gui/macos/install-dock-app.sh" ]]; then
     # Do not bounce the Dock on a re-run when the app is already present.
-    if [[ -d "$HOME/Applications/Trips Local AI.app" ]]; then
+    if [[ -d "$HOME/Applications/Trips Local AI for Lightroom.app" ]]; then
       LOCALAI_SKIP_DOCK_RESTART=1 "$DEST/gui/macos/install-dock-app.sh" || \
-        echo "Warning: Dock shortcut refresh failed (the panel still works at http://127.0.0.1:8765/)"
+        echo "Warning: Dock shortcut refresh failed (the panel still works at http://127.0.0.1:8766/)"
     else
       "$DEST/gui/macos/install-dock-app.sh" || \
-        echo "Warning: Dock shortcut install failed (the panel still works at http://127.0.0.1:8765/)"
+        echo "Warning: Dock shortcut install failed (the panel still works at http://127.0.0.1:8766/)"
     fi
   fi
 fi
@@ -519,33 +490,34 @@ Next steps (one-time):
   1. Set your NAS photo folders in the control panel under
      Settings → Locations (Browse or paste), or edit $DEST/config.json
      (imports_root, exports_root, and optional photos_root /
-     other_exports_root). Mount the volume before using the health strip.
+     other_exports_root / schedules_root). Mount the volume before
+     using the health strip.
 
-  2. Grant permissions in System Settings → Privacy & Security:
-       • Automation — allow Terminal, osascript and the control-panel
-         Python to control Capture One.
-       • Full Disk Access — give Capture One, Terminal and
-         $DEST/venv/bin/python access if your photos live on a NAS
-         or an external disk.
+  2. Grant Full Disk Access in System Settings → Privacy & Security
+     to Terminal and $DEST/venv/bin/python if your photos live on a
+     NAS or an external disk.
 
-  3. Open Capture One 16.8.x (this setup is tested with 16.8.5.30).
-     Window → Keyword Library: create or import a library named exactly
-     "Trip Keywords", then import:
+  3. Optionally import the keyword list into Lightroom Classic so the
+     hierarchy already exists in the catalogue (the XMP writer does
+     not need this, but it keeps the Keyword List tidy):
        $DEST/keywords/trip-keyword-library.txt
-     Scripts → Trip Local AI should list the tagging actions
-     (Draft Captions is for export folders only).
+     Metadata → Import Keywords.
 
-  4. Start the local model server if it is not already running:
+  4. In Lightroom, keep "Automatically write changes into XMP" off
+     for folders this tool will tag, until you have used
+     Metadata → Read Metadata from Files on them.
+
+  5. Start the local model server if it is not already running:
        $DEST/start-ollama.sh
      It only listens on 127.0.0.1. Nothing is exposed to the network.
 
-  5. Open the control panel: http://127.0.0.1:8765/
-     or the "Trips Local AI" Dock shortcut (signs you in locally).
+  6. Open the control panel: http://127.0.0.1:8766/
+     or the "Trips Local AI for Lightroom" Dock shortcut (signs you in locally).
      The login token is stored at $DEST/gui/auth.token (never share it).
      Settings → Locations sets the NAS paths; the Training tab can queue
-     a rank-training job (NAS read-only, never writes to Capture One).
+     a rank-training job (NAS read-only, never writes sidecars).
 
-  6. First tagging run also downloads the SigLIP image model into
+  7. First tagging run also downloads the SigLIP image model into
      $DEST/models/hf (about 1–2 GB). Keep the Mac awake until it finishes.
 
   Optional: OCR translation uses qwen3:8b. Pull it with:
@@ -556,5 +528,5 @@ Quick smoke test:
   $DEST/start-ollama.sh
   $DEST/tag --help
 
-See INSTALL.md for updating, uninstalling, and Intel Mac notes.
+See INSTALL-LR.md for updating, uninstalling, Lightroom read-back, and Intel Mac notes.
 EOF

@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-"""Pick the Capture One catalog folder collection for a job path, and cull-album membership.
+"""Cull-keyword membership (and leftover catalog-folder helpers kept for tests).
 
-Shared by tests and cull_album.py. The same rules are implemented in JXA
-(scopeToFolder in apply_c1.js, snap.js and undo_c1.js): exact folder path first,
-then a uniquely named catalog folder under the Camera Imports tree.
-folderPath smart albums are not used.
+Shared by tests and cull_album.py. This Lightroom edition does not talk to a catalog;
+cull membership is computed from sidecar keywords and written back as Cull|* keywords.
 """
 from pathlib import Path
 

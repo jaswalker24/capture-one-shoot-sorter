@@ -2,7 +2,7 @@
 """People pass: local face detect (Apple Vision) + ArcFace embed + cluster + library match.
 
 All on-device. Produces:
-  out/<shoot>/people-proposals.json   Capture One additive keywords People/<Name>
+  out/<shoot>/people-proposals.json   additive keywords People/<Name> for XMP
   out/<shoot>/people/clusters.json    anonymous + named clusters for the GUI
   out/<shoot>/people/person_XXX.jpg   contact sheets
   ~/localai/people/library.json       persistent named people (centroids)
@@ -18,7 +18,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 PEOPLE_DIR = HOME / "people"
 LIB_PATH = PEOPLE_DIR / "library.json"
 OUT = HOME / "out"
@@ -164,7 +164,7 @@ def run_people_pass(folder: Path, files: list[Path] | None = None, *,
                     cluster_eps: float = CLUSTER_EPS, proposals_only: bool = True) -> dict:
     """Detect/embed/cluster faces for a shoot and write proposals + contact sheets.
 
-    proposals_only is informational (this function never writes to Capture One).
+    proposals_only is informational (this function never writes sidecars).
     """
     import features as F
 

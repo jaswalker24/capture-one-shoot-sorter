@@ -3,18 +3,18 @@
 
 Multi-label SigLIP (local, no caption model). Proposes General/Scene/* keywords
 with per-label thresholds, a cap per frame, and conservative defaults (precision
-over recall). Writes proposals only — it never talks to Capture One.
+over recall). Writes proposals only — it never writes sidecars on its own.
 
 Image features come from the existing index embeddings when present, otherwise
 from the cached preview (same SigLIP model as the tagger). MP4s are ignored.
 """
 from __future__ import annotations
 
-import argparse, csv, json, os, sys, time
+import argparse, os, csv, json, os, sys, time
 from collections import Counter
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 
 # Heavy imports (tagger, torch/SigLIP, preview cache) are lazy so unit tests can
 # import the vocabulary and selection logic without the localai runtime.
@@ -681,7 +681,7 @@ def run_scene_pass(folder: Path, files: list[Path] | None = None, sample: int = 
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Generalised scene keyword proposals (read-only, no Capture One writes)")
+    ap = argparse.ArgumentParser(description="Generalised scene keyword proposals (read-only, no sidecar writes)")
     ap.add_argument("folder", nargs="?")
     ap.add_argument("--files", nargs="+")
     ap.add_argument("--sample", type=int, default=0)

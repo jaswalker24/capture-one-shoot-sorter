@@ -3,17 +3,18 @@
 build(): per-frame keywords a run would ADD, from the proposals files of the chosen passes, using the
 same confidence rules as the job runner (needs_review / errors never applied, Rank only General/Rank/*,
 AF focus Missed never applied). Compared with the keywords earlier runs recorded for each frame
-(offline, from out/<shoot>/*-result.json), and optionally checked against Capture One with a dry run
+(offline, from out/<shoot>/*-result.json), and optionally checked against existing XMP sidecars with a dry run
 (read-only; refused while another job is writing to the catalog).
 approve(): freezes the approved subset into out/<shoot>/preview-approved-<id>.json and queues an
-apply-only job. Nothing is written to Capture One until that job runs.
+apply-only job. Nothing is written to sidecars until that job runs.
 """
 from __future__ import annotations
+import os
 import json, subprocess, sys, threading, time
 from collections import Counter, defaultdict
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 OUT = HOME / "out"
 sys.path.insert(0, str(HOME))
 
@@ -105,7 +106,7 @@ def build(folder: str, passes, profile="motorsport", afpoints=True, apply_rank_k
            "frames_total": len(items), "frames_with_new": sum(1 for x in items if x["add"]),
            "keywords_new": sum(len(x["add"]) for x in items), "keywords_already": sum(len(x["already"]) for x in items),
            "by_keyword": dict(by_kw.most_common()), "by_pass": dict(by_pass), "items": items,
-           "compared_with": "keywords recorded by earlier runs of this shoot (offline); use 'Check against Capture One' for an exact read",
+           "compared_with": "keywords recorded by earlier runs of this shoot (offline); use 'Check existing XMP' for an exact read",
            "built": time.strftime("%Y-%m-%dT%H:%M:%S")}
     (OUT / shoot).mkdir(parents=True, exist_ok=True)
     json.dump(res, open(OUT / shoot / f"preview-{pid}.json", "w"))
@@ -154,7 +155,7 @@ def approve(shoot: str, pid: str, exclude_keywords=(), exclude_passes=(), exclud
 def start_c1_check(shoot: str, pid: str, busy_fn):
     busy = busy_fn()
     if busy:
-        raise RuntimeError(f"Capture One is busy ({busy}); the offline comparison is shown instead")
+        raise RuntimeError(f"A write is already running ({busy}); the offline comparison is shown instead")
     pv = load(shoot, pid)
     with _LOCK:
         if _CHECKS.get(pid, {}).get("status") == "running":
@@ -167,14 +168,14 @@ def start_c1_check(shoot: str, pid: str, busy_fn):
 def _c1_check(pv):
     pid = pv["id"]; shoot = pv["shoot"]
     try:
-        from apply_c1 import apply_proposals
+        from apply_xmp import apply_proposals
         imgs = [{"filename": fr["filename"], "sha256": fr.get("sha256"), "needs_review": False,
                  "proposed_keywords": [x["keyword"] for x in fr["add"] + fr["already"]]} for fr in pv["items"]]
         already = defaultdict(set); new = defaultdict(set)
         for i in range(0, len(imgs), 200):
             cf = OUT / shoot / f"preview-{pid}-check-{i // 200:03d}.json"
             json.dump({"folder": pv["folder"], "images": imgs[i:i + 200]}, open(cf, "w"))
-            # dry run: apply_c1.js reads the catalog and reports what it WOULD add; it writes nothing
+            # dry run: apply_xmp reads existing sidecars and reports what it WOULD add; it writes nothing
             r = apply_proposals(str(cf), apply=False, prefix=str(OUT / shoot / f"preview-{pid}-check-c{i // 200:03d}"))
             for a in r.get("applied") or []:
                 if a.get("keyword"): new[a["filename"]].add(a["keyword"])
@@ -194,7 +195,7 @@ def _c1_check(pv):
                   keywords_new=sum(len(x["add"]) for x in pv["items"]),
                   keywords_already=sum(len(x["already"]) for x in pv["items"]),
                   frames_with_new=sum(1 for x in pv["items"] if x["add"]),
-                  compared_with="Capture One (dry run at " + time.strftime("%H:%M") + ")")
+                  compared_with="existing XMP sidecars (dry run at " + time.strftime("%H:%M") + ")")
         json.dump(pv, open(OUT / shoot / f"preview-{pid}.json", "w"))
         with _LOCK:
             _CHECKS[pid].update(status="done", finished=time.strftime("%H:%M:%S"))

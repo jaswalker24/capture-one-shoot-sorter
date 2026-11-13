@@ -264,7 +264,7 @@ async function renderStats() {
   bits.push(s.nas_mounted ? `<span class="pill ok">NAS ok</span>` : `<span class="pill bad">NAS missing</span>`);
   if (s.disk_home_free_gb != null) bits.push(`<span class="pill"><strong>${s.disk_home_free_gb} GB</strong> free M5</span>`);
   if (s.disk_nas_free_gb != null) bits.push(`<span class="pill"><strong>${s.disk_nas_free_gb} GB</strong> free NAS</span>`);
-  bits.push(s.capture_one_running ? `<span class="pill ok">Capture One</span>` : `<span class="pill warn">C1 not running</span>`);
+  bits.push(s.lightroom_running ? `<span class="pill ok">Lightroom</span>` : `<span class="pill warn">Lightroom not running</span>`);
   bits.push(s.caption_model_loaded
     ? `<span class="pill bad">caption model LOADED</span>`
     : `<span class="pill ok">caption model off</span>`);
@@ -1087,7 +1087,7 @@ function updatePvCount(nRows, nShown) {
 async function pvRunCheck() {
   try {
     await api("/api/preview/check", { method: "POST", body: JSON.stringify({ shoot: pv.shoot, id: pv.id }) });
-    $("pvCheckMsg").textContent = "Checking against Capture One (read only)…";
+    $("pvCheckMsg").textContent = "Checking existing XMP sidecars (read only)…";
     pollCheck();
   } catch (e) { $("pvCheckMsg").textContent = e.message; }
 }
@@ -1097,11 +1097,11 @@ function pollCheck() {
   pv.timer = setTimeout(async () => {
     try {
       const c = await api(`/api/preview/check_status?id=${encodeURIComponent(pv.id)}`);
-      if (c.status === "running") { $("pvCheckMsg").textContent = `Checking against Capture One… ${c.done_chunks || 0} chunks done`; return pollCheck(); }
+      if (c.status === "running") { $("pvCheckMsg").textContent = `Checking existing XMP… ${c.done_chunks || 0} chunks done`; return pollCheck(); }
       if (c.status === "error") { $("pvCheckMsg").textContent = "Check failed: " + c.error; return; }
       if (c.status === "done") {
         pv.data = await api(`/api/preview?shoot=${encodeURIComponent(pv.shoot)}&id=${encodeURIComponent(pv.id)}`);
-        $("pvCheckMsg").textContent = `Checked against Capture One at ${c.finished}.`; renderPreview();
+        $("pvCheckMsg").textContent = `Checked against existing XMP at ${c.finished}.`; renderPreview();
       }
     } catch (e) { $("pvCheckMsg").textContent = e.message; }
   }, 3000);
@@ -1111,7 +1111,7 @@ async function pvApprove() {
   const passF = $("pvPass").value;
   const s = pvSelectedCount();
   if (!s.kw) return;
-  if (!confirm(`Add ${s.kw} keywords to ${s.frames} frames in Capture One?\n\nKeywords are only added (nothing removed); ratings and colour tags are not touched. You can undo the job from History.`)) return;
+  if (!confirm(`Add ${s.kw} keywords to ${s.frames} XMP sidecars?\n\nKeywords are only added (nothing removed); ratings and colour labels are not touched. You can undo the job from History. Next step in Lightroom: select the folder, choose Metadata > Read Metadata from Files, and keep “Automatically write changes into XMP” off until it has been read in.`)) return;
   const exclude_passes = passF ? (pv.data.sources || []).filter(x => x !== passF) : [];
   try {
     const r = await api("/api/preview/approve", { method: "POST", body: JSON.stringify({
@@ -1167,7 +1167,7 @@ async function startTraining() {
       index_missing: $("trainIndexMissing").checked,
       auto_adopt: $("trainAutoAdopt").checked,
     })});
-    $("trainStartNote").textContent = "Queued " + r.job.id + " — watch Progress below. This never writes to Capture One.";
+    $("trainStartNote").textContent = "Queued " + r.job.id + " — watch Progress below. This never writes sidecars.";
     await loadTrainingTab();
     refresh();
   } catch (e) {
@@ -1175,7 +1175,7 @@ async function startTraining() {
   }
 }
 async function adoptTraining() {
-  if (!confirm("Adopt the candidate ranking weights from the last report?\n\nThis only updates config.json. Capture One, stars, colour tags and rank keywords are not changed. Current weights are saved so you can Roll back.")) return;
+  if (!confirm("Adopt the candidate ranking weights from the last report?\n\nThis only updates config.json. Sidecars, stars, colour labels and rank keywords are not changed. Current weights are saved so you can Roll back.")) return;
   try {
     const r = await api("/api/train/adopt", { method: "POST", body: JSON.stringify({ confirm: true })});
     $("trainStartNote").textContent = r.reason || "Adopted";
@@ -1185,7 +1185,7 @@ async function adoptTraining() {
   }
 }
 async function rollbackTraining() {
-  if (!confirm("Roll back to the previous ranking weights?\n\nThis only updates config.json. Capture One, stars, colour tags and rank keywords are not changed. The weights you are leaving are saved so you can Adopt them again.")) return;
+  if (!confirm("Roll back to the previous ranking weights?\n\nThis only updates config.json. Sidecars, stars, colour labels and rank keywords are not changed. The weights you are leaving are saved so you can Adopt them again.")) return;
   try {
     const r = await api("/api/train/rollback", { method: "POST", body: JSON.stringify({ confirm: true })});
     $("trainStartNote").textContent = r.reason || "Rolled back";
@@ -1286,7 +1286,7 @@ function renderTrainReport(s) {
     </div>`
   ).join("") || `<p class="note">No source folders were recorded in this report.</p>`;
   box.innerHTML = `
-    <p class="note">Report ${escapeHtml(report.stamp || "")}${train.adopt_reason ? " · " + escapeHtml(train.adopt_reason) : ""}. Training is read-only on the NAS and does not write to Capture One.</p>
+    <p class="note">Report ${escapeHtml(report.stamp || "")}${train.adopt_reason ? " · " + escapeHtml(train.adopt_reason) : ""}. Training is read-only on the NAS and does not write sidecars.</p>
     <h3 style="margin:12px 0 4px;font-size:13px">Folders used</h3>
     ${srcLines}
     <table class="train-table">
@@ -1354,7 +1354,7 @@ async function start() {
     u.searchParams.delete("token");
     history.replaceState({}, "", u.pathname + u.search + u.hash);
     try { $("tokenInput").value = urlToken; await doLogin(); return; }
-    catch (e) { $("loginErr").textContent = (e && e.message) || "Auto-login failed — paste token from ~/localai/gui/auth.token"; }
+    catch (e) { $("loginErr").textContent = (e && e.message) || "Auto-login failed — paste token from ~/localai-lr/gui/auth.token"; }
   }
   try { await checkLogin(); } catch (e) {}
 }

@@ -11,7 +11,7 @@ import json, os, shutil, subprocess, sys, threading, time, uuid
 from datetime import datetime
 from pathlib import Path
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 
 DEFAULT_PHOTOS = Path("/Volumes/Photos")
 DEFAULT_IMPORTS = DEFAULT_PHOTOS / "Camera Imports"

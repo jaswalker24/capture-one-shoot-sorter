@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""Wait until the Trips Local AI job queue is empty, then reload the GUI LaunchAgent.
+"""Wait until the Trips Local AI for Lightroom job queue is empty, then reload the GUI LaunchAgent.
 
-Used so code changes (e.g. People path UI) go live without interrupting a running catalog job.
+Used so code changes (e.g. People path UI) go live without interrupting a running tagging job.
 Safe to leave detached: polls jobs/*.json; exits after one successful kickstart.
 """
 from __future__ import annotations
 import json, os, subprocess, sys, time
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 JOBS = HOME / "gui" / "jobs"
 LOG = HOME / "logs" / "gui" / "reload-when-idle.log"
 POLL = float(os.environ.get("LOCALAI_RELOAD_POLL", "20"))
-LABELS = ("com.trips.localai.gui", "com.grok.localai.gui")
+LABELS = ("com.trips.localai-lr.gui",)
 
 
 def log(msg: str):

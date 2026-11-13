@@ -2,7 +2,7 @@
 """Discover Camera Exports, match them to raws, and recalibrate the rank model.
 
 Read-only on the NAS. Does not apply rank keywords or change stars/colours,
-and never writes to Capture One.
+and never writes XMP sidecars.
 
 usage:
   venv/bin/python tools/train_rank_exports.py
@@ -10,10 +10,10 @@ usage:
   venv/bin/python tools/train_rank_exports.py --export-root "/path/Camera Exports" --index-missing
 """
 from __future__ import annotations
-import argparse, json, os, shutil, subprocess, sys, time
+import argparse, os, json, os, shutil, subprocess, sys, time
 from pathlib import Path
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 sys.path.insert(0, str(HOME))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import rank_exports as R

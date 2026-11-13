@@ -12,7 +12,7 @@ from __future__ import annotations
 import json, os, re, subprocess, threading, time
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 OUT = HOME / "out"
 CACHE = HOME / "cache"
 THUMBS = CACHE / "_review"
@@ -279,7 +279,7 @@ def start_apply(shoot: str, kind: str = "numbers"):
     _safe_shoot(shoot)
     busy = catalog_busy()
     if busy:
-        raise RuntimeError(f"Capture One is busy ({busy}); try again when it finishes")
+        raise RuntimeError(f"A write is already running ({busy}); try again when it finishes")
     log = HOME / "logs" / "gui" / f"review-apply-{kind}-{shoot}-{time.strftime('%Y%m%d-%H%M%S')}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     proc = subprocess.Popen([str(HOME / "venv/bin/python"), str(HOME / "review_apply.py"), shoot, "--apply", "--kind", kind],

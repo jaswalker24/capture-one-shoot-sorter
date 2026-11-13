@@ -3,23 +3,24 @@
 
 Per pass, additive keywords only (confident rows; needs_review rows are never applied), no captions,
 MP4/MOV ignored, before/after rating+colour snapshots of that folder, undo data (*-before/-result.json).
-Stops at the first refusal (Capture One scope mismatch). Optionally records the result files on the job
+Optionally records the result files on the job
 so the panel's Undo for that job also covers this re-apply.
 
 usage: reapply_folder.py <folder> --profile gig --passes tagger,sharpness,afpoints,bursts [--job <job.json>]
        [--check NAME:RATING:COLOR ...] [--apply]
 """
-import argparse, json, subprocess, sys, time
+import argparse, os, json, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"; OUT = HOME / "out"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr")); OUT = HOME / "out"
 sys.path.insert(0, str(HOME))
 from jobrunner import _proposal_file  # noqa: E402
-from apply_c1 import apply_proposals  # noqa: E402
+from apply_xmp import apply_proposals  # noqa: E402
 
-def snap(path, folder):
-    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path), "--folder", str(folder)],
-                   check=True, capture_output=True, timeout=600)
-    return json.load(open(path))
+def snap(path, folder=None):
+    from apply_xmp import write_snap
+    if not folder:
+        raise ValueError("snap requires a folder (XMP sidecars are read from disk, not a catalog)")
+    return write_snap(path, folder)
 
 def checks(s, specs):
     bad = []

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Trips Local AI</title>
+  <title>Trips Local AI for Lightroom</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png" />
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
   <link rel="stylesheet" href="/style.css" />
@@ -12,9 +12,9 @@
   <div id="loginView" class="login">
     <div class="brand">
       <img class="app-logo" src="/logo.png" alt="" width="32" height="32" />
-      <h1>Trips Local AI</h1>
+      <h1>Trips Local AI for Lightroom</h1>
     </div>
-    <p class="note">On this Mac, the Dock shortcut signs you in automatically. From another device, copy the one-line secret from the M5: open Terminal there and run <code>cat ~/localai/gui/auth.token</code>, then paste it below (no extra spaces or newline).</p>
+    <p class="note">On this Mac, the Dock shortcut signs you in automatically. From another device, copy the one-line secret from the M5: open Terminal there and run <code>cat ~/localai-lr/gui/auth.token</code>, then paste it below (no extra spaces or newline).</p>
     <label>Shared secret
       <input type="password" id="tokenInput" autocomplete="current-password" />
     </label>
@@ -29,8 +29,8 @@
       <div class="brand">
         <img class="app-logo" src="/logo.png" alt="" width="32" height="32" />
         <div>
-          <h1>Trips Local AI</h1>
-          <div class="sub">Control panel · additive keywords only · no cloud</div>
+          <h1>Trips Local AI for Lightroom</h1>
+          <div class="sub">Control panel · Lightroom Classic · additive keywords only · no cloud</div>
         </div>
       </div>
     </header>
@@ -52,7 +52,8 @@
     <div id="tab-run" class="panel-section active">
       <div class="grid">
         <section class="card">
-          <h2>New catalog job</h2>
+          <h2>New tagging job</h2>
+          <p class="note" id="lrNextStep"><strong>Next step in Lightroom:</strong> after a job writes sidecars, select the folder, choose <em>Metadata → Read Metadata from Files</em>, and keep “Automatically write changes into XMP” off until the keywords have been read in.</p>
           <div class="row">
             <label>Profile
               <select id="presetSelect"><option value="">— custom —</option></select>
@@ -250,7 +251,7 @@
       <div class="grid">
         <section class="card">
           <h2>Rank training</h2>
-          <p class="note">Retrains the quality ranking from your exports and 3★+ ratings. Leave-one-shoot-out evaluation. Read-only on the NAS. It never writes to Capture One and never changes stars, colour tags or rank keywords. The run is queued like any other job.</p>
+          <p class="note">Retrains the quality ranking from your exports and 3★+ ratings. Leave-one-shoot-out evaluation. Read-only on the NAS. It never writes sidecars and never changes stars, colour tags or rank keywords. The run is queued like any other job.</p>
           <div class="hr"></div>
           <h2>Training data</h2>
           <p class="note">The run uses only folders marked as training data in Settings → Locations. Those folders are read only — training never modifies them.</p>
@@ -368,7 +369,7 @@
       </section>
       <section class="card">
         <h2>Notifications</h2>
-        <p class="note">Alerts when a job finishes, fails or has a keyword preview waiting. Telegram needs a BotFather token + chat id in <code>~/localai/gui/notify.json</code> (untracked, never committed; see the README). The Telegram inbound bridge cannot send alerts. Email uses local sendmail when enabled.</p>
+        <p class="note">Alerts when a job finishes, fails or has a keyword preview waiting. Telegram needs a BotFather token + chat id in <code>~/localai-lr/gui/notify.json</code> (untracked, never committed; see the README). The Telegram inbound bridge cannot send alerts. Email uses local sendmail when enabled.</p>
         <div id="notifyStatus" class="note"></div>
         <div class="row">
           <label class="inline"><input type="checkbox" id="notifyEnabled" /> Enable notifications</label>
@@ -380,7 +381,7 @@
       </section>
       <section class="card">
         <h2>Auto-queue new shoots</h2>
-        <p class="note">When this is on, every ~30 minutes (in step with Capture One referencing new imports) the panel looks in <code>[03] Photos/Camera Imports/&lt;year&gt;/</code> for <code>YYYY-MM-DD…</code> folders newer than the last-run cutoff below. A folder is newer if its date is after the cutoff day, or it is a same-day folder created after the cutoff time. It is only queued once Capture One has referenced it <em>and</em> the folder has stopped changing. Already-run folders and folders that already have a job are left alone. Off by default. Times are Europe/London.</p>
+        <p class="note">When this is on, every poll interval the panel looks in <code>Camera Imports/&lt;year&gt;/</code> for <code>YYYY-MM-DD…</code> folders newer than the last-run cutoff below. A folder is newer if its date is after the cutoff day, or it is a same-day folder created after the cutoff time. It is only queued once the folder has stopped changing (same file count and size on two looks, and nothing written for the stable interval). Already-run folders and folders that already have a job are left alone. Off by default. Times are Europe/London.</p>
         <div class="row">
           <label class="inline"><input type="checkbox" id="aqEnabled" /> Auto-queue new shoots</label>
           <label>Profile <select id="aqProfile"></select></label>
@@ -430,7 +431,7 @@
       <h3 class="pv-h">Per frame <span class="note" id="pvCount"></span></h3>
       <div class="pv-table"><table class="data"><thead><tr><th></th><th>Frame</th><th>Would add</th><th>Already there</th></tr></thead><tbody id="pvRows"></tbody></table></div>
       <div class="row" style="margin-top:12px">
-        <button class="secondary" id="pvCheck" title="Dry run against Capture One: reads only, writes nothing. Not available while a job is writing.">Check against Capture One</button>
+        <button class="secondary" id="pvCheck" title="Dry run against existing XMP sidecars: reads only, writes nothing. Not available while a job is writing.">Check existing XMP</button>
         <span class="note" id="pvCheckMsg"></span>
         <span style="flex:1"></span>
         <button class="secondary hidden" id="pvDiscard">Discard this preview</button>

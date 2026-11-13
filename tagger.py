@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
-Local AI photo tagger for Capture One (Apple silicon).
+Local AI photo tagger for Lightroom Classic (Apple silicon).
 
 READ-ONLY on originals: files are opened for reading only (hash + embedded preview).
 Previews are cached under ~/localai/cache, outputs under ~/localai/out/<folder>/.
-Never writes to Capture One - it only produces keyword PROPOSALS (json + csv).
+Writes keyword PROPOSALS (json + csv). Additive apply to XMP sidecars only with --apply.
 
 Profiles: motorsport | gig | street (kyoto is an alias of street)
 """
-import argparse, base64, csv, hashlib, io, json, os, re, subprocess, sys, time
+import argparse, os, base64, csv, hashlib, io, json, os, re, subprocess, sys, time
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 os.environ.setdefault("HF_HOME", str(HOME / "models" / "hf"))
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
@@ -416,7 +416,7 @@ def process(p, folder, profile, cfg, clip, args):
 def main():
     ap = argparse.ArgumentParser(description="Local AI keyword/caption proposals (read-only)")
     ap.add_argument("folder", nargs="?")
-    ap.add_argument("--files", nargs="+", help="explicit image paths (e.g. a Capture One selection) instead of a folder")
+    ap.add_argument("--files", nargs="+", help="explicit image paths instead of a folder")
     ap.add_argument("--resume", action="store_true", help="skip frames already in this run's .jsonl progress file")
     ap.add_argument("--profile", required=True, choices=list(PROFILES))
     ap.add_argument("--sample", type=int, default=0, help="evenly spread N images through the folder (0 = all)")
@@ -425,7 +425,7 @@ def main():
     ap.add_argument("--config", default=str(HOME / "config.json"))
     ap.add_argument("--tag", default="", help="suffix for output file names, e.g. dryrun")
     ap.add_argument("--apply", action="store_true",
-                    help="after tagging, ADD confident keywords (needs_review=false, proposed only) to Capture One; default is a dry-run plan only")
+                    help="after tagging, ADD confident keywords (needs_review=false, proposed only) to XMP sidecars; default is a dry-run plan only")
     ap.add_argument("--context", default="", help='shoot context for captions, e.g. "Britcar Into The Night, Brands Hatch"')
     args = ap.parse_args()
     global CONTEXT
@@ -491,9 +491,9 @@ def main():
             w.writerow(row)
     el = time.time() - t_all
     print(f"done {len(recs)} images in {el:.0f}s ({el/max(1,len(recs)):.1f}s/image)", flush=True)
-    # Capture One step: dry-run plan by default, additive apply only with --apply
+    # XMP sidecar step: dry-run plan by default, additive apply only with --apply
     sys.path.insert(0, str(HOME))
-    from apply_c1 import apply_proposals
+    from apply_xmp import apply_proposals
     if not os.environ.get("LOCALAI_NO_APPLY_STEP"):
         apply_proposals(str(outdir / f"{stem}.json"), apply=args.apply)
 

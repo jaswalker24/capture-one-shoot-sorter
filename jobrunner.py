@@ -3,21 +3,20 @@
 
 Applies keywords after each pass when apply_each=True (default).
 Always uses --no-caption for catalog tagging. Never touches stars/colours.
-Does not modify fullrun.py; reuses the same CLI entrypoints (tag / apply_c1).
+Does not modify fullrun.py; reuses the same CLI entrypoints (tag / apply_xmp).
 """
 from __future__ import annotations
 import json, os, re, subprocess, sys, time, traceback
 from pathlib import Path
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 sys.path.insert(0, str(HOME))
 TAG = str(HOME / "tag")
-SNAP_JS = HOME / "snap.js"
 OUT = HOME / "out"
 def _nas_roots():
     try:
         import nas_paths as NP
-        NP.HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+        NP.HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
         return NP.imports_root(), NP.exports_root()
     except Exception:
         photos = Path("/Volumes/Photos")
@@ -34,7 +33,7 @@ PASSES = [
      "note": "Includes the AF focus check (Canon AF points) unless turned off below: On Target applies, Missed goes to Review."},
     {"id": "bursts", "label": "Bursts", "needs_index": True},
     {"id": "rank", "label": "Rank (calibrated)", "needs_index": True,
-     "note": "Top 10% General/Rank/Best, next 20% General/Rank/Good (calibrated on catalog star ratings)."},
+     "note": "Top 10% General/Rank/Best, next 20% General/Rank/Good (calibrated on your star ratings)."},
     {"id": "ocr", "label": "Read Text in Frame", "needs_index": False},
     {"id": "people", "label": "People (faces)", "needs_index": False,
      "note": "Local face clusters + People/<Name> keywords. Off by default; name clusters in the People tab first."},
@@ -43,8 +42,8 @@ PASSES = [
     {"id": "scene", "label": "Scene (general keywords)", "needs_index": False,
      "note": "General/Scene/* multi-label tags (architecture, street, concert, motorsport, temple, food, …). Local SigLIP, conservative thresholds."},
     {"id": "schedule", "label": "Tag by Schedule", "needs_index": False},
-    {"id": "cull", "label": "Cull smart albums", "needs_index": False,
-     "note": "Smart albums in group 'Trips Local AI': Sharp + Burst Best, Rank Best, Shortlist (no blur). Collections only."},
+    {"id": "cull", "label": "Cull keywords", "needs_index": False,
+     "note": "Writes Cull|Sharp + Burst Best, Cull|Rank Best and Cull|Shortlist into XMP sidecars so you can build Lightroom smart collections on them. Additive only."},
 ]
 PASS_BY_ID = {p["id"]: p for p in PASSES}
 DEFAULT_ORDER = ["tagger", "camera", "scene", "index", "sharpness", "bursts", "rank", "ocr", "schedule", "cull"]
@@ -67,10 +66,9 @@ def _save(state):
     tmp.replace(path)
 
 
-def snap(path: Path):
-    subprocess.run(["osascript", "-l", "JavaScript", str(SNAP_JS), str(path)],
-                   check=True, capture_output=True)
-    return json.load(open(path))
+def snap(path: Path, folder: Path):
+    from apply_xmp import write_snap
+    return write_snap(path, folder)
 
 
 def _run_streaming(state, cmd, env=None, pass_id=None):
@@ -175,7 +173,7 @@ def _apply_source(state, folder: Path, pass_id: str, profile: str, apply: bool, 
     if not prop:
         log(state, "no proposals for", pass_id)
         return {"skipped": "no proposals"}
-    from apply_c1 import apply_proposals
+    from apply_xmp import apply_proposals
     prefix = str(OUT / folder.name / f"gui-apply-{label or pass_id}-{time.strftime('%H%M%S')}")
     # Only apply confident rows; filter needs_review already in apply_proposals
     # For tagger: prefer non-review. apply_proposals handles that.
@@ -212,7 +210,7 @@ def _apply_source(state, folder: Path, pass_id: str, profile: str, apply: bool, 
 
 def _apply_approved(state, folder: Path, apply: bool):
     """apply_only job: apply exactly the keyword plan approved in the Keyword preview (nothing else)."""
-    from apply_c1 import apply_proposals
+    from apply_xmp import apply_proposals
     plan = json.load(open(state["approved_plan"]))["plan"]
     stamp = time.strftime("%H%M%S")
     state.setdefault("undo_result_files", []); state.setdefault("added_keywords", {})
@@ -275,10 +273,9 @@ def ensure_pass_order(passes: list[str], folder: Path | None = None) -> list[str
 def run_rank_train(state):
     """Queued rank training: match exports, optionally index missing, train/eval.
 
-    Read-only on the NAS. Never talks to Capture One and never writes stars,
-    colour tags or rank keywords.
+    Read-only on the NAS. Never writes sidecars, stars, colour tags or rank keywords.
     """
-    log(state, "RANK TRAIN — NAS read-only; no Capture One, stars, colours or rank keyword writes")
+    log(state, "RANK TRAIN — NAS read-only; no sidecar, star, colour or rank keyword writes")
     state["current_pass"] = "train"
     state["progress"] = {"pass": "train", "n": 0, "total": 0, "line": "starting"}
     state["apply_each"] = False
@@ -387,26 +384,17 @@ def run_job(state_path: Path):
         log(state, "JOB", folder.name, "profile=", profile, "passes=", passes,
             "apply_each=", apply, "dry_run=", dry_run, "sample=", sample)
 
-        # Full-catalog snapshot is expensive (and can stall while another C1 job runs).
-        # Skip for sample jobs; for full jobs, time out after 90s so the queue does not hang.
+        # Snapshot ratings/labels from existing XMP sidecars (no catalog).
         before_path = out / f"gui-flags-before-{state['id']}.json"
         if sample or dry_run or preview_first:
             log(state, "snapshot before skipped (sample/dry-run/preview)")
             state["snapshot_before_skipped"] = "sample" if sample else ("dry_run" if dry_run else "preview")
         else:
             try:
-                log(state, "snapshot before, this folder only (180s timeout)...")
-                proc = subprocess.Popen(["osascript", "-l", "JavaScript", str(SNAP_JS), str(before_path), "--folder", str(folder)],
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                try:
-                    proc.communicate(timeout=180)
-                except subprocess.TimeoutExpired:
-                    proc.kill(); proc.wait()
-                    raise TimeoutError("snapshot before timed out after 180s")
-                if proc.returncode:
-                    raise RuntimeError(f"snapshot rc={proc.returncode}")
+                log(state, "snapshot before, this folder's sidecars...")
+                snap(before_path, folder)
                 state["snapshot_before"] = str(before_path)
-                log(state, "snapshot before ok,", len(json.load(open(before_path))), "variants")
+                log(state, "snapshot before ok,", len(json.load(open(before_path))), "files")
             except Exception as e:
                 log(state, "snapshot before skipped:", e)
                 state["snapshot_before_error"] = str(e)
@@ -525,7 +513,7 @@ def run_job(state_path: Path):
 
             elif pid == "cull":
                 if sample or dry_run:
-                    log(state, "cull albums skipped (sample/dry-run)")
+                    log(state, "cull keywords skipped (sample/dry-run)")
                 else:
                     _run_streaming(state, [str(HOME / "venv/bin/python"), str(HOME / "cull_album.py"), str(folder)], pass_id=pid)
 
@@ -574,16 +562,8 @@ def run_job(state_path: Path):
         else:
             try:
                 after_path = out / f"gui-flags-after-{state['id']}.json"
-                log(state, "snapshot after, this folder only (180s timeout)...")
-                proc = subprocess.Popen(["osascript", "-l", "JavaScript", str(SNAP_JS), str(after_path), "--folder", str(folder)],
-                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                try:
-                    proc.communicate(timeout=180)
-                except subprocess.TimeoutExpired:
-                    proc.kill(); proc.wait()
-                    raise TimeoutError("snapshot after timed out after 180s")
-                if proc.returncode:
-                    raise RuntimeError(f"snapshot after rc={proc.returncode}")
+                log(state, "snapshot after, this folder's sidecars...")
+                snap(after_path, folder)
                 after = json.load(open(after_path))
                 state["snapshot_after"] = str(after_path)
                 if state.get("snapshot_before") and Path(state["snapshot_before"]).exists():

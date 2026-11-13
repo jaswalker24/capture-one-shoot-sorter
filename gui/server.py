@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Trips Local AI control panel — LAN web UI on port 8765.
+"""Trips Local AI for Lightroom control panel — LAN web UI on port 8766.
 
-Stdlib only (no Flask/FastAPI) so it can run while a catalog job uses the venv.
-Auth: shared secret in ~/localai/gui/auth.token → cookie after POST /api/login.
+Stdlib only (no Flask/FastAPI) so it can run while a tagging job uses the venv.
+Auth: shared secret in ~/localai-lr/gui/auth.token → cookie after POST /api/login.
 """
 from __future__ import annotations
 import hashlib, hmac, json, os, secrets, subprocess, sys, threading, time, uuid
@@ -11,14 +11,14 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 OUT = HOME / "out"
 GUI = HOME / "gui"
 STATIC = GUI / "static"
 JOBS = GUI / "jobs"
 HISTORY = GUI / "history"
 AUTH_FILE = GUI / "auth.token"
-PORT = int(os.environ.get("LOCALAI_GUI_PORT", "8765"))
+PORT = int(os.environ.get("LOCALAI_GUI_PORT", "8766"))
 HOST = os.environ.get("LOCALAI_GUI_HOST", "0.0.0.0")
 
 # nas_paths (and the rest of the tree) live in LOCALAI_HOME, or the repo root
@@ -229,10 +229,11 @@ def sys_stats():
     except Exception as e:
         stats["disk_nas_error"] = str(e)
     try:
-        r = subprocess.run(["pgrep", "-x", "Capture One"], capture_output=True)
-        stats["capture_one_running"] = r.returncode == 0
+        r = subprocess.run(["pgrep", "-if", "Lightroom"], capture_output=True, text=True)
+        line = r.stdout or ""
+        stats["lightroom_running"] = r.returncode == 0 and "Lightroom" in line
     except Exception:
-        stats["capture_one_running"] = None
+        stats["lightroom_running"] = None
     try:
         # thermal / memory pressure via `memory_pressure` / `pmset -g therm`
         mp = subprocess.run(["memory_pressure"], capture_output=True, text=True, timeout=3)
@@ -516,7 +517,7 @@ def list_train_roots():
 
 
 def _create_train_job(data: dict) -> dict:
-    """Queue a rank-training job. Never applies keywords or talks to Capture One."""
+    """Queue a rank-training job. Never applies keywords or writes sidecars."""
     TR, R = _train_mod()
     ctx = _training_context()
     marked = [r for r in ctx["roots"] if r.get("marked") and r.get("available")]

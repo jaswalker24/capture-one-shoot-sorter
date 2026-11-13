@@ -1,7 +1,7 @@
-"""Auto-queue new shoots (Trips Local AI panel). OFF by default.
+"""Auto-queue new shoots (Trips Local AI for Lightroom panel). OFF by default.
 
-Every ~30 minutes (in step with Capture One's 30-minute referencing of new imports) look in
-[03] Photos/Camera Imports/<year>/ for YYYY-MM-DD… folders newer than the last-run cutoff.
+Every poll_min minutes look in
+Camera Imports/<year>/ for YYYY-MM-DD… folders newer than the last-run cutoff.
 
 A folder is NEW when:
   - its YYYY-MM-DD name is a later date than the cutoff date, or
@@ -9,10 +9,9 @@ A folder is NEW when:
     (folder birth/creation, or the oldest image if birth is unavailable). Existing same-day folders
     that were already on disk at the cutoff are left alone even if more files arrive later.
 
-A new folder is queued only when BOTH are true:
-  - Capture One already has it (read-only check of the first image; never an import or full-library scan),
-    skipped while the catalog is busy, and
-  - it is stable: same image count/size on two polls in a row and nothing written for >= stable_min.
+A new folder is queued only when it is stable: the same image count/size on two
+polls in a row and nothing written for >= stable_min. There is no Lightroom
+catalog check (this edition writes XMP sidecars, which does not need Lightroom open).
 
 Folders already run by auto-queue (`ran`) and folders that already have a job are never re-queued.
 Queued jobs use the chosen default profile and its catalog passes (Draft Captions is never included).
@@ -28,14 +27,14 @@ from datetime import datetime
 import os
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 GUI = HOME / "gui"
 CFG = GUI / "autoqueue.json"
 STATE = GUI / "autoqueue-state.json"
 def _imports_root():
     try:
         import nas_paths as NP
-        NP.HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+        NP.HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
         return NP.imports_root()
     except Exception:
         return Path("/Volumes/Photos/Camera Imports")
@@ -281,25 +280,6 @@ def _first_image(folder: Path) -> str | None:
                  if p.suffix.lower() in IMAGE_EXT and not p.name.startswith(".")), None)
 
 
-def c1_has_folder(folder: Path, first_image: str | None) -> bool | None:
-    """Read-only: does the Capture One catalog hold this folder's first image? None = could not check."""
-    if not first_image:
-        return None
-    js = ("function run(a){const d=Application('Capture One').currentDocument();"
-          "return d.images.whose({path:a[0]})().length;}")
-    try:
-        r = subprocess.run(["osascript", "-l", "JavaScript", "-e", js, str(folder / first_image)],
-                           capture_output=True, text=True, timeout=120)
-        return int(r.stdout.strip() or 0) > 0 if r.returncode == 0 else None
-    except Exception:
-        return None
-
-
-def c1_import_status(folder: Path) -> bool | None:
-    """Read-only readiness: has Capture One referenced this folder? Never imports or scans the library."""
-    return c1_has_folder(folder, _first_image(folder))
-
-
 def enable(cfg_update: dict) -> dict:
     """Apply settings; switching ON leaves older-than-cutoff folders alone."""
     with _LOCK:
@@ -354,8 +334,12 @@ def status() -> dict:
             "events": (st.get("events") or [])[-10:]}
 
 
-def poll(enqueue, existing_folders, catalog_busy, force=False, now=None) -> dict:
-    """One poll. enqueue(folder_path, cfg) -> job id; existing_folders() -> set of folder paths with jobs."""
+def poll(enqueue, existing_folders, catalog_busy=None, force=False, now=None) -> dict:
+    """One poll. enqueue(folder_path, cfg) -> job id; existing_folders() -> set of folder paths with jobs.
+
+    catalog_busy is accepted for compatibility with the panel and ignored: this
+    edition does not wait on a catalog.
+    """
     with _LOCK:
         cfg = load_cfg()
         if not cfg["enabled"]:
@@ -391,16 +375,8 @@ def poll(enqueue, existing_folders, catalog_busy, force=False, now=None) -> dict
             if not sig["n"]:
                 entry["why_waiting"] = "no images yet"; seen[f.name] = entry; continue
             stable = bool(prev) and prev.get("sig") == sig and now - sig["newest"] >= cfg["stable_min"] * 60
-            in_c1 = bool((prev or {}).get("in_c1"))
-            if stable and not in_c1:
-                if catalog_busy():
-                    in_c1 = None
-                else:
-                    in_c1 = c1_import_status(f)
-            if in_c1:
-                entry["in_c1"] = True
-            if stable and in_c1:
-                reason = "stable and in Capture One"
+            if stable:
+                reason = "folder is stable"
                 try:
                     jid = enqueue(f, cfg)
                     queued[f.name] = jid; seen.pop(f.name, None)
@@ -410,9 +386,7 @@ def poll(enqueue, existing_folders, catalog_busy, force=False, now=None) -> dict
                     _event(st, f"could not queue {f.name}: {e}")
             else:
                 entry["why_waiting"] = ("still changing" if prev and prev.get("sig") != sig else
-                                        "waiting for a second look" if not stable else
-                                        "Capture One busy; check next time" if in_c1 is None else
-                                        "waiting for Capture One to reference it (30-min poll)")
+                                        "waiting for a second look")
                 seen[f.name] = entry
         _save_state(st)
         return {"queued": done}

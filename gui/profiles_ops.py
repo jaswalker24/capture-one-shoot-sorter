@@ -3,11 +3,12 @@
 Stored as JSON files in ~/localai/profiles/. Catalog profiles never include captions.
 """
 from __future__ import annotations
+import os
 import json, re, time, uuid
 from copy import deepcopy
 from pathlib import Path
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 PROFILES = HOME / "profiles"
 ORDER_FILE = PROFILES / "_order.json"
 

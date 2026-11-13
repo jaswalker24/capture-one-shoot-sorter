@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Schedule tagging: EXIF capture time -> event/venue/act/cheki/meet/changeover keyword proposals.
-Proposals are apply_c1-compatible; flagged frames (needs_review) are never applied."""
+Proposals are apply_xmp-compatible; flagged frames (needs_review) are never applied."""
+import os
 import json, subprocess
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 
 def _off(s):
     s = s.strip(); sign = -1 if s.startswith("-") else 1; h, m = s.lstrip("+-").split(":")

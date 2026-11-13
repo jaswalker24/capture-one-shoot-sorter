@@ -2,18 +2,18 @@
 """Apply reviewed race numbers (confirm / fix decisions only) as additive Motorsport/Car Number/<n> keywords.
 usage: venv/bin/python review_apply.py <shoot-folder-name> [--apply] [--kind numbers|focus]
 --kind focus: apply General/Focus/Missed to AF-focus frames confirmed in Review (afpoints.py).
-Snapshot before (whole collection: stars/colours), apply in chunks of 200 via apply_c1, verify after.
+Snapshot before (stars/colour labels from sidecars), apply in chunks of 200 via apply_xmp, verify after.
 Rejected, skipped and unreviewed frames are never touched. Undo: out/<shoot>/review-apply-*-before.json."""
-import argparse, json, re, subprocess, sys, time
+import argparse, os, json, re, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"; sys.path.insert(0, str(HOME))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr")); sys.path.insert(0, str(HOME))
 OUT = HOME / "out"
 
 def snap(path, folder=None):
-    # folder-scoped (snap.js --folder): never snapshot whatever collection Capture One happens to show
-    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)] + (["--folder", str(folder)] if folder else []),
-                   check=True, capture_output=True, timeout=300)
-    return json.load(open(path))
+    from apply_xmp import write_snap
+    if not folder:
+        raise ValueError("snap requires a folder (XMP sidecars are read from disk, not a catalog)")
+    return write_snap(path, folder)
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("shoot"); ap.add_argument("--apply", action="store_true")
@@ -38,7 +38,7 @@ def main():
     if not todo:
         json.dump({"status": "done", "finished": time.strftime("%Y-%m-%dT%H:%M:%S"), "applied": 0, "failures": 0}, open(d / "review-apply-last.json", "w"))
         return
-    from apply_c1 import apply_proposals
+    from apply_xmp import apply_proposals
     before = after = None
     if a.apply:
         before = snap(d / f"review-apply-{stamp}-flags-before.json", folder); print("snapshot before:", len(before), "variants", flush=True)
@@ -84,7 +84,7 @@ def apply_focus(a, d, stamp):
     if not todo:
         json.dump({"status": "done", "finished": time.strftime("%Y-%m-%dT%H:%M:%S"), "applied": 0, "failures": 0}, open(lastf, "w"))
         return
-    from apply_c1 import apply_proposals
+    from apply_xmp import apply_proposals
     before = snap(d / f"review-focus-apply-{stamp}-flags-before.json", folder) if a.apply else None
     tot_kw = tot_fail = 0
     for i in range(0, len(todo), 200):

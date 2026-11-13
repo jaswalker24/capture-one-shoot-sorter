@@ -5,10 +5,11 @@ Telegram: needs a Bot API token + chat_id (the inbound Telegram bridge cannot se
 Email: optional local sendmail/postfix fallback when enabled.
 """
 from __future__ import annotations
+import os
 import json, subprocess, urllib.error, urllib.request, urllib.parse
 from pathlib import Path
 
-GUI = Path.home() / "localai" / "gui"
+GUI = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr")) / "gui"
 CFG = GUI / "notify.json"
 EXAMPLE = GUI / "notify.example.json"
 

@@ -1,9 +1,8 @@
 #!/bin/bash
-TOKEN_FILE="$HOME/localai/gui/auth.token"
-BASE="http://127.0.0.1:8765/"
+TOKEN_FILE="${LOCALAI_HOME:-$HOME/localai-lr}/gui/auth.token"
+BASE="http://127.0.0.1:8766/"
 if [ -f "$TOKEN_FILE" ]; then
   TOKEN=$(tr -d '\r\n' < "$TOKEN_FILE")
-  # URL-encode minimally (token is urlsafe)
   open "${BASE}?token=${TOKEN}"
 else
   open "$BASE"

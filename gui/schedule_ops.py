@@ -3,6 +3,7 @@
 Reuses ~/localai/schedule_tag.py for mapping; confirmed events only by default.
 """
 from __future__ import annotations
+import os
 import csv, io, json, re, time
 from collections import Counter
 from copy import deepcopy
@@ -10,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 SCHED_DIR = HOME / "schedules"
 IMPORTS = Path("/Volumes/Photos/Camera Imports")
 

@@ -16,7 +16,7 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 IDX = HOME / "index" / "catalog.sqlite"
 OUT = HOME / "out"
 PHOTOS = Path("/Volumes/Photos")

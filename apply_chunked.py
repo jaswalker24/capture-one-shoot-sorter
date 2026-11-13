@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Additively apply one proposals file to Capture One in chunks, with a whole-collection star/colour snapshot
+"""Additively apply one proposals file to XMP sidecars in chunks, with a folder star/colour snapshot
 before and a verify after. usage: venv/bin/python apply_chunked.py <proposals.json> --tag NAME [--apply] [--prefix-keyword General/Rank/]
 Undo data: out/<shoot>/<tag>-<time>-cNNN-before.json (keywords per variant before the write)."""
-import argparse, json, subprocess, sys, time
+import argparse, os, json, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"; sys.path.insert(0, str(HOME))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr")); sys.path.insert(0, str(HOME))
 
 def snap(path, folder=None):
-    # folder-scoped (snap.js --folder): never snapshot whatever collection Capture One happens to show
-    subprocess.run(["osascript", "-l", "JavaScript", str(HOME / "snap.js"), str(path)] + (["--folder", str(folder)] if folder else []),
-                   check=True, capture_output=True, timeout=300)
-    return json.load(open(path))
+    from apply_xmp import write_snap
+    if not folder:
+        raise ValueError("snap requires a folder (XMP sidecars are read from disk, not a catalog)")
+    return write_snap(path, folder)
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("proposals"); ap.add_argument("--tag", required=True)
     ap.add_argument("--apply", action="store_true"); ap.add_argument("--prefix-keyword", default="")
     ap.add_argument("--chunk", type=int, default=200); a = ap.parse_args()
-    from apply_c1 import apply_proposals
+    from apply_xmp import apply_proposals
     p = Path(a.proposals); d = p.parent; data = json.load(open(p)); stamp = time.strftime("%Y%m%d-%H%M%S")
     imgs = []
     for r in data["images"]:

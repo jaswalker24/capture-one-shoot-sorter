@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Backend for the Capture One 'Trip Local AI' Scripts menu. Runs at low priority, logs to ~/localai/logs/scripts/,
-posts a macOS notification when done. Capture One writes only via apply_c1 (additive keywords; Description only if empty)."""
+"""Optional folder-list backend (this edition has no Capture One Scripts menu).
+Runs at low priority, logs to ~/localai-lr/logs/scripts/, posts a macOS notification
+when done. Writes only via apply_xmp (additive keywords in sidecars)."""
 import json, os, re, subprocess, sys, time
 from pathlib import Path
-HOME = Path.home() / "localai"
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 sys.path.insert(0, str(HOME))
 LOG = HOME / "logs" / "scripts"; LOG.mkdir(parents=True, exist_ok=True)
 CFG = json.load(open(HOME / "config.json"))
@@ -26,7 +27,7 @@ def profile_for(folder: str):
     return CFG.get("script_profile_default", "gig")
 
 def apply(proposals):
-    from apply_c1 import apply_proposals
+    from apply_xmp import apply_proposals
     res = apply_proposals(str(proposals), apply=True)
     return res
 

@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Iterable
 from zoneinfo import ZoneInfo
 
-HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai"))
+HOME = Path(os.environ.get("LOCALAI_HOME") or (Path.home() / "localai-lr"))
 DRAFTS_DIR = HOME / "gui" / "schedule-drafts"
 MERGED_DIR = HOME / "schedules"
 JOBS_DIR = HOME / "gui" / "jobs"

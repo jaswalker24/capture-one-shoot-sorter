@@ -1,6 +1,6 @@
 #!/bin/bash
 # Starts the local Ollama server (localhost only) with models stored under $LOCALAI_HOME/models
-HOME_LOCAL="${LOCALAI_HOME:-$HOME/localai}"
+HOME_LOCAL="${LOCALAI_HOME:-$HOME/localai-lr}"
 export OLLAMA_MODELS="${OLLAMA_MODELS:-$HOME_LOCAL/models}"
 export OLLAMA_HOST="${OLLAMA_HOST:-127.0.0.1:11434}"
 export OLLAMA_KEEP_ALIVE=5m

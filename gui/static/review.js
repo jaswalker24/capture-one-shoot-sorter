@@ -17,7 +17,7 @@ function setupKind() {
   $("onlyNums").closest("label").style.display = "none";
   $("fixInput").closest("label").style.display = "none";
   $("bFix").style.display = "none";
-  $("applyBtn").textContent = "Apply confirmed Focus/Missed to Capture One";
+  $("applyBtn").textContent = "Apply confirmed Focus/Missed to XMP sidecars";
   $("bConfirm").textContent = "Confirm missed (Enter)";
 }
 async function init() {
@@ -64,7 +64,7 @@ function render() {
   $("cands").innerHTML = it.candidates.map(c => `<span>${c.number} · ${c.sources.join("+")}${c.conf != null ? " " + (+c.conf).toFixed(2) : ""}</span>`).join("") + (it.car_colour ? `<span>colour: ${it.car_colour}</span>` : "");
   $("reasons").textContent = (it.reasons || []).join(" · ");
   const d = it.decision;
-  $("status").textContent = d ? `${d.action}${d.numbers && d.numbers.length ? " → " + d.numbers.join(", ") : ""}${it.applied ? " (in Capture One)" : ""}` : "not reviewed";
+  $("status").textContent = d ? `${d.action}${d.numbers && d.numbers.length ? " → " + d.numbers.join(", ") : ""}${it.applied ? " (in XMP)" : ""}` : "not reviewed";
   $("fixInput").value = "";
   // prefetch next image
   if (items[idx + 1]) { const im = new Image(); im.src = `/api/review/thumb?${q()}&file=${encodeURIComponent(items[idx + 1].filename)}`; }
@@ -83,8 +83,8 @@ function fix() { const v = $("fixInput").value.trim(); if (!v) { $("fixInput").f
 async function refreshCounts() { try { const d = await api(`/api/review/queue?${q()}&status=none`); showCounts(d.counts, d.apply); } catch (e) {} }
 async function pollApply() { try { const d = await api(`/api/review/apply_status?${q()}`); showApply(d.apply); } catch (e) {} }
 async function applyNow() {
-  const msg = KIND === "focus" ? "Add General/Focus/Missed to the confirmed frames in Capture One? Nothing else changes."
-                               : "Add the confirmed and fixed car numbers to Capture One as keywords? Nothing else changes.";
+  const msg = KIND === "focus" ? "Add General/Focus/Missed to the confirmed frames' XMP sidecars? Nothing else changes."
+                               : "Add the confirmed and fixed car numbers to the XMP sidecars as keywords? Nothing else changes.";
   if (!confirm(msg)) return;
   try { const r = await api("/api/review/apply", { method: "POST", body: JSON.stringify({ shoot, kind: KIND }) }); showApply(r.apply); }
   catch (e) { alert(e.message); }

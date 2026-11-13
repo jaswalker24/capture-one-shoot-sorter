@@ -495,14 +495,20 @@ def run_job(state_path: Path):
                 _run_streaming(state, cmd, pass_id=pid)
 
             elif pid == "schedule":
-                cmd = [TAG, "schedule", str(folder)]
-                if sample:
-                    cmd += ["--sample", str(sample)]
-                sched = state.get("schedule_path") or str(HOME / "schedules/example.json")
-                cmd += ["--schedule", sched]
-                if state.get("camera_offset"):
-                    cmd += ["--camera-offset", state["camera_offset"]]
-                _run_streaming(state, cmd, pass_id=pid)
+                sched = state.get("schedule_path") or ""
+                if not sched or not Path(sched).is_file():
+                    log(state, "schedule skipped: no schedule file chosen for this job"
+                        + (f" ({sched} not found)" if sched else "")
+                        + "; load one with the Schedule importer to tag set times")
+                    state.setdefault("pass_results", {})[pid] = {"skipped": "no schedule"}
+                else:
+                    cmd = [TAG, "schedule", str(folder)]
+                    if sample:
+                        cmd += ["--sample", str(sample)]
+                    cmd += ["--schedule", sched]
+                    if state.get("camera_offset"):
+                        cmd += ["--camera-offset", state["camera_offset"]]
+                    _run_streaming(state, cmd, pass_id=pid)
 
             elif pid == "cull":
                 if sample or dry_run:

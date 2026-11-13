@@ -58,7 +58,7 @@ LOCATION_FIELDS = (
         "key": "schedules_root",
         "label": "Schedules root",
         "prompt": "Choose the Schedules folder",
-        "hint": "Optional. Top of the Schedules tree (Year / YYYY-MM-DD / Event name / _schedule.jpg). Leave blank to use Photos root/Schedules. Read only for now; nothing is written here, and _schedule* files are skipped by every pass.",
+        "hint": "Optional. Top of the Schedules tree (Year / YYYY-MM-DD / Event name). Leave blank to use Photos root/Schedules. The Schedules tab writes schedule.json here only when you press Confirm. _schedule* files are skipped by every pass.",
         "optional": True,
         "training_source": False,
     },

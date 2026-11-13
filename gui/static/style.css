@@ -247,3 +247,53 @@ textarea.code { font-family:ui-monospace, Menlo, monospace; font-size:12px; min-
 }
 .fb-list button:hover { background: rgba(255,255,255,.04); }
 .fb-foot { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+
+/* ---- Schedules tab ---- */
+#schedulesBadge { margin-left: 6px; }
+#schedulesBadge.hidden { display: none !important; }
+.se-event {
+  display: block; width: 100%; text-align: left;
+  background: var(--panel2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 10px; margin-bottom: 6px;
+}
+.se-event:hover { border-color: var(--accent); }
+.se-event .badge { margin-left: 6px; }
+#seTable { width: 100%; border-collapse: collapse; }
+#seTable th, #seTable td { border-bottom: 1px solid var(--border); padding: 4px 6px; vertical-align: middle; }
+#seTable th { color: var(--muted); font-weight: 600; font-size: 12px; text-align: left; }
+#seTable input { width: 100%; }
+#seTable tr.se-err td { background: rgba(255, 107, 122, 0.12); }
+#seTable tr.se-warn td { background: rgba(240, 180, 41, 0.10); }
+.se-del { width: 72px; }
+.se-issues { margin: 8px 0; padding-left: 18px; }
+.se-red { color: var(--danger); }
+.se-amber { color: var(--warn); }
+.se-summary { background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+.se-hist { list-style: none; margin: 0; padding: 0; }
+.se-hist li { padding: 8px 0; border-bottom: 1px solid var(--border); }
+.se-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+tr.se-added td { color: var(--accent2); }
+tr.se-removed td { color: var(--danger); }
+tr.se-changed td { color: var(--warn); }
+#sePending table.data td { vertical-align: middle; }
+
+@media (max-width: 720px) {
+  #seTable, #seTable thead, #seTable tbody, #seTable th, #seTable td, #seTable tr { display: block; }
+  #seTable thead { display: none; }
+  #seTable tr.se-row {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 10px; margin-bottom: 10px;
+  }
+  #seTable td {
+    border: 0; padding: 4px 0;
+    display: flex; align-items: center; gap: 8px;
+  }
+  #seTable td::before {
+    content: attr(data-label);
+    flex: 0 0 88px; color: var(--muted); font-size: 12px;
+  }
+  #seTable td.se-del { display: block; }
+  #seTable td.se-del::before { content: none; }
+  #sePending table.data { display: block; overflow-x: auto; }
+}

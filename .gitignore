@@ -64,3 +64,5 @@ people/
 
 # Local GUI state
 gui/presets.json
+gui/schedule-drafts/
+schedules/_merged-*.json

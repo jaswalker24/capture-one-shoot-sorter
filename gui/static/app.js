@@ -43,6 +43,7 @@ function setupTabs() {
       $("tab-" + btn.dataset.tab).classList.add("active");
       if (btn.dataset.tab === "schedule") loadScheduleTab();
       if (btn.dataset.tab === "history") renderHistory();
+      if (btn.dataset.tab === "schedules" && window.loadSchedulesTab) loadSchedulesTab();
       if (btn.dataset.tab === "training") loadTrainingTab();
       if (btn.dataset.tab === "profiles") renderProfiles();
       if (btn.dataset.tab === "settings") { loadNotify(); loadAutoqueue(); loadLocations(); }
@@ -283,6 +284,7 @@ async function refresh() {
     renderQueue(q);
     await renderStats();
     if ($("tab-history").classList.contains("active")) await renderHistory();
+    if ($("tab-schedules") && $("tab-schedules").classList.contains("active") && window.loadSchedulesTab) await loadSchedulesTab();
     if ($("tab-training") && $("tab-training").classList.contains("active")) await loadTrainingTab();
   } catch (e) {
     if (String(e.message).includes("login")) {

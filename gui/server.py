@@ -57,6 +57,7 @@ import review as RV  # race-number review queue (additive)
 import people_pass as PP  # face clusters / People/<Name>
 import preview_ops as PV  # keyword preview before apply
 import autoqueue as AQ  # auto-queue new shoots (off by default)
+import schedules_api as SA  # Schedules tab (editor, history, pre-load)
 
 JOBS.mkdir(parents=True, exist_ok=True)
 HISTORY.mkdir(parents=True, exist_ok=True)
@@ -392,6 +393,7 @@ def _create_job(data: dict) -> dict:
             "preview_before_apply": bool(data.get("preview_before_apply", False)),
             "sample": int(data.get("sample") or 0),
             "schedule_path": data.get("schedule_path") or "",
+            "schedule_paths": data.get("schedule_paths") or [],
             "camera_offset": data.get("camera_offset") or "",
             "status": "queued",
             "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
@@ -419,8 +421,24 @@ def _folders_with_jobs() -> set:
 
 
 def _autoqueue_enqueue(folder: Path, cfg: dict) -> str:
-    job = _create_job({"folder": str(folder), "profile_id": cfg.get("profile_id") or "",
-                       "preview_before_apply": bool(cfg.get("preview_before_apply")), "auto_queued": True})
+    payload = {"folder": str(folder), "profile_id": cfg.get("profile_id") or "",
+               "preview_before_apply": bool(cfg.get("preview_before_apply")), "auto_queued": True}
+    try:
+        import nas_paths as NP
+        import schedules_tree as STREE
+        NP.HOME = HOME
+        root = NP.schedules_root(HOME)
+        found = STREE.lookup_for_import_folder(
+            root, folder, write_manifest=STREE.manifest_path(root).is_file())
+        paths = found.get("paths") or []
+        if len(paths) == 1:
+            payload["schedule_path"] = paths[0]
+        elif len(paths) > 1:
+            payload["schedule_path"] = paths[0]
+            payload["schedule_paths"] = paths
+    except Exception:
+        pass
+    job = _create_job(payload)
     ensure_worker()
     return job["id"]
 
@@ -713,6 +731,12 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 200, _browse_job_status(jid))
             if path.startswith("/api/review/"):
                 return self._review_get(path, parse_qs(u.query))
+            if path.startswith("/api/schedules"):
+                try:
+                    code, body = SA.handle_get(path, parse_qs(u.query), HOME)
+                except Exception as e:
+                    return _json(self, 500, {"error": str(e)})
+                return _json(self, code, body)
             if path == "/api/stats":
                 return _json(self, 200, sys_stats())
             if path == "/api/years":
@@ -919,6 +943,13 @@ class Handler(BaseHTTPRequestHandler):
             return _json(self, 401, {"error": "login required"})
 
         data = _read_json(self)
+
+        if path.startswith("/api/schedules"):
+            try:
+                code, body = SA.handle_post(path, data, HOME)
+            except Exception as e:
+                return _json(self, 500, {"error": str(e)})
+            return _json(self, code, body)
 
         if path == "/api/review/decide":
             try:

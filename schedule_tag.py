@@ -30,12 +30,26 @@ def capture_times(paths, camera_utc_offset=None):
 
 def load_schedule(path):
     s = json.load(open(path)); tz = ZoneInfo(s.get("timezone", "UTC"))
-    def at(date, hm): return datetime.fromisoformat(f"{date}T{hm}").replace(tzinfo=tz)
+    def at(date, hm, after=None):
+        dt = datetime.fromisoformat(f"{date}T{hm}").replace(tzinfo=tz)
+        if after is not None and dt <= after:
+            dt = dt + timedelta(days=1)
+        return dt
     for e in s["events"]:
-        e["_doors"] = at(e["date"], e.get("doors") or e["start"]); e["_end"] = at(e["date"], e.get("attend_until") or e["window_end"])
+        doors_hm = e.get("doors") or e["start"]
+        start_hm = e.get("start") or doors_hm
+        e["_doors"] = at(e["date"], doors_hm)
+        start_dt = at(e["date"], start_hm)
+        if start_hm and doors_hm and start_hm < doors_hm:
+            start_dt = at(e["date"], start_hm, after=e["_doors"])
+        end_hm = e.get("attend_until") or e["window_end"]
+        e["_end"] = at(e["date"], end_hm, after=start_dt)
         e["_buf"] = timedelta(minutes=e.get("changeover_buffer_min", s.get("changeover_buffer_min", 3)))
         for sl in e["slots"]:
-            sl["_s"] = at(e["date"], sl["start"]); sl["_e"] = at(e["date"], sl["end"])
+            sl["_s"] = at(e["date"], sl["start"])
+            if doors_hm and sl.get("start") and sl["start"] < doors_hm:
+                sl["_s"] = at(e["date"], sl["start"], after=e["_doors"])
+            sl["_e"] = at(e["date"], sl["end"], after=sl["_s"])
             sl["_acts"] = [sl["act"]] if "act" in sl else sl["acts"]
     return s, tz
 

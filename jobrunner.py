@@ -495,13 +495,26 @@ def run_job(state_path: Path):
                 _run_streaming(state, cmd, pass_id=pid)
 
             elif pid == "schedule":
-                sched = state.get("schedule_path") or ""
+                sched = ""
+                paths = []
+                try:
+                    sys.path.insert(0, str(HOME / "gui"))
+                    import schedules_tree as STREE
+                    paths = STREE.resolve_job_schedule_paths(state)
+                    prepared = STREE.prepared_schedule_path(paths, work_dir=HOME / "schedules")
+                    sched = str(prepared) if prepared else ""
+                except Exception as e:
+                    log(state, "schedule: could not prepare schedule file(s):", e)
+                    raw = state.get("schedule_path") or ""
+                    sched = raw if raw and Path(raw).is_file() else ""
                 if not sched or not Path(sched).is_file():
                     log(state, "schedule skipped: no schedule file chosen for this job"
                         + (f" ({sched} not found)" if sched else "")
-                        + "; load one with the Schedule importer to tag set times")
+                        + "; load one with the Schedule importer or the Schedules tab to tag set times")
                     state.setdefault("pass_results", {})[pid] = {"skipped": "no schedule"}
                 else:
+                    if len(paths) > 1:
+                        log(state, f"schedule: merged {len(paths)} event files for this date -> {sched}")
                     cmd = [TAG, "schedule", str(folder)]
                     if sample:
                         cmd += ["--sample", str(sample)]

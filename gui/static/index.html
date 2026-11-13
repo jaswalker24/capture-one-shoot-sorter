@@ -39,6 +39,7 @@
       <button type="button" data-tab="run" class="active">Run</button>
       <button type="button" data-tab="schedule">Schedule importer</button>
       <button type="button" data-tab="history">History &amp; undo</button>
+      <button type="button" data-tab="schedules">Schedules <span id="schedulesBadge" class="badge hidden">0</span></button>
       <button type="button" data-tab="training">Training</button>
       <button type="button" data-tab="profiles">Profiles</button>
       <button type="button" data-tab="settings">Settings</button>
@@ -156,6 +157,85 @@
     </div>
 
     
+
+    <div id="tab-schedules" class="panel-section">
+      <section class="card">
+        <h2>Pre-loaded schedules</h2>
+        <p class="note">Add events in advance (for a trip or a batch of jobs). They become active at the time you set, then wait for the photos to arrive. Nothing runs until a matching Camera Imports folder shows up.</p>
+        <div id="sePending"></div>
+        <label>Load trip — paste a table with date and event columns (venue and start time optional)
+          <textarea id="seTripPaste" class="code" placeholder="date	event	venue	start&#10;2026-11-22	Example Hall Show	Example Hall	17:00"></textarea>
+        </label>
+        <div class="row"><button type="button" class="secondary" id="seTripBtn">Preview trip list</button></div>
+        <div id="seTripPreview"></div>
+      </section>
+      <section class="card">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h2 style="margin:0">Events</h2>
+          <button type="button" id="seNew">New event</button>
+        </div>
+        <p class="note">Folders under the Schedules root (Year / YYYY-MM-DD / Event name). The path is the source of truth.</p>
+        <div id="seEventList"></div>
+      </section>
+      <section class="card hidden" id="seEditor">
+        <h2 id="seEditorTitle">New event</h2>
+        <p class="note" id="seFolderPath">Schedules/YYYY/YYYY-MM-DD/Event/schedule.json</p>
+        <p class="note" id="seTzNote"></p>
+        <div class="row">
+          <label>Date <input type="date" id="seDate" /></label>
+          <label>Event name <input type="text" id="seEvent" placeholder="Example Hall Show" /></label>
+          <label>Venue <input type="text" id="seVenue" placeholder="Example Hall" /></label>
+        </div>
+        <div class="row">
+          <label>Time zone
+            <select id="seTz">
+              <option>Europe/London</option>
+              <option>Asia/Tokyo</option>
+              <option>UTC</option>
+            </select>
+          </label>
+          <label>Changeover buffer (min) <input type="number" id="seBuf" min="0" value="3" /></label>
+          <label>Event type
+            <select id="seType">
+              <option value="gig">Gig</option>
+              <option value="wedding">Wedding</option>
+              <option value="corporate">Corporate</option>
+            </select>
+          </label>
+        </div>
+        <p class="note">One row per act or time slot. Times can be 19:30 or 1930. Tab moves between cells; Enter adds a row.</p>
+        <table id="seTable">
+          <thead>
+            <tr>
+              <th data-hint="act">Act name</th>
+              <th data-hint="start">Set start</th>
+              <th data-hint="end">Set end</th>
+              <th data-hint="doors">Doors / 開場</th>
+              <th data-hint="notes">Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="seTableBody"></tbody>
+        </table>
+        <div class="row">
+          <button type="button" class="secondary" id="seAddRow">Add row</button>
+          <button type="button" class="secondary" id="seValidate">Check times</button>
+          <button type="button" class="secondary" id="seHistoryBtn">History</button>
+        </div>
+        <div id="seIssues"></div>
+        <p class="note" id="seDraftNote"></p>
+        <label>Paste from a spreadsheet (shown as a preview before it fills the table)
+          <textarea id="sePaste" class="code" placeholder="act	start	end&#10;Act One	19:00	19:40"></textarea>
+        </label>
+        <div class="row"><button type="button" class="secondary" id="sePasteBtn">Preview paste</button></div>
+        <div id="sePastePreview"></div>
+        <div class="row">
+          <button type="button" id="seReviewSave">Review and save</button>
+        </div>
+        <div id="seReview"></div>
+        <div id="seHistory" class="hidden"></div>
+      </section>
+    </div>
 
     <div id="tab-training" class="panel-section">
       <div class="grid">
@@ -371,5 +451,6 @@
     </div>
   </div>
   <script src="/app.js"></script>
+  <script src="/schedules.js"></script>
 </body>
 </html>

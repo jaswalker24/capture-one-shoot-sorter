@@ -259,7 +259,7 @@
         btn.onclick = () => openEvent(btn.dataset.date, btn.dataset.name);
       });
     }
-    updateBadge(r.waiting_count || 0);
+    updateBadge((r.waiting_count || 0) + (r.poster_review_count || 0));
     return r;
   }
 
@@ -284,7 +284,7 @@
       return;
     }
     const entries = r.entries || [];
-    updateBadge(r.waiting_count || 0);
+    updateBadge((r.waiting_count || 0) + (r.poster_review_count || 0));
     if (!entries.length) {
       box.innerHTML = `<p class="note">No pre-loaded schedules yet. Use Load trip to add a batch, or save an event and add it later.</p>`;
       return;

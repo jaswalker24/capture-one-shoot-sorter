@@ -159,6 +159,15 @@
     
 
     <div id="tab-schedules" class="panel-section">
+      <section class="card" id="sePosterReview">
+        <div class="row" style="justify-content:space-between;align-items:center">
+          <h2 style="margin:0">Schedule review</h2>
+          <button type="button" class="secondary" id="prScan">Scan for posters</button>
+        </div>
+        <p class="note">When an event folder holds a single image, it is read automatically. The result stays on this Mac until you Confirm. confirmed.json is the master; disagreements are held for you to review. Posters are never moved or renamed.</p>
+        <div id="prList"></div>
+        <div id="prDetail" class="hidden"></div>
+      </section>
       <section class="card">
         <h2>Pre-loaded schedules</h2>
         <p class="note">Add events in advance (for a trip or a batch of jobs). They become active at the time you set, then wait for the photos to arrive. Nothing runs until a matching Camera Imports folder shows up.</p>
@@ -452,5 +461,6 @@
   </div>
   <script src="/app.js"></script>
   <script src="/schedules.js"></script>
+  <script src="/schedules_posters.js"></script>
 </body>
 </html>

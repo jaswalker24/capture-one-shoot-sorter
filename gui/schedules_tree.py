@@ -119,6 +119,69 @@ def event_dir(root: Path, date_str: str, event_name: str) -> Path:
     return Path(root) / yyyy / date_str / sanitize_event_name(event_name)
 
 
+def iter_event_dirs(root: Path) -> list[Path]:
+    """Event folders in the canonical YYYY/YYYY-MM-DD tree, plus a flat YYYY-MM-DD layout if present."""
+    root = Path(root)
+    if not root.is_dir():
+        return []
+    out, seen = [], set()
+    try:
+        years = [p for p in root.iterdir() if p.is_dir() and p.name.isdigit() and len(p.name) == 4]
+    except Exception:
+        return []
+    for year in sorted(years):
+        try:
+            days = [p for p in year.iterdir() if p.is_dir() and DATE_RE.match(p.name)]
+        except Exception:
+            continue
+        for day in sorted(days):
+            try:
+                evs = [p for p in day.iterdir() if p.is_dir() and not p.name.startswith(".")]
+            except Exception:
+                continue
+            for evdir in sorted(evs):
+                key = evdir.resolve() if evdir.exists() else evdir
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(evdir)
+    try:
+        flats = [p for p in root.iterdir() if p.is_dir() and DATE_RE.match(p.name)]
+    except Exception:
+        flats = []
+    for day in sorted(flats):
+        try:
+            evs = [p for p in day.iterdir() if p.is_dir() and not p.name.startswith(".")]
+        except Exception:
+            continue
+        for evdir in sorted(evs):
+            key = evdir.resolve() if evdir.exists() else evdir
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(evdir)
+    return out
+
+
+def find_event_dir(root: Path, date_str: str, event_name: str) -> Path:
+    """Existing event folder in either layout, else the canonical path (which may not exist yet)."""
+    wanted = sanitize_event_name(event_name or "")
+    raw = (event_name or "").strip()
+    if date_str and DATE_RE.match(date_str):
+        days = [Path(root) / date_str[:4] / date_str, Path(root) / date_str]
+        for day in days:
+            if not day.is_dir():
+                continue
+            try:
+                kids = list(day.iterdir())
+            except Exception:
+                continue
+            for p in kids:
+                if p.is_dir() and (p.name == raw or p.name == wanted):
+                    return p
+    return event_dir(root, date_str or "0000-00-00", event_name or "Untitled event")
+
+
 def volume_for(path: Path) -> Path | None:
     parts = Path(path).resolve().parts if Path(path).is_absolute() else Path(path).parts
     if len(parts) >= 3 and parts[0] == "/" and parts[1] == "Volumes":
@@ -471,12 +534,7 @@ def list_events(root: Path) -> list[dict]:
         return []
     if not root.is_dir():
         return []
-    out = []
-    for year in sorted(p for p in root.iterdir() if p.is_dir() and p.name.isdigit()) if root.is_dir() else []:
-        for day in sorted(p for p in year.iterdir() if p.is_dir() and DATE_RE.match(p.name)):
-            for evdir in sorted(p for p in day.iterdir() if p.is_dir() and not p.name.startswith(".")):
-                out.append(_event_info(evdir, root))
-    return out
+    return [_event_info(evdir, root) for evdir in iter_event_dirs(root)]
 
 
 def _event_info(evdir: Path, root: Path) -> dict:
@@ -523,15 +581,7 @@ def load_event(root: Path, date_str: str, event_name: str) -> dict:
     st = nas_status(root)
     if not st["ok"]:
         return {"ok": False, "error": st["error"], "mounted": False}
-    evdir = event_dir(root, date_str, event_name)
-    # also allow exact folder if it already exists under a slightly different sanitised name
-    if not evdir.is_dir():
-        day = Path(root) / date_str[:4] / date_str
-        if day.is_dir():
-            for p in day.iterdir():
-                if p.is_dir() and (p.name == event_name or p.name == sanitize_event_name(event_name)):
-                    evdir = p
-                    break
+    evdir = find_event_dir(root, date_str, event_name)
     info = _event_info(evdir, Path(root)) if evdir.is_dir() else {
         "date": date_str, "event": event_name, "venue": "", "path": str(evdir),
         "rel": str(Path(date_str[:4]) / date_str / sanitize_event_name(event_name)),
@@ -861,7 +911,7 @@ def confirm_save(root: Path, meta: dict, rows: list[dict], *,
                 "needs_ack": True, "validation": result}
 
     data = build_schedule(meta, rows)
-    evdir = event_dir(root, meta["date"], meta["event"])
+    evdir = find_event_dir(root, meta["date"], meta["event"])
     sched_path = evdir / "schedule.json"
 
     if sched_path.is_file() and expected_mtime is not None and not force:
@@ -893,7 +943,7 @@ def confirm_save(root: Path, meta: dict, rows: list[dict], *,
 
 
 def _load_confirmed(root: Path, meta: dict) -> dict | None:
-    evdir = event_dir(root, meta.get("date") or "", meta.get("event") or "")
+    evdir = find_event_dir(root, meta.get("date") or "", meta.get("event") or "")
     p = evdir / "confirmed.json"
     return _read_json(p) if p.is_file() else None
 
@@ -904,7 +954,7 @@ def rollback(root: Path, date_str: str, event_name: str, version: int, *,
     st = nas_status(root)
     if not st["ok"]:
         return {"ok": False, "error": st["error"], "mounted": False}
-    evdir = event_dir(root, date_str, event_name)
+    evdir = find_event_dir(root, date_str, event_name)
     ver = history_version(evdir, version)
     if not ver:
         return {"ok": False, "error": f"Version {version} was not found."}
@@ -930,7 +980,7 @@ def rollback(root: Path, date_str: str, event_name: str, version: int, *,
 
 def review_summary(root: Path, meta: dict, rows: list[dict]) -> dict:
     st = nas_status(root)
-    evdir = event_dir(root, meta.get("date") or "0000-00-00", meta.get("event") or "Untitled event")
+    evdir = find_event_dir(root, meta.get("date") or "0000-00-00", meta.get("event") or "Untitled event")
     exists = (evdir / "schedule.json").is_file()
     val = validate_event({**meta, "schedules_root": str(root)}, rows, confirmed=_load_confirmed(root, meta))
     data = build_schedule(meta, rows) if val["can_save"] or rows else None

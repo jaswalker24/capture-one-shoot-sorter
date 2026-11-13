@@ -58,6 +58,7 @@ import people_pass as PP  # face clusters / People/<Name>
 import preview_ops as PV  # keyword preview before apply
 import autoqueue as AQ  # auto-queue new shoots (off by default)
 import schedules_api as SA  # Schedules tab (editor, history, pre-load)
+import poster_reader as PRDR  # schedule-from-poster review (local drafts)
 
 JOBS.mkdir(parents=True, exist_ok=True)
 HISTORY.mkdir(parents=True, exist_ok=True)
@@ -731,6 +732,33 @@ class Handler(BaseHTTPRequestHandler):
                 return _json(self, 200, _browse_job_status(jid))
             if path.startswith("/api/review/"):
                 return self._review_get(path, parse_qs(u.query))
+            if path == "/api/schedules/posters/thumb":
+                try:
+                    import nas_paths as NP
+                    NP.HOME = HOME
+                    PRDR.HOME = HOME
+                    PRDR.DRAFTS_DIR = HOME / "gui" / "poster-drafts"
+                    PRDR.THUMBS_DIR = HOME / "gui" / "poster-thumbs"
+                    qs = parse_qs(u.query)
+                    def _q(n):
+                        v = qs.get(n) or [""]
+                        return v[0]
+                    root = NP.schedules_root(HOME)
+                    got = PRDR.thumbnail_bytes(root, _q("date"), _q("name") or _q("event"),
+                                               _q("file") or _q("filename") or None, home=HOME)
+                except Exception as e:
+                    return _json(self, 500, {"error": str(e)})
+                if not got:
+                    self.send_error(404)
+                    return
+                data, ctype = got
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Cache-Control", "private, max-age=3600")
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if path.startswith("/api/schedules"):
                 try:
                     code, body = SA.handle_get(path, parse_qs(u.query), HOME)
@@ -1389,6 +1417,15 @@ class Handler(BaseHTTPRequestHandler):
         return _json(self, 404, {"error": "unknown api"})
 
 
+def ensure_poster_scan():
+    """Light periodic scan of the Schedules tree. Never starts photo jobs."""
+    def _root():
+        import nas_paths as NP
+        NP.HOME = HOME
+        return NP.schedules_root(HOME)
+    PRDR.start_scan_thread(_root, lambda: HOME, tick=90.0)
+
+
 def main():
     if not AUTH_FILE.exists() or not _token():
         AUTH_FILE.write_text(secrets.token_urlsafe(24))
@@ -1400,6 +1437,7 @@ def main():
         print("profile seed:", _e, flush=True)
     ensure_worker()
     ensure_autoqueue()
+    ensure_poster_scan()
     httpd = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Trips Local AI control panel on http://{HOST}:{PORT}", flush=True)
     print(f"Auth token file: {AUTH_FILE}", flush=True)

@@ -297,3 +297,26 @@ tr.se-changed td { color: var(--warn); }
   #seTable td.se-del::before { content: none; }
   #sePending table.data { display: block; overflow-x: auto; }
 }
+
+
+/* Schedule review (poster importer) */
+.pr-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  background: var(--panel2);
+}
+.pr-card.active { border-color: var(--accent); }
+.pr-card-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.pr-card button.pr-open { background: none; border: 0; color: inherit; text-align: left; cursor: pointer; padding: 0; font: inherit; }
+.pr-thumb { max-width: 280px; max-height: 280px; border-radius: 6px; border: 1px solid var(--border); display: block; margin: 10px 0; }
+.pr-cmp { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.pr-flag { font-size: 12px; padding: 3px 8px; border-radius: 99px; background: #243049; }
+.pr-flag.match { background: #1d3d2a; color: var(--accent2); }
+.pr-flag.gap { background: #1d2a3d; color: var(--accent); }
+.pr-flag.dis { background: #3d1d24; color: var(--danger); }
+#prTable { width: 100%; border-collapse: collapse; }
+#prTable th, #prTable td { padding: 4px; }
+#prTable input { width: 100%; }
+.pr-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }

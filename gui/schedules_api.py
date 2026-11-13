@@ -6,6 +6,7 @@ from pathlib import Path
 
 import nas_paths as NP
 import schedules_tree as ST
+import poster_reader as PR
 
 
 def _root(home: Path) -> Path:
@@ -15,6 +16,9 @@ def _root(home: Path) -> Path:
     ST.JOBS_DIR = Path(home) / "gui" / "jobs"
     ST.HISTORY_DIR = Path(home) / "gui" / "history"
     ST.MERGED_DIR = Path(home) / "schedules"
+    PR.HOME = Path(home)
+    PR.DRAFTS_DIR = Path(home) / "gui" / "poster-drafts"
+    PR.THUMBS_DIR = Path(home) / "gui" / "poster-thumbs"
     return NP.schedules_root(home)
 
 
@@ -71,6 +75,9 @@ def handle_get(path: str, qs: dict, home: Path) -> tuple[int, dict]:
         pend = {"waiting_count": 0, "entries": []}
         if st["ok"]:
             pend = ST.pending_entries(root, dates_with_photos=_photos_dates(home), write=False)
+        posters = {"review_count": 0}
+        if st["ok"]:
+            posters = PR.list_review(root, drafts=PR.DRAFTS_DIR, scan=False)
         return 200, {
             "ok": st["ok"],
             "mounted": st.get("mounted", False),
@@ -78,6 +85,7 @@ def handle_get(path: str, qs: dict, home: Path) -> tuple[int, dict]:
             "error": st.get("error"),
             "root": str(root),
             "waiting_count": pend.get("waiting_count") or 0,
+            "poster_review_count": posters.get("review_count") or 0,
         }
 
     if path == "/api/schedules/events":
@@ -85,10 +93,12 @@ def handle_get(path: str, qs: dict, home: Path) -> tuple[int, dict]:
         if not st["ok"]:
             return 200, {"ok": False, "error": st["error"], "mounted": False, "events": [], "root": str(root)}
         pend = ST.pending_entries(root, dates_with_photos=_photos_dates(home), write=False)
+        posters = PR.list_review(root, drafts=PR.DRAFTS_DIR, scan=False)
         return 200, {
             "ok": True, "mounted": True, "exists": st["exists"], "root": str(root),
             "events": ST.list_events(root),
             "waiting_count": pend.get("waiting_count") or 0,
+            "poster_review_count": posters.get("review_count") or 0,
         }
 
     if path == "/api/schedules/event":
@@ -121,7 +131,7 @@ def handle_get(path: str, qs: dict, home: Path) -> tuple[int, dict]:
         date_str, name = q("date"), q("name") or q("event")
         if not date_str or not name:
             return 400, {"error": "date and name required"}
-        evdir = ST.event_dir(root, date_str, name)
+        evdir = ST.find_event_dir(root, date_str, name)
         if not evdir.is_dir():
             return 404, {"error": "event folder not found"}
         return 200, {"ok": True, **ST.history_list(evdir)}
@@ -134,7 +144,7 @@ def handle_get(path: str, qs: dict, home: Path) -> tuple[int, dict]:
             b = int(b) if b else None
         except ValueError:
             return 400, {"error": "version numbers required"}
-        evdir = ST.event_dir(root, date_str, name)
+        evdir = ST.find_event_dir(root, date_str, name)
         try:
             return 200, {"ok": True, **ST.history_diff(evdir, a, b)}
         except Exception as e:
@@ -156,6 +166,38 @@ def handle_get(path: str, qs: dict, home: Path) -> tuple[int, dict]:
                                    write_manifest=False)
         return 200, found
 
+    if path in ("/api/schedules/posters", "/api/schedules/posters/list"):
+        st = ST.nas_status(root)
+        if not st["ok"]:
+            return 200, {"ok": False, "error": st["error"], "mounted": False,
+                         "items": [], "review": [], "review_count": 0}
+        scan = (q("scan") or "").lower() in ("1", "true", "yes")
+        out = PR.list_review(root, drafts=PR.DRAFTS_DIR, scan=scan)
+        return 200, out
+
+    if path == "/api/schedules/posters/item":
+        date_str, name = q("date"), q("name") or q("event")
+        if not date_str or not name:
+            return 400, {"error": "date and name required"}
+        rec = PR.load_draft(date_str, name, drafts=PR.DRAFTS_DIR)
+        if not rec:
+            return 404, {"error": "No poster draft for this event."}
+        evdir = ST.find_event_dir(root, date_str, name)
+        confirmed = PR._load_confirmed_for(root, date_str, name, evdir)
+        comparison = PR.compare_with_confirmed(rec.get("rows") or [], confirmed)
+        val = ST.validate_event({**(rec.get("meta") or {}), "date": date_str, "event": name,
+                                 "source": "poster", "schedules_root": str(root),
+                                 "timezone": (rec.get("meta") or {}).get("timezone") or ST.default_timezone(date_str)},
+                                rec.get("rows") or [], confirmed)
+        rec = dict(rec)
+        rec["comparison"] = comparison
+        rec["validation"] = val
+        rec["can_accept"] = bool(comparison.get("can_accept")) and bool(val.get("can_save"))
+        rec["has_confirmed"] = bool(confirmed)
+        rec["confirmed"] = confirmed
+        rec["ok"] = True
+        return 200, rec
+
     return 404, {"error": "unknown schedules endpoint"}
 
 
@@ -170,7 +212,7 @@ def handle_post(path: str, data: dict, home: Path) -> tuple[int, dict]:
         if not meta["timezone"] and meta["date"]:
             meta["timezone"] = ST.default_timezone(meta["date"])
         confirmed = None
-        evdir = ST.event_dir(root, meta["date"], meta["event"]) if meta["date"] and meta["event"] else None
+        evdir = ST.find_event_dir(root, meta["date"], meta["event"]) if meta["date"] and meta["event"] else None
         if evdir and (evdir / "confirmed.json").is_file():
             confirmed = ST._read_json(evdir / "confirmed.json")
         val = ST.validate_event({**meta, "schedules_root": str(root)}, data.get("rows") or [], confirmed)
@@ -271,5 +313,53 @@ def handle_post(path: str, data: dict, home: Path) -> tuple[int, dict]:
         except Exception as e:
             return 400, {"error": str(e)}
         return 200, result
+
+    if path in ("/api/schedules/posters/scan", "/api/schedules/posters/read"):
+        if path.endswith("/scan") and not (data.get("date") and (data.get("event") or data.get("name"))):
+            out = PR.scan_tree(root, drafts=PR.DRAFTS_DIR, read=True)
+            return 200, out
+        date_str = (data.get("date") or "").strip()
+        name = (data.get("event") or data.get("name") or "").strip()
+        if not date_str or not name:
+            if path.endswith("/scan"):
+                out = PR.scan_tree(root, drafts=PR.DRAFTS_DIR, read=True)
+                return 200, out
+            return 400, {"error": "date and event name required"}
+        result = PR.reread(root, date_str, name, filename=data.get("filename") or data.get("file"),
+                           drafts=PR.DRAFTS_DIR)
+        return (200 if result.get("ok") else 400), result
+
+    if path == "/api/schedules/posters/preview":
+        date_str = (data.get("date") or "").strip()
+        name = (data.get("event") or data.get("name") or "").strip()
+        if not date_str or not name:
+            return 400, {"error": "date and event name required"}
+        return 200, PR.preview_accept(root, date_str, name, data.get("rows"),
+                                      drafts=PR.DRAFTS_DIR, meta_update=data.get("meta"))
+
+    if path == "/api/schedules/posters/accept":
+        date_str = (data.get("date") or "").strip()
+        name = (data.get("event") or data.get("name") or "").strip()
+        if not date_str or not name:
+            return 400, {"error": "date and event name required"}
+        result = PR.accept(
+            root, date_str, name,
+            rows=data.get("rows"),
+            confirm=bool(data.get("confirm")),
+            ack_warnings=bool(data.get("ack_warnings")),
+            meta_update=data.get("meta"),
+            drafts=PR.DRAFTS_DIR,
+            jobs_dir=home / "gui" / "jobs",
+            history_jobs=home / "gui" / "history",
+        )
+        return (200 if result.get("ok") else 400), result
+
+    if path in ("/api/schedules/posters/hold", "/api/schedules/posters/reject"):
+        date_str = (data.get("date") or "").strip()
+        name = (data.get("event") or data.get("name") or "").strip()
+        status = "held" if path.endswith("/hold") else "rejected"
+        result = PR.set_status(date_str, name, status, drafts=PR.DRAFTS_DIR,
+                               rows=data.get("rows"))
+        return (200 if result.get("ok") else 400), result
 
     return 404, {"error": "unknown schedules endpoint"}

@@ -16,8 +16,8 @@ def sha256(p):
             h.update(b)
     return h.hexdigest()
 
-DEFAULT_KEYWORD_LIBRARY = "Trip Keywords"
-LEGACY_KEYWORD_LIBRARY = "Grok Keywords"
+DEFAULT_KEYWORD_LIBRARY = app_home.DEFAULT_KEYWORD_LIBRARY
+LEGACY_KEYWORD_LIBRARY = app_home.LEGACY_KEYWORD_LIBRARIES[0]
 
 
 def keyword_library(name=None):

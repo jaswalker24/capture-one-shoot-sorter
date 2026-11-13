@@ -32,7 +32,7 @@ It puts everything in `~/shoot-sorter-c1` (or `~/localai` if that folder already
 - `config.json` from the example, **only if you do not already have one**
 - A new login token at `~/shoot-sorter-c1/gui/auth.token` with mode `600`, **only if missing**. The token is never printed
 - The Capture One **Scripts → Capture One Shoot Sorter** menu items (an existing install keeps its current Scripts menu folder)
-- The `com.shootsorter.c1.gui` Login item (LaunchAgent), loaded only if it is not already running. An existing `com.trips.localai.gui` or `com.grok.localai.gui` agent is left in place
+- The `com.shootsorter.c1.gui` Login item (LaunchAgent), loaded only if it is not already running. An existing LaunchAgent from an earlier install is left in place
 - The **Capture One Shoot Sorter** app in `~/Applications` and a Dock shortcut
 
 Homebrew is optional. If it is already installed, the script can use it as a fallback for ExifTool when the direct download fails. Apple’s Command Line Tools (`xcode-select --install`) are useful for compiling the Scripts menu items.

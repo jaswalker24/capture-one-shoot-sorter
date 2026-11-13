@@ -4,12 +4,16 @@
 //        "items": [{"filename": "_A3A3807.CR3", "path": "<abs path>", "keywords": ["Motorsport/Car Colour/Green", ...]}]}
 // Never removes keywords, never changes ratings/colour tags. Keywords not found in the library are skipped (no flat ones).
 
+var DEFAULT_KEYWORD_LIBRARY = "Trip Keywords";
+var LEGACY_KEYWORD_LIBRARIES = ["Grok Keywords"];
+
 function findKeywordLibrary(C1, preferred) {
   // Prefer the name in the plan (from config.json keyword_library). Fall back
-  // to Trip Keywords, then the previous library name so an older catalog still applies.
+  // to the default library, then any previous library name so an older catalog still applies.
   var names = [];
   if (preferred) names.push(preferred);
-  names.push("Trip Keywords", "Grok Keywords");
+  names.push(DEFAULT_KEYWORD_LIBRARY);
+  for (var i = 0; i < LEGACY_KEYWORD_LIBRARIES.length; i++) names.push(LEGACY_KEYWORD_LIBRARIES[i]);
   var seen = {};
   var tried = [];
   for (var i = 0; i < names.length; i++) {

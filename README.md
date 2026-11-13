@@ -69,7 +69,7 @@ Use `--no-apply` on `fullrun.py` if you only want the proposal files.
 
 Local web UI: **http://127.0.0.1:8765/**.
 
-LaunchAgent: `com.shootsorter.c1.gui` (or the existing `com.trips.localai.gui` / `com.grok.localai.gui` on a live install). Dock app: **Capture One Shoot Sorter** (opens already signed in via `?token=` from `~/shoot-sorter-c1/gui/auth.token`, or `~/localai/gui/auth.token` on an existing install).
+LaunchAgent: `com.shootsorter.c1.gui` (or the LaunchAgent already loaded from an earlier install). Dock app: **Capture One Shoot Sorter** (opens already signed in via `?token=` from `~/shoot-sorter-c1/gui/auth.token`, or `~/localai/gui/auth.token` on an existing install).
 
 ### Tabs
 
@@ -233,9 +233,42 @@ rm -rf "$HOME/Library/Scripts/Capture One Scripts/Capture One Shoot Sorter"
 
 ---
 
-## Licence / privacy
+## Licence
 
-Private repository. Photos, proposals, caches and logs are excluded from git on purpose — do not commit them.
+Released under the MIT Licence. See [LICENSE](LICENSE). The MIT licence covers Capture One Shoot Sorter's own code only. Models and engines stay under their own terms; see [Models and licences](#models-and-licences). Third-party Python packages and bundled tools are listed in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
+Photos, proposals, caches and logs are excluded from git on purpose — do not commit them.
+
+## Models and licences
+
+Capture One Shoot Sorter does not ship model weights in this repository. `install.sh` (and, for SigLIP and CLIP, the first tagging run) downloads them onto the Mac, into `~/shoot-sorter-c1/models` (or `~/localai/models` on an existing install) or the local Ollama models folder. Those files remain under their makers' licences, not MIT. You are responsible for complying with those terms, including any restriction on commercial use.
+
+Licences below were checked against the official model card, licence file or project README at the time of writing. They can change; follow the linked source if you need a current answer.
+
+| Model or engine | Used for | Licence | Commercial use |
+|---|---|---|---|
+| [Qwen2.5-VL-3B](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct) (`qwen2.5vl:3b`) | Captions, VLM confirmation of scene flags and race numbers, optional export captions | [Qwen Research Licence](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/blob/main/LICENSE) | No |
+| [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B) (`qwen3:8b`, optional) | Japanese-to-English OCR translation, journal and ask | [Apache 2.0](https://huggingface.co/Qwen/Qwen3-8B/blob/main/LICENSE) | Yes |
+| [SigLIP ViT-B-16-256](https://huggingface.co/timm/ViT-B-16-SigLIP-256) (`ViT-B-16-SigLIP-256`, `webli`) | Scene keywords, image index, search and burst grouping | [Apache 2.0](https://huggingface.co/timm/ViT-B-16-SigLIP-256) | Yes |
+| [OpenAI CLIP ViT-L/14](https://huggingface.co/openai/clip-vit-large-patch14) (`ViT-L-14`, `openai`) | Image embeddings for the aesthetic scorer | [MIT](https://github.com/openai/CLIP/blob/main/LICENSE) (official code repo; the Hugging Face card does not declare a licence) | Check |
+| [LAION improved aesthetic predictor](https://github.com/christophschuhmann/improved-aesthetic-predictor) (`sac+logos+ava1-l14-linearMSE.pth`) | Aesthetic scores used by ranking and the cull | [Apache 2.0](https://github.com/christophschuhmann/improved-aesthetic-predictor/blob/main/LICENSE) | Yes |
+| [InsightFace buffalo_s](https://github.com/deepinsight/insightface) (`w600k_mbf.onnx`) | Face embeddings for the people pass (clustering and library match) | [InsightFace model terms](https://github.com/deepinsight/insightface#license) (non-commercial research only) | No |
+| [Apple Vision](https://developer.apple.com/documentation/vision) | Text in frame, poster reading, face detection and landmarks, subject region for sharpness | Apple software licence (part of macOS) | Check |
+| [Ollama](https://github.com/ollama/ollama) | Local server that runs the Qwen models (localhost only) | [MIT](https://github.com/ollama/ollama/blob/main/LICENSE) | Yes |
+
+Ollama's MIT licence covers the server only, not the models it pulls. The aesthetic predictor's own weights are Apache 2.0, but they run on top of CLIP ViT-L/14, whose commercial terms you should check separately. Face *detection* uses Apple Vision; only the InsightFace embedding file is restricted.
+
+### Restricted models
+
+**`qwen2.5vl:3b`** is the default caption model. Its official card uses the [Qwen Research Licence](https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/blob/main/LICENSE), which allows use for research or evaluation only. Commercial use needs a separate licence from Alibaba Cloud. The 7B and larger Qwen2.5-VL models are [Apache 2.0](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct). For commercial use you can pull `qwen2.5vl:7b` (~6 GB) and set `vlm_model` in `config.json` to that tag. It needs more memory than the 3B model.
+
+**`w600k_mbf.onnx`** comes from InsightFace's `buffalo_s` package. InsightFace's README and site state that the code is MIT, but the pre-trained models (including buffalo_s) are for non-commercial research only, and a commercial licence is required otherwise. They ask commercial users to contact [recognition-oss-pack@insightface.ai](mailto:recognition-oss-pack@insightface.ai). Until you have that licence, skip the people pass for commercial work, or replace the embedding model with one whose terms allow it.
+
+The personal ranking model trained from your own exports is your data; it is not a third-party weight.
+
+## Disclaimer
+
+Capture One Shoot Sorter is an independent project. It is not affiliated with, endorsed by, or sponsored by Capture One A/S. Capture One is a trademark of Capture One A/S.
 
 ---
 

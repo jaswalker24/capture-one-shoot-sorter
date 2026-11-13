@@ -320,3 +320,8 @@ tr.se-changed td { color: var(--warn); }
 #prTable th, #prTable td { padding: 4px; }
 #prTable input { width: 100%; }
 .pr-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+
+.pr-other { margin: 10px 0; border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; background: var(--panel2); }
+.pr-other summary { cursor: pointer; color: var(--muted); }
+.pr-other ul { margin: 8px 0 4px; padding-left: 18px; }
+.pr-other li { margin: 4px 0; }

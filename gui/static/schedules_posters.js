@@ -65,6 +65,26 @@
     return `<div class="pr-cmp">${flags.join("") || "<span class='note'>No timed acts to compare.</span>"}</div>${verdict}`;
   }
 
+  function renderOther(list) {
+    const items = list || [];
+    if (!items.length) return "";
+    const label = {
+      sale: "Sale",
+      price: "Price",
+      merch: "Merch",
+      parallel: "Parallel / after-show",
+      break: "Break",
+      info: "Note",
+      date: "Date"
+    };
+    const rows = items.map(o => {
+      const when = (o.start || o.end) ? `${escapeHtml(o.start || "")}${o.end ? "–" + escapeHtml(o.end) : ""}` : "";
+      const act = o.act ? escapeHtml(o.act) + " " : "";
+      return `<li><span class="pr-flag">${escapeHtml(label[o.kind] || o.kind || "")}</span> ${when} ${act}${escapeHtml(o.text || "")}</li>`;
+    }).join("");
+    return `<details class="pr-other"><summary>Other information on the poster (sale times, prices, merch) — not used as acts (${items.length})</summary><ul>${rows}</ul></details>`;
+  }
+
   function renderTable() {
     if (!rows.length) rows = [{ act: "", start: "", end: "", doors: "", notes: "" }];
     return `<table id="prTable">
@@ -147,6 +167,7 @@
       ${pick}${img}
       <div id="prCmp">${renderComparison(item.comparison)}</div>
       ${item.status === "multiple" ? "" : renderTable()}
+      ${renderOther(item.other)}
       <div class="pr-actions">
         <button type="button" id="prAccept"${item.can_accept ? "" : " disabled"}>Accept and Confirm</button>
         <button type="button" class="secondary" id="prHold">Hold</button>

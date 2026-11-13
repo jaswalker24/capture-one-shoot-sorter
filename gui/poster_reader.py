@@ -40,14 +40,45 @@ SKIP_LINE_RE = re.compile(
     r"schedule|スケジュール|出演者|出演|acts?|line[- ]?up|出演アーティスト)$",
     re.I,
 )
-DATE_LINE_RE = re.compile(
-    r"^\s*(?:\d{4}[.\/年\-]\s*\d{1,2}[.\/月\-]\s*\d{1,2}日?|"
-    r"\d{1,2}[.\/]\s*\d{1,2}(?:[.\/]\s*\d{2,4})?)\s*$",
+WEEKDAY_PART = r"[（(]?(?:月|火|水|木|金|土|日|mon|tue|wed|thu|fri|sat|sun)[）)]?"
+DATE_TOKEN_RE = re.compile(
+    r"(?:"
+    r"\d{4}[.\/年\-]\s*(?:0?[1-9]|1[0-2])[.\/月]\s*(?:0?[1-9]|[12]\d|3[01])日?"
+    r"|(?:0?[1-9]|1[0-2])[\/月]\s*(?:0?[1-9]|[12]\d|3[01])日?"
+    r"|(?:0?[1-9]|1[0-2])\.(?:0?[1-9]|[12]\d|3[01])日?(?=\s*" + WEEKDAY_PART + r")"
+    r")"
+    r"(?:\s*" + WEEKDAY_PART + r")?",
+    re.I,
 )
-# time token after fullwidth normalisation
-TIME_TOKEN = re.compile(r"(?<!\d)([01]?\d|2[0-3])[:.]([0-5]\d)(?!\d)")
+DATE_LINE_RE = re.compile(
+    r"^\s*(?:(?:\d{4}[.\/年\-]\s*)?\d{1,2}[.\/月\-]\s*\d{1,2}日?)"
+    r"(?:\s*" + WEEKDAY_PART + r")?\s*$",
+    re.I,
+)
+# time token after fullwidth normalisation and date masking
+TIME_TOKEN = re.compile(r"(?<!\d)([01]?\d|2[0-3]):([0-5]\d)(?!\d)")
+TIME_TOKEN_DOT = re.compile(r"(?<!\d)([01]?\d|2[0-3])\.([0-5]\d)(?!\d)")
 TIME_JP = re.compile(r"(?<!\d)([01]?\d|2[0-3])時(?:([0-5]\d)分?)?")
 RANGE_SEP = r"[-~〜～–—－−]"
+SALE_RE = re.compile(
+    r"(一般発売|先行発売|先行抽選|先行(?:受付|販売|発売)|抽選|"
+    r"受付開始|チケット|前売|当日券|当日販売|発売|販売|物販|通販|"
+    r"on\s*sale|pre[-\s]?sale|tickets?(?:\s+on)?\s*sale|"
+    r"lottery|box\s*office)",
+    re.I,
+)
+# Broader admission/ticket words used when the line is not a leading set-time row
+SALE_SOFT_RE = re.compile(r"(受付|予約|当日|先行|sale|ticket|presale|lottery)", re.I)
+PRICE_RE = re.compile(r"(料金|入場料|チケット代|\d+\s*円|¥\s*\d|yen\b|price\s*:)", re.I)
+PARALLEL_RE = re.compile(
+    r"[（(]\s*(?:並行[A-Da-d0-9０-９]*|終演後|物販|cheki|チェキ)[^）)]*[）)]"
+)
+MERCH_LINE_RE = re.compile(
+    r"(終演後\s*物販|終演後物販|物販のみ|after[-\s]?show\s*(?:sale|merch)|"
+    r"merch(?:andise)?\s*sale)",
+    re.I,
+)
+ADJUST_RE = re.compile(r"^調整時間$")
 
 _FW_DIGITS = str.maketrans("０１２３４５６７８９：．，", "0123456789:.,")
 
@@ -227,48 +258,144 @@ def _time_from_groups(hh, mm) -> str | None:
     return ST.parse_time(f"{int(hh):02d}:{int(mm):02d}")
 
 
-def extract_times(text: str) -> list[tuple[str, str | None, str]]:
-    """Return list of (start, end_or_None, remainder_without_this_range).
+def _parse_date_token(tok: str, event_year: int | None = None):
+    """Return a date or None from a token like 2026.11.22, 11/1, 11月1日."""
+    from datetime import date as _date
+    t = normalize_text(tok)
+    t = re.sub(WEEKDAY_PART, "", t, flags=re.I).strip()
+    t = t.replace("年", "-").replace("月", "-").replace("日", "")
+    t = t.replace(".", "-").replace("/", "-")
+    parts = [p for p in t.split("-") if p]
+    if len(parts) == 3:
+        y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+    elif len(parts) == 2 and event_year:
+        y, m, d = int(event_year), int(parts[0]), int(parts[1])
+    else:
+        return None
+    try:
+        return _date(y, m, d)
+    except ValueError:
+        return None
 
-    Scans for 'HH:MM-HH:MM' first, then lone 'HH:MM' or 'HH時MM分'.
-    Remainder is the original text with all time tokens removed (once).
-    """
+
+def line_dates(text: str, event_date: str | None = None):
+    from datetime import date as _date
+    ev = None
+    ev_year = None
+    if event_date:
+        try:
+            ev = _date.fromisoformat(event_date[:10])
+            ev_year = ev.year
+        except ValueError:
+            ev = None
+    found = []
+    for m in DATE_TOKEN_RE.finditer(normalize_text(text)):
+        d = _parse_date_token(m.group(0), ev_year)
+        if d:
+            found.append(d)
+    return found, ev
+
+
+def has_foreign_date(text: str, event_date: str | None = None) -> bool:
+    found, ev = line_dates(text, event_date)
+    if not found or ev is None:
+        return False
+    return any(d != ev for d in found)
+
+
+def is_date_only_line(text: str) -> bool:
+    return bool(DATE_LINE_RE.match(normalize_text(text)))
+
+
+def _clean_label(s: str) -> str:
+    s = re.sub(r"[\s/|,;:：·・\-]+", " ", s or "").strip(" /|,;:：·・-")
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def mask_dates(text: str) -> str:
+    """Replace date tokens with spaces so 11.22 or 11/1 is not read as a time."""
+    return DATE_TOKEN_RE.sub(" ", normalize_text(text))
+
+
+def split_parallel_clauses(text: str) -> tuple[str, list[str]]:
+    """Lift （並行A 11:55-12:55） / （終演後 21:35-22:35） off the set line."""
     s = normalize_text(text)
-    if not s:
+    clauses = [m.group(0) for m in PARALLEL_RE.finditer(s)]
+    if not clauses:
+        return s, []
+    leftover = PARALLEL_RE.sub(" ", s)
+    leftover = re.sub(r"\s+", " ", leftover).strip()
+    return leftover, clauses
+
+
+def is_sale_line(text: str, *, event_date: str | None = None, has_leading_set: bool = False) -> bool:
+    t = normalize_text(text)
+    if MERCH_LINE_RE.search(t) or SALE_RE.search(t) or PRICE_RE.search(t):
+        return True
+    if has_foreign_date(t, event_date):
+        return True
+    if has_leading_set:
+        return False
+    # admission / ticket words on a line that is not a timetable row
+    if SALE_SOFT_RE.search(t):
+        return True
+    return False
+
+
+def extract_times(text: str) -> list[tuple[str, str | None, str]]:
+    """Return list of (start, end_or_None, label beside this time).
+
+    Dates are masked first so 2026.11.22 or 11/1(土) is not read as 11:22.
+    Each time keeps only the label next to it (not the whole line), so
+    '11:15-11:30 OPEN/11:20-11:30 Act' becomes doors + one act.
+    """
+    s = mask_dates(text)
+    if not s.strip():
         return []
-    # Japanese 17時30分 / 17時 → 17:30 / 17:00
     def _jp_sub(m):
         hh, mm = m.group(1), m.group(2) or "00"
         return f"{int(hh):02d}:{int(mm):02d}"
     s = TIME_JP.sub(_jp_sub, s)
 
-    ranges = []
     range_re = re.compile(
-        rf"(?<!\d)([01]?\d|2[0-3])[:.]([0-5]\d)\s*{RANGE_SEP}\s*([01]?\d|2[0-3])[:.]([0-5]\d)(?!\d)"
+        rf"(?<!\d)([01]?\d|2[0-3]):([0-5]\d)\s*{RANGE_SEP}\s*([01]?\d|2[0-3]):([0-5]\d)(?!\d)"
     )
-    used = []
+    spans = []
     for m in range_re.finditer(s):
         st = _time_from_groups(m.group(1), m.group(2))
         en = _time_from_groups(m.group(3), m.group(4))
         if st and en:
-            ranges.append((st, en, m.start(), m.end()))
-            used.append(m)
-    singles = []
-    if not ranges:
+            spans.append((st, en, m.start(), m.end()))
+    if not spans:
+        # dotted ranges such as 19.30-20.00, after dates have been masked
+        dot_range = re.compile(
+            rf"(?<!\d)([01]?\d|2[0-3])\.([0-5]\d)\s*{RANGE_SEP}\s*([01]?\d|2[0-3])\.([0-5]\d)(?!\d)"
+        )
+        for m in dot_range.finditer(s):
+            st = _time_from_groups(m.group(1), m.group(2))
+            en = _time_from_groups(m.group(3), m.group(4))
+            if st and en:
+                spans.append((st, en, m.start(), m.end()))
+    if not spans:
         for m in TIME_TOKEN.finditer(s):
             st = _time_from_groups(m.group(1), m.group(2))
             if st:
-                singles.append((st, None, m.start(), m.end()))
-    items = ranges or singles
-    if not items:
+                spans.append((st, None, m.start(), m.end()))
+    # dotted singles (19.30) only when no colon/dotted ranges and not a leftover date
+    if not spans:
+        for m in TIME_TOKEN_DOT.finditer(s):
+            st = _time_from_groups(m.group(1), m.group(2))
+            if st:
+                spans.append((st, None, m.start(), m.end()))
+    if not spans:
         return []
-    # remainder: strip all matched tokens
-    leftover = s
-    for _st, _en, a, b in sorted(items, key=lambda x: -x[2]):
-        leftover = leftover[:a] + " " + leftover[b:]
-    leftover = re.sub(r"[\s/|,;:：·・\-]+", " ", leftover).strip(" /|,;:：·・-")
-    leftover = re.sub(r"\s+", " ", leftover).strip()
-    return [(st, en, leftover) for st, en, *_ in items]
+    out = []
+    for i, (st, en, a, b) in enumerate(spans):
+        before = s[:a] if i == 0 else ""
+        after_end = spans[i + 1][2] if i + 1 < len(spans) else len(s)
+        label = _clean_label(before + " " + s[b:after_end])
+        out.append((st, en, label))
+    return out
 
 
 def _is_skip_line(text: str) -> bool:
@@ -277,14 +404,41 @@ def _is_skip_line(text: str) -> bool:
         return True
     if SKIP_LINE_RE.match(t):
         return True
-    if DATE_LINE_RE.match(t):
+    if is_date_only_line(t):
         return True
     return False
 
 
+def _clean_act_name(name: str) -> str:
+    name = PARALLEL_RE.sub(" ", name or "")
+    # trailing OCR junk from icons / catalogue marks, e.g. 001▶X, 0o1▶X, ※1▶X, 以
+    name = re.sub(r"\s*※\S*$", "", name)
+    name = re.sub(r"\s+[0oO]{1,2}[0-9iIlDX]{0,4}[▶■].*$", "", name)
+    name = re.sub(r"\s+\d{1,2}[▶■]\S*$", "", name)
+    name = re.sub(r"\s+[0oO]{1,2}[0-9iIl]{1,3}[DX]*\s*$", "", name)
+    name = re.sub(r"\s+[0oO]?\d{2,}[A-Za-z0-9]*$", "", name)
+    name = re.sub(r"\s+[▶■区以回]+\S*$", "", name)
+    name = _clean_label(name)
+    return name
+
+
+def _other_item(kind: str, text: str, *, act: str = "", start: str = "", end: str = "") -> dict:
+    return {
+        "kind": kind,
+        "text": (text or "").strip(),
+        "act": (act or "").strip(),
+        "start": start or "",
+        "end": end or "",
+    }
+
+
 def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
                     timezone: str | None = None, venue: str | None = None) -> dict:
-    """Parse OCR lines (strings or {text,...} dicts) into editor rows and meta."""
+    """Parse OCR lines (strings or {text,...} dicts) into editor rows and meta.
+
+    Sale, presale, lottery, ticket, merch and parallel-session times are kept
+    in `other` and are not used as acts, doors or show start.
+    """
     raw = []
     for item in lines or []:
         if isinstance(item, dict):
@@ -299,18 +453,25 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
     doors = None
     notes_bits = []
     acts: list[dict] = []
+    other: list[dict] = []
 
     pending_time = None  # (start, end) waiting for an act name on a nearby line
     pending_name = None
 
     def add_act(name, start, end, notes=""):
-        name = (name or "").strip()
+        name = _clean_act_name(name)
         if not name:
             return
-        # don't treat doors/show-start labels as act names
         if DOORS_RE.search(name) or SHOW_START_RE.fullmatch(name.strip()):
             return
-        if SKIP_LINE_RE.match(name) or DATE_LINE_RE.match(name):
+        if SKIP_LINE_RE.match(name) or is_date_only_line(name):
+            return
+        if ADJUST_RE.match(name) or MERCH_LINE_RE.search(name) or SALE_RE.search(name):
+            other.append(_other_item(
+                "break" if ADJUST_RE.match(name) else "sale",
+                f"{start or ''}–{end or ''} {name}".strip(" –"),
+                act=name, start=start or "", end=end or "",
+            ))
             return
         if len(name) > 80:
             name = name[:80].strip()
@@ -323,49 +484,90 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
         })
 
     for rec in raw:
-        text = normalize_text(rec.get("text") or "")
-        if not text:
+        original = rec.get("text") or ""
+        text_line = normalize_text(original)
+        if not text_line:
             continue
-        if _is_skip_line(text):
+        if _is_skip_line(text_line):
             continue
 
-        vm = VENUE_RE.search(text)
+        vm = VENUE_RE.search(text_line)
         if vm and not venue_name:
             venue_name = vm.group(2).strip()
-            # if the line is only a venue label, skip further
-            rest_v = VENUE_RE.sub("", text).strip()
+            rest_v = VENUE_RE.sub("", text_line).strip()
             if not rest_v:
                 continue
-            text = rest_v
+            text_line = rest_v
 
-        times = extract_times(text)
-        is_doors = bool(DOORS_RE.search(text))
-        is_show = bool(SHOW_START_RE.search(text)) and not is_doors
+        stripped, clauses = split_parallel_clauses(text_line)
+        for cl in clauses:
+            times_cl = extract_times(cl)
+            st = times_cl[0][0] if times_cl else ""
+            en = times_cl[0][1] if times_cl else ""
+            other.append(_other_item("parallel", cl, start=st or "", end=en or ""))
+
+        work = stripped or text_line
+        times = extract_times(work)
+        has_leading_set = bool(times and re.match(r"^\d{1,2}:\d{2}", mask_dates(work).strip()))
+        if is_sale_line(work, event_date=date_str, has_leading_set=has_leading_set) and not has_leading_set:
+            # sale / price / merch / a date that is not the show date
+            if times:
+                for st, en, lab in times:
+                    other.append(_other_item(
+                        "sale",
+                        work,
+                        act=_clean_act_name(lab),
+                        start=st or "",
+                        end=en or "",
+                    ))
+            else:
+                kind = "price" if PRICE_RE.search(work) else "sale"
+                other.append(_other_item(kind, work))
+            pending_name = None
+            continue
+
+        # merch or adjustment on an otherwise timed row (e.g. 21:35-22:35 終演後物販)
+        if times and (MERCH_LINE_RE.search(work) or (times[0][2] and (MERCH_LINE_RE.search(times[0][2]) or ADJUST_RE.match(_clean_act_name(times[0][2]) or "")))):
+            for st, en, lab in times:
+                name = _clean_act_name(lab)
+                kind = "break" if ADJUST_RE.match(name or "") else "merch"
+                other.append(_other_item(kind, work, act=name, start=st or "", end=en or ""))
+            pending_name = None
+            continue
+
+        is_doors = bool(DOORS_RE.search(work))
+        is_show = bool(SHOW_START_RE.search(work)) and not is_doors
 
         if is_doors and times:
-            doors = doors or times[0][0]
-            # leftover after removing doors label + time may be a venue
-            leftover = times[0][2]
-            leftover = DOORS_RE.sub("", leftover).strip(" :：-")
-            if leftover and not venue_name and len(leftover) > 1:
-                # ignore bare words like OPEN
-                if not re.fullmatch(r"(open|doors?|opening|開場)", leftover, re.I):
-                    pass
-            continue
+            act_times = []
+            for st, en, label in times:
+                lab = DOORS_RE.sub("", label or "").strip(" :：-/")
+                lab_full = label or ""
+                if (not lab) or DOORS_RE.search(lab_full) or re.fullmatch(r"(open|doors?|opening|開場)", lab, re.I):
+                    if doors is None:
+                        doors = st
+                elif SHOW_START_RE.search(lab_full) and not _clean_act_name(SHOW_START_RE.sub("", lab)):
+                    notes_bits.append(f"Show start {st}")
+                else:
+                    act_times.append((st, en, label))
+            if not act_times:
+                pending_name = None
+                continue
+            times = act_times
+            is_doors = False
 
         if is_show and times:
             leftover_show = SHOW_START_RE.sub("", times[0][2] or "").strip(" :：-")
+            leftover_show = _clean_act_name(leftover_show)
             if not leftover_show:
-                # "開演 18:00" with no act name — not an act
                 notes_bits.append(f"Show start {times[0][0]}")
                 continue
 
         if times:
-            # one or more timed acts on this line
             leftover = times[0][2]
-            leftover = DOORS_RE.sub("", leftover)
+            leftover = DOORS_RE.sub("", leftover or "")
             leftover = SHOW_START_RE.sub("", leftover)
-            leftover = leftover.strip(" :：-/")
+            leftover = _clean_act_name(leftover)
             if len(times) == 1:
                 st, en, _ = times[0]
                 if leftover:
@@ -376,7 +578,6 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
                         pending_time = None
                         pending_name = None
                 else:
-                    # time only — attach to a pending name, else remember
                     if pending_name and not (event_name and _names_match(pending_name, event_name)):
                         add_act(pending_name, st, en)
                         pending_name = None
@@ -384,9 +585,10 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
                         pending_time = (st, en)
                         pending_name = None
             else:
-                # multiple ranges; if one leftover name, only first gets it (unusual)
-                for i, (st, en, bit) in enumerate(times):
-                    name = bit or leftover if i == 0 else bit
+                for st, en, bit in times:
+                    name = _clean_act_name(bit)
+                    if name and event_name and _names_match(name, event_name):
+                        continue
                     if name:
                         add_act(name, st, en)
                     else:
@@ -395,28 +597,29 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
 
         # no times on this line
         if pending_time:
-            add_act(text, pending_time[0], pending_time[1])
+            add_act(text_line, pending_time[0], pending_time[1])
             pending_time = None
             continue
-        # event / venue titles are not acts
-        if event_name and _names_match(text, event_name):
+        if event_name and _names_match(text_line, event_name):
             continue
-        if venue_name and _names_match(text, venue_name):
+        if venue_name and _names_match(text_line, venue_name):
             continue
-        # a bare name may belong to the next time line
-        if not DOORS_RE.search(text) and not SHOW_START_RE.search(text) and not VENUE_RE.search(text):
+        if PRICE_RE.search(text_line) or SALE_RE.search(text_line) or SALE_SOFT_RE.search(text_line):
+            other.append(_other_item("info" if not PRICE_RE.search(text_line) else "price", text_line))
+            continue
+        if not DOORS_RE.search(text_line) and not SHOW_START_RE.search(text_line) and not VENUE_RE.search(text_line):
+            if len(text_line) <= 1:
+                continue
             if pending_name and not acts:
-                # two names in a row; the first might be the event title
                 if not event_name:
                     event_name = pending_name
-                pending_name = text
+                pending_name = text_line
             elif pending_name:
-                # previous pending name never got a time — keep as event or skip
                 if not event_name:
                     event_name = pending_name
-                pending_name = text
+                pending_name = text_line
             else:
-                pending_name = text
+                pending_name = text_line
 
     if pending_name and not event_name:
         event_name = pending_name
@@ -437,6 +640,23 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
     if doors and acts:
         acts[0]["doors"] = doors
 
+    # attach an act name to parallel clauses that sit on the same row, when still blank
+    used_idx = set()
+    for row in acts:
+        for i, item in enumerate(other):
+            if i in used_idx or item.get("act") or item.get("kind") != "parallel":
+                continue
+            # if this parallel clause was taken from the same act line, we already
+            # only have the clause text; try to stamp the preceding act
+            # (clauses are recorded in reading order just before the act is added,
+            # so the nearest preceding act-less parallel is a reasonable match).
+            if not item.get("act"):
+                item["act"] = row["act"]
+                if row["act"] and row["act"] not in (item.get("text") or ""):
+                    item["text"] = f"{row['act']} {item['text']}".strip()
+                used_idx.add(i)
+                break
+
     return {
         "meta": {
             "date": date_str,
@@ -449,9 +669,11 @@ def parse_ocr_lines(lines, *, date: str | None = None, event: str | None = None,
             "doors": doors or "",
         },
         "rows": acts,
+        "other": other,
         "doors": doors or "",
         "notes": notes_bits,
     }
+
 
 
 # ------------------------------------------------------------------ comparison
@@ -586,6 +808,7 @@ def _blank_item(info: dict, status: str, **extra) -> dict:
         "status": status,
         "ocr": None,
         "rows": [],
+        "other": [],
         "meta": {
             "date": info["date"],
             "event": info["event"],
@@ -636,6 +859,7 @@ def read_image(path: Path, *, date: str, event: str, venue: str = "",
             "text": text,
         },
         "rows": rows,
+        "other": parsed.get("other") or [],
         "meta": meta,
         "comparison": comparison,
         "doors": parsed.get("doors") or "",
@@ -726,6 +950,7 @@ def scan_tree(root: Path, *, drafts: Path | None = None, ocr_fn=None,
                                  ocr_fn=ocr_fn, confirmed=confirmed)
                 rec["ocr"] = got["ocr"]
                 rec["rows"] = got["rows"]
+                rec["other"] = got.get("other") or []
                 rec["meta"] = got["meta"]
                 rec["comparison"] = got["comparison"]
                 rec["venue"] = got["meta"].get("venue") or ""
@@ -761,6 +986,33 @@ def list_review(root: Path, *, drafts: Path | None = None, scan: bool = False,
     # merge current folders with saved drafts (no OCR)
     found = scan_tree(root, drafts=drafts, ocr_fn=ocr_fn, read=False)
     return found
+
+
+
+def reparse_draft(rec: dict, *, confirmed: dict | None = None) -> dict:
+    """Re-run the parser on OCR already stored in a local draft. No NAS writes."""
+    rec = dict(rec or {})
+    lines = ((rec.get("ocr") or {}).get("lines")) or []
+    if not lines and (rec.get("ocr") or {}).get("text"):
+        lines = (rec["ocr"]["text"] or "").splitlines()
+    parsed = parse_ocr_lines(
+        lines,
+        date=rec.get("date") or "",
+        event=rec.get("event") or "",
+        timezone=(rec.get("meta") or {}).get("timezone") or rec.get("timezone") or None,
+        venue=(rec.get("meta") or {}).get("venue") or rec.get("venue") or "",
+    )
+    rec["rows"] = parsed["rows"]
+    rec["other"] = parsed.get("other") or []
+    rec["meta"] = parsed["meta"]
+    rec["venue"] = parsed["meta"].get("venue") or rec.get("venue") or ""
+    rec["timezone"] = parsed["meta"].get("timezone") or rec.get("timezone") or ""
+    rec["comparison"] = compare_with_confirmed(rec["rows"], confirmed)
+    rec["error"] = None
+    if rec.get("status") in ("error", "rejected", "held", "pending_review", None, ""):
+        rec["status"] = "pending_review"
+    rec["parsed_at"] = datetime.now().astimezone().isoformat(timespec="seconds")
+    return rec
 
 
 def reread(root: Path, date_str: str, event_name: str, *, filename: str | None = None,
@@ -802,6 +1054,7 @@ def reread(root: Path, date_str: str, event_name: str, *, filename: str | None =
                          ocr_fn=ocr_fn, confirmed=confirmed)
         rec["ocr"] = got["ocr"]
         rec["rows"] = got["rows"]
+        rec["other"] = got.get("other") or []
         rec["meta"] = got["meta"]
         rec["comparison"] = got["comparison"]
         rec["venue"] = got["meta"].get("venue") or ""

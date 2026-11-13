@@ -512,5 +512,115 @@ def _render_sample_poster(path: Path):
     return path
 
 
+
+class SaleTimesExcluded(unittest.TestCase):
+    def test_date_is_not_read_as_a_time(self):
+        self.assertEqual(PR.extract_times("2026.11.22（日）"), [])
+        self.assertTrue(PR.is_date_only_line("2026.11.22（日）"))
+        self.assertTrue(PR.is_date_only_line("11/1(土)"))
+        # dotted clock times still work when they are not dates
+        self.assertEqual(PR.extract_times("19.30-20.00 Act")[0][:2], ("19:30", "20:00"))
+
+    def test_japanese_sale_lines_are_other(self):
+        text = [
+            "Example Hall",
+            "2026.11.22（日）",
+            "開場 16:30",
+            "17:00-17:30 Act One",
+            "17:40-18:20 Act Two",
+            "一般発売 11/1(土) 10:00〜",
+            "先行抽選 10/20 18:00",
+            "チケット販売 10:00-18:00",
+        ]
+        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Example Hall")
+        acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
+        self.assertEqual(acts, [("Act One", "17:00", "17:30"), ("Act Two", "17:40", "18:20")])
+        self.assertEqual(p["doors"], "16:30")
+        kinds = {o["kind"] for o in p["other"]}
+        self.assertTrue(kinds & {"sale"})
+        blob = " ".join(o["text"] for o in p["other"])
+        self.assertIn("一般発売", blob)
+        self.assertIn("先行抽選", blob)
+        self.assertIn("チケット販売", blob)
+        self.assertFalse(any(r["start"] == "10:00" for r in p["rows"]))
+        self.assertFalse(any("11:01" in (r["start"], r["end"]) or r["act"].startswith("2026") for r in p["rows"]))
+
+    def test_english_sale_lines_are_other(self):
+        text = [
+            "Doors 18:00",
+            "Opener 19:00-19:30",
+            "Main Act 19:45-20:30",
+            "Tickets on sale 1 Nov 10:00",
+            "Presale 10/20 18:00",
+            "Lottery 11/1(Sat) 10:00~",
+        ]
+        p = PR.parse_ocr_lines(text, date="2026-11-22", event="Night")
+        acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
+        self.assertEqual(acts, [("Opener", "19:00", "19:30"), ("Main Act", "19:45", "20:30")])
+        self.assertEqual(p["doors"], "18:00")
+        blob = " ".join(o["text"] for o in p["other"]).lower()
+        self.assertTrue("sale" in blob or "presale" in blob or "lottery" in blob)
+        self.assertFalse(any(r["start"] == "10:00" for r in p["rows"]))
+
+    def test_hep_hall_fixture_excludes_parallel_and_sale_times(self):
+        fix_path = ROOT / "tests" / "fixtures" / "hep_hall_2026-11-22_ocr.json"
+        fix = json.loads(fix_path.read_text(encoding="utf-8"))
+        p = PR.parse_ocr_lines(fix["lines"], date=fix["date"], event=fix["event"])
+        acts = [(r["act"], r["start"], r["end"]) for r in p["rows"]]
+        names = [a for a, *_ in acts]
+        self.assertEqual(p["doors"], "11:15")
+        self.assertEqual(p["meta"]["timezone"], "Asia/Tokyo")
+        # first act was previously dropped (mixed OPEN + set on one line)
+        self.assertEqual(acts[0], ("アオイトリ", "11:20", "11:30"))
+        self.assertIn("ホシノナミ", names)
+        self.assertEqual(names.count("ホシノナミ"), 1)
+        self.assertEqual([a for a in acts if a[0] == "ホシノナミ"][0],
+                         ("ホシノナミ", "11:30", "11:45"))
+        # 並行 / 終演後 merch times must not appear as a second set
+        self.assertFalse(any(a == ("ホシノナミ", "11:55", "12:55") for a in acts))
+        self.assertNotIn("終演後物販", names)
+        self.assertNotIn("調整時間", names)
+        self.assertFalse(any(r["act"].startswith("2026") or r["start"] == "11:22" for r in p["rows"]))
+        # sale / price / merch info is in other, not the act table
+        kinds = {o["kind"] for o in p["other"]}
+        self.assertIn("parallel", kinds)
+        self.assertIn("merch", kinds)
+        self.assertIn("price", kinds)
+        self.assertTrue({"sale", "price"} & kinds)
+        other_text = " ".join(o["text"] for o in p["other"])
+        self.assertIn("終演後物販", other_text)
+        self.assertIn("前売", other_text)
+        self.assertIn("並行", other_text)
+        self.assertTrue(any(o.get("start") == "11:55" and o.get("end") == "12:55" for o in p["other"]))
+        # later headliners still present once
+        self.assertIn("ハナノカゼ", names)
+        self.assertEqual(names.count("ハナノカゼ"), 1)
+        self.assertGreaterEqual(len(acts), 30)
+        self.assertLess(len(acts), 50)  # used to be 81 with sale times doubled in
+
+    def test_reparse_draft_is_local_only(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            drafts = d / "drafts"
+            ev = _event_folder(d / "Schedules")
+            # no image needed; seed a draft that already has OCR
+            fix = json.loads((ROOT / "tests" / "fixtures" / "hep_hall_2026-11-22_ocr.json").read_text(encoding="utf-8"))
+            rec = {
+                "date": "2026-11-22", "event": "Example Hall", "status": "rejected",
+                "folder": str(ev), "ocr": {"engine": "apple-vision", "lines": fix["lines"], "text": ""},
+                "rows": [{"act": "一般発売", "start": "10:00", "end": "18:00", "doors": "", "notes": ""}],
+                "other": [],
+            }
+            PR.save_draft(rec, drafts=drafts)
+            loaded = PR.load_draft("2026-11-22", "Example Hall", drafts=drafts)
+            updated = PR.reparse_draft(loaded)
+            PR.save_draft(updated, drafts=drafts)
+            self.assertEqual(updated["status"], "pending_review")
+            self.assertEqual(updated["rows"][0]["act"], "アオイトリ")
+            self.assertFalse(any(r["act"] == "一般発売" or r["act"] == "終演後物販" for r in updated["rows"]))
+            self.assertFalse((ev / "poster.json").exists())
+            self.assertFalse((ev / "schedule.json").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

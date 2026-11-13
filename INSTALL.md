@@ -80,13 +80,14 @@ The control panel’s health strip looks for your Camera Imports and Camera Expo
 "imports_root": "/Volumes/your-volume/Camera Imports",
 "exports_root": "/Volumes/your-volume/Camera Exports",
 "other_exports_root": "/Volumes/your-volume/2025 Exports",
+"schedules_root": "/Volumes/your-volume/Schedules",
 "keyword_library": "Trip Keywords"
 ```
 
 The Capture One library name is configurable (`keyword_library`). New installs use **Trip Keywords**. An existing catalog that already has a library named **Trip Keywords** should set `"keyword_library": "Trip Keywords"` instead of renaming the library.
 
 
-Do not commit `config.json`; it is local to the machine. You can also set these later in **Settings → Locations** (Browse lists folders in the page so it works from another Mac, or paste a path. Optional “Open on M5 screen” opens a Finder dialog on the Mac running the panel without hanging this page, and does not change the path unless you pick a folder). A timestamped `config.json.bak-locations-*` backup is written on save. Use the **Training data** toggles on Camera Exports, Other Exports and Camera Imports to mark which folders train the personal ranking model (read only, never modified). Environment variables `LOCALAI_PHOTOS`, `LOCALAI_IMPORTS`, `LOCALAI_EXPORTS` and `LOCALAI_OTHER_EXPORTS` still override config if set.
+Do not commit `config.json`; it is local to the machine. You can also set these later in **Settings → Locations** (Browse lists folders in the page so it works from another Mac, or paste a path. Optional “Open on M5 screen” opens a Finder dialog on the Mac running the panel without hanging this page, and does not change the path unless you pick a folder). A timestamped `config.json.bak-locations-*` backup is written on save. Use the **Training data** toggles on Camera Exports, Other Exports and Camera Imports to mark which folders train the personal ranking model (read only, never modified). **Schedules root** points at the Schedules tree (Year / YYYY-MM-DD / Event name / `_schedule.jpg`); it defaults to Photos root/Schedules and is read only for now. Any file named `_schedule*` is skipped by every pass, so schedule posters never get tagged, ranked or put in cull albums. Environment variables `LOCALAI_PHOTOS`, `LOCALAI_IMPORTS`, `LOCALAI_EXPORTS`, `LOCALAI_OTHER_EXPORTS` and `LOCALAI_SCHEDULES` still override config if set.
 
 ## First run
 

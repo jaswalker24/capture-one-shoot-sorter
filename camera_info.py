@@ -26,6 +26,11 @@ HOME = Path.home() / "localai"
 OUT = HOME / "out"
 EXIFTOOL = str(HOME / "bin" / "exiftool")
 RAW_EXT = {".cr3", ".cr2"}
+
+
+def is_schedule_file(p) -> bool:
+    """Event schedule posters (_schedule*) are skipped by every pass."""
+    return Path(str(p)).name.lower().startswith("_schedule")
 PREFIX = "General/Camera/"
 
 # Tags we have verified on Canon EOS R6 CR3 files (2026-06-23 and Brands Hatch).
@@ -421,7 +426,7 @@ def normalize(r: dict, C=None) -> dict:
 # ------------------------------------------------------------------ IO
 
 def list_raws(folder: Path) -> list[Path]:
-    return sorted(p for p in folder.iterdir() if p.suffix.lower() in RAW_EXT and not p.name.startswith("."))
+    return sorted(p for p in folder.iterdir() if p.suffix.lower() in RAW_EXT and not p.name.startswith(".") and not is_schedule_file(p))
 
 
 def read_exif(files, cache_path=None, workers=8, refresh=False):
@@ -532,7 +537,7 @@ def run_folder(folder, files=None, sample=0, refresh=False, no_clip=False, quiet
     d.mkdir(parents=True, exist_ok=True)
     C = cfg()
     files = [Path(p) for p in (files or list_raws(folder))]
-    files = [p for p in files if p.suffix.lower() in RAW_EXT and not p.name.startswith(".")]
+    files = [p for p in files if p.suffix.lower() in RAW_EXT and not p.name.startswith(".") and not is_schedule_file(p)]
     if sample and len(files) > sample:
         # even spread, same idea as tagger.spread
         if sample == 1:

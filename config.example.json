@@ -9,6 +9,7 @@
   "imports_root": "/Volumes/your-nas/Camera Imports",
   "exports_root": "/Volumes/your-nas/Camera Exports",
   "other_exports_root": "/Volumes/your-nas/2025 Exports",
+  "schedules_root": "/Volumes/your-nas/Schedules",
   "training": {
     "sources": {
       "exports_root": true,

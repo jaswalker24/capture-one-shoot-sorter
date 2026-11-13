@@ -396,7 +396,7 @@ def iter_export_images(folder: Path):
         if not ent.is_file():
             continue
         name = ent.name
-        if name.startswith(".") or name.startswith("._"):
+        if name.startswith(".") or name.startswith("._") or name.lower().startswith("_schedule"):
             continue
         ext = Path(name).suffix.lower()
         if ext in SKIP_VIDEO:
@@ -419,7 +419,7 @@ def list_import_stems(import_dir: Path) -> dict[str, str]:
             if not ent.is_file():
                 continue
             name = ent.name
-            if name.startswith(".") or name.startswith("._"):
+            if name.startswith(".") or name.startswith("._") or name.lower().startswith("_schedule"):
                 continue
             ext = Path(name).suffix.lower()
             if ext in SKIP_VIDEO:
@@ -648,7 +648,7 @@ def list_import_raws(import_dir: Path) -> list[Path]:
             if not ent.is_file():
                 continue
             name = ent.name
-            if name.startswith(".") or name.startswith("._"):
+            if name.startswith(".") or name.startswith("._") or name.lower().startswith("_schedule"):
                 continue
             ext = Path(name).suffix.lower()
             if ext in SKIP_VIDEO or ext not in {e.lower() for e in RAW_EXTS}:

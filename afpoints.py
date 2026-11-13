@@ -194,7 +194,8 @@ def run_folder(folder, annotate=0, sample=0, refresh=False, quiet=False):
         except ValueError: annotate = 0
     folder = Path(folder); fo = folder.name; d = OUT / fo; d.mkdir(parents=True, exist_ok=True)
     C = cfg(); idx = index_rows(fo)
-    files = sorted(p for p in folder.iterdir() if p.suffix.lower() in RAW_EXT and not p.name.startswith("."))
+    files = sorted(p for p in folder.iterdir() if p.suffix.lower() in RAW_EXT and not p.name.startswith(".")
+                   and not p.name.lower().startswith("_schedule"))
     if sample: files = files[::max(1, len(files) // sample)][:sample]
     ex = read_exif(files, d / "afpoints-exif.json", C["workers"], refresh)
     rows = []

@@ -73,11 +73,11 @@ def file_sha(c, p: Path):
 def resolve_files(args):
     """--files a b c | folder [--sample N] [--start NAME --count N]"""
     if getattr(args, "files", None):
-        return [Path(f) for f in args.files if Path(f).suffix.lower() not in T.SKIP_EXT]
+        return [Path(f) for f in args.files if Path(f).suffix.lower() not in T.SKIP_EXT and not T.is_schedule_file(f)]
     folder = Path(args.folder).resolve()
     if getattr(args, "indexed", False):   # only frames already in the index for this folder
         c = db()
-        return sorted(Path(r[0]) for r in c.execute("SELECT path FROM images WHERE folder=? AND path IS NOT NULL", (folder.name,)))
+        return sorted(Path(r[0]) for r in c.execute("SELECT path FROM images WHERE folder=? AND path IS NOT NULL", (folder.name,)) if not T.is_schedule_file(r[0]))
     files = T.list_images(folder)
     if getattr(args, "start", None):
         names = [f.stem for f in files]
@@ -829,7 +829,7 @@ def cmd_camera(args):
     """EXIF / Canon MakerNotes + preview clip check. Proposals only. CR2/CR3 only."""
     import camera_info as CI
     files = resolve_files(args) if (args.folder or args.files) else []
-    files = [p for p in files if p.suffix.lower() in CI.RAW_EXT]
+    files = [p for p in files if p.suffix.lower() in CI.RAW_EXT and not CI.is_schedule_file(p)]
     if not files and not args.folder:
         print("camera: no images"); return
     folder = Path(args.folder).resolve() if args.folder else Path(files[0]).parent

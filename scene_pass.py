@@ -549,7 +549,7 @@ def run_scene_pass(folder: Path, files: list[Path] | None = None, sample: int = 
         files = list_folder_images(folder)
     else:
         _, T, _ = _runtime()
-        files = [Path(p) for p in files if Path(p).suffix.lower() not in T.SKIP_EXT]
+        files = [Path(p) for p in files if Path(p).suffix.lower() not in T.SKIP_EXT and not T.is_schedule_file(p)]
     if sample:
         files = T.spread(files, sample)
     outdir = OUT / folder.name

@@ -179,7 +179,8 @@ def run_people_pass(folder: Path, files: list[Path] | None = None, *,
     if files is None:
         files = F.T.list_images(folder)
     else:
-        files = [Path(p) for p in files if Path(p).suffix.lower() not in getattr(F.T, "SKIP_EXT", {".mp4", ".mov", ".avi", ".mkv"})]
+        files = [Path(p) for p in files if Path(p).suffix.lower() not in getattr(F.T, "SKIP_EXT", {".mp4", ".mov", ".avi", ".mkv"})
+                 and not Path(p).name.lower().startswith("_schedule")]
     files = sorted(files)
     if sample and len(files) > sample:
         files = files[:sample]

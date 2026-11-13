@@ -54,6 +54,14 @@ LOCATION_FIELDS = (
         "training_source": True,
         "training_role": "exported frames",
     },
+    {
+        "key": "schedules_root",
+        "label": "Schedules root",
+        "prompt": "Choose the Schedules folder",
+        "hint": "Optional. Top of the Schedules tree (Year / YYYY-MM-DD / Event name / _schedule.jpg). Leave blank to use Photos root/Schedules. Read only for now; nothing is written here, and _schedule* files are skipped by every pass.",
+        "optional": True,
+        "training_source": False,
+    },
 )
 
 ALLOWED_KEYS = tuple(f["key"] for f in LOCATION_FIELDS)
@@ -62,6 +70,7 @@ ENV_FOR_KEY = {
     "imports_root": "LOCALAI_IMPORTS",
     "exports_root": "LOCALAI_EXPORTS",
     "other_exports_root": "LOCALAI_OTHER_EXPORTS",
+    "schedules_root": "LOCALAI_SCHEDULES",
 }
 
 
@@ -141,6 +150,19 @@ def other_exports_root(home: Path | None = None) -> Path:
     return sibling
 
 
+DEFAULT_SCHEDULES_NAME = "Schedules"
+
+
+def schedules_root(home: Path | None = None) -> Path:
+    env = os.environ.get("LOCALAI_SCHEDULES")
+    if env:
+        return Path(normalize_path(env))
+    cfg = _cfg(home)
+    if cfg.get("schedules_root"):
+        return Path(normalize_path(str(cfg["schedules_root"])))
+    return photos_root(home) / DEFAULT_SCHEDULES_NAME
+
+
 # Backward-compatible alias
 def exports_2025_root(home: Path | None = None) -> Path:
     return other_exports_root(home)
@@ -151,6 +173,7 @@ RESOLVERS = {
     "imports_root": imports_root,
     "exports_root": exports_root,
     "other_exports_root": other_exports_root,
+    "schedules_root": schedules_root,
 }
 
 TRAINING_SOURCE_KEYS = ("exports_root", "other_exports_root", "imports_root")

@@ -205,7 +205,9 @@ def main():
         return
     osascript_js(DUMP_JS, [folder, str(dump_path)])
     dump = json.load(open(dump_path))
-    groups = S.cull_groups(dump.get("frames") or [])
+    frames = [f for f in (dump.get("frames") or [])
+              if not Path(str(f.get("path") or "")).name.lower().startswith("_schedule")]
+    groups = S.cull_groups(frames)
     plan = {"group": GROUP, "folder": folder, "scope": dump.get("scope"),
             "albums": [{"name": f"{shoot} · {suffix}", "ids": ids} for suffix, ids in groups.items()]}
     json.dump(plan, open(plan_path, "w"), indent=1)

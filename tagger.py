@@ -22,6 +22,12 @@ from PIL import Image, ImageOps
 RAW_EXT = {".cr3", ".cr2", ".nef", ".arw", ".dng", ".raf", ".orf", ".rw2"}
 IMG_EXT = {".jpg", ".jpeg", ".png", ".heic", ".tif", ".tiff"}
 SKIP_EXT = {".mp4", ".mov", ".m4v", ".avi", ".mts"}
+# Event schedule posters (Schedules tree, e.g. _schedule.jpg) are never photos to tag, rank or cull.
+SCHEDULE_PREFIX = "_schedule"
+
+
+def is_schedule_file(p) -> bool:
+    return Path(str(p)).name.lower().startswith(SCHEDULE_PREFIX)
 
 # ---------------------------------------------------------------- profiles
 COLOURS = ["red", "blue", "green", "yellow", "orange", "white", "black",
@@ -288,7 +294,7 @@ def vlm(cfg, im, prompt, timeout=180):
 def list_images(folder: Path):
     files = []
     for p in sorted(folder.iterdir()):       # top level only; nested export folders skipped
-        if p.is_dir() or p.name.startswith("."):
+        if p.is_dir() or p.name.startswith(".") or is_schedule_file(p):
             continue
         ext = p.suffix.lower()
         if ext in SKIP_EXT:
@@ -427,7 +433,7 @@ def main():
 
     cfg = json.load(open(args.config))
     if args.files:
-        files = [Path(f) for f in args.files if Path(f).suffix.lower() not in SKIP_EXT]
+        files = [Path(f) for f in args.files if Path(f).suffix.lower() not in SKIP_EXT and not is_schedule_file(f)]
         folder = files[0].parent
     else:
         folder = Path(args.folder).resolve()
